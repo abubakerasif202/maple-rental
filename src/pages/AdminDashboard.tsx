@@ -9,8 +9,18 @@ export default function AdminDashboard() {
   const [cars, setCars] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
   const [rentals, setRentals] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [editingCar, setEditingCar] = useState<any | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newCar, setNewCar] = useState({
+    name: '',
+    modelYear: new Date().getFullYear(),
+    weeklyPrice: 0,
+    bond: 0,
+    status: 'Available',
+    image: ''
+  });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -64,6 +74,40 @@ export default function AdminDashboard() {
     });
     
     setApplications(applications.map(a => a.id === id ? { ...a, status } : a));
+  };
+
+  const handleAddCar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = localStorage.getItem('admin_token');
+    try {
+      const response = await fetch('/api/cars', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(newCar)
+      });
+
+      if (response.ok) {
+        const { id } = await response.json();
+        setCars([...cars, { ...newCar, id }]);
+        setIsAddModalOpen(false);
+        setNewCar({
+          name: '',
+          modelYear: new Date().getFullYear(),
+          weeklyPrice: 0,
+          bond: 0,
+          status: 'Available',
+          image: ''
+        });
+      } else {
+        alert('Failed to add car');
+      }
+    } catch (error) {
+      console.error('Error adding car:', error);
+      alert('An error occurred while adding the car');
+    }
   };
 
   const deleteCar = async (id: number) => {
@@ -257,9 +301,23 @@ export default function AdminDashboard() {
             >
               <div className="flex justify-between items-center mb-12">
                 <h1 className="text-3xl font-serif font-bold tracking-tight">Fleet Management</h1>
-                <button className="bg-brand-gold hover:bg-white text-brand-charcoal px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 shadow-[0_0_20px_rgba(198,169,79,0.1)]">
-                  <Plus className="w-4 h-4" /> Add Vehicle
-                </button>
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      placeholder="Search fleet..." 
+                      className="bg-brand-charcoal border border-white/10 px-6 py-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-brand-gold/50 min-w-[300px]"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <button 
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="bg-brand-gold hover:bg-white text-brand-charcoal px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 shadow-[0_0_20px_rgba(198,169,79,0.1)]"
+                  >
+                    <Plus className="w-4 h-4" /> Add Vehicle
+                  </button>
+                </div>
               </div>
               <div className="bg-brand-charcoal border border-white/5 overflow-hidden shadow-2xl rounded-xl">
                 <table className="min-w-full divide-y divide-white/5">
@@ -272,7 +330,12 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {cars.map(car => (
+                    {cars
+                      .filter(car => 
+                        car.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                        car.modelYear.toString().includes(searchTerm)
+                      )
+                      .map(car => (
                       <tr key={car.id} className="hover:bg-white/5 transition-colors">
                         <td className="px-8 py-6">
                           <div className="flex items-center gap-6">
@@ -443,6 +506,104 @@ export default function AdminDashboard() {
                     className="bg-brand-gold hover:bg-white text-brand-charcoal px-10 py-3 text-xs font-bold uppercase tracking-widest transition-all shadow-lg"
                   >
                     Save Changes
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Add Car Modal */}
+        {isAddModalOpen && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-brand-charcoal border border-brand-gold/30 p-10 max-w-2xl w-full rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh]"
+            >
+              <h2 className="text-2xl font-serif font-bold text-white mb-8 tracking-tight">Add New Vehicle</h2>
+              <form onSubmit={handleAddCar} className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Vehicle Name</label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. Toyota Camry Hybrid"
+                      className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
+                      value={newCar.name}
+                      onChange={(e) => setNewCar({...newCar, name: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Weekly Rate ($)</label>
+                    <input 
+                      type="number" 
+                      required
+                      className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
+                      value={newCar.weeklyPrice}
+                      onChange={(e) => setNewCar({...newCar, weeklyPrice: Number(e.target.value)})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Model Year</label>
+                    <input 
+                      type="number" 
+                      required
+                      className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
+                      value={newCar.modelYear}
+                      onChange={(e) => setNewCar({...newCar, modelYear: Number(e.target.value)})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Bond ($)</label>
+                    <input 
+                      type="number" 
+                      required
+                      className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
+                      value={newCar.bond}
+                      onChange={(e) => setNewCar({...newCar, bond: Number(e.target.value)})}
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Image URL</label>
+                    <input 
+                      type="url" 
+                      required
+                      className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
+                      value={newCar.image}
+                      onChange={(e) => setNewCar({...newCar, image: e.target.value})}
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3 pt-4">
+                  <select 
+                    className="bg-brand-charcoal border border-white/10 text-[10px] font-bold uppercase tracking-widest px-4 py-3 outline-none focus:border-brand-gold/50"
+                    value={newCar.status}
+                    onChange={(e) => setNewCar({...newCar, status: e.target.value})}
+                  >
+                    <option value="Available">Available</option>
+                    <option value="Rented">Rented</option>
+                    <option value="Maintenance">Maintenance</option>
+                  </select>
+                </div>
+
+                <div className="flex justify-end gap-5 mt-12 pt-8 border-t border-white/5">
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setIsAddModalOpen(false);
+                    }}
+                    className="px-8 py-3 text-xs font-bold uppercase tracking-widest text-brand-grey hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    className="bg-brand-gold hover:bg-white text-brand-charcoal px-10 py-3 text-xs font-bold uppercase tracking-widest transition-all shadow-lg"
+                  >
+                    Add Vehicle
                   </button>
                 </div>
               </form>

@@ -13,7 +13,7 @@ import AdminDashboard from './pages/AdminDashboard';
 export default function App() {
   return (
     <Router>
-      <div className="flex flex-col min-h-screen bg-[#0a0a0a]">
+      <div className="app-car-bg flex flex-col min-h-screen bg-[#0a0a0a]">
         <Navbar />
         <main className="flex-grow">
           <Routes>

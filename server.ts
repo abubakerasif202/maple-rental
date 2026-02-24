@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import Stripe from 'stripe';
 import crypto from 'crypto';
-import db from './src/db/index.js';
+import db from './src/db/index.ts';
 
 const app = express();
 const PORT = 3000;
@@ -66,19 +66,23 @@ const authenticateAdmin = (req: express.Request, res: express.Response, next: ex
 // --- API Routes ---
 
 // Auth
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   if (!isNonEmptyString(username, 120) || !isNonEmptyString(password, 256)) {
     return res.status(400).json({ error: 'Username and password are required.' });
   }
 
-  const admin = db.prepare('SELECT * FROM admin WHERE username = ?').get(username) as any;
+  const result = await db.execute({
+    sql: 'SELECT * FROM admin WHERE username = ?',
+    args: [username]
+  });
+  const admin = result.rows[0] as any;
 
   if (!admin || !bcrypt.compareSync(password, admin.password)) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  const token = jwt.sign({ id: admin.id, username: admin.username }, JWT_SECRET, { expiresIn: '1d' });
+  const token = jwt.sign({ id: Number(admin.id), username: admin.username }, JWT_SECRET, { expiresIn: '1d' });
   res.cookie('admin_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' });
   res.json({ token, username: admin.username });
 });
@@ -93,18 +97,22 @@ app.get('/api/auth/verify', authenticateAdmin, (req, res) => {
 });
 
 // Cars
-app.get('/api/cars', (req, res) => {
-  const cars = db.prepare('SELECT * FROM cars').all();
-  res.json(cars);
+app.get('/api/cars', async (req, res) => {
+  const result = await db.execute('SELECT * FROM cars');
+  res.json(result.rows);
 });
 
-app.get('/api/cars/:id', (req, res) => {
-  const car = db.prepare('SELECT * FROM cars WHERE id = ?').get(req.params.id);
+app.get('/api/cars/:id', async (req, res) => {
+  const result = await db.execute({
+    sql: 'SELECT * FROM cars WHERE id = ?',
+    args: [req.params.id]
+  });
+  const car = result.rows[0];
   if (!car) return res.status(404).json({ error: 'Car not found' });
   res.json(car);
 });
 
-app.post('/api/cars', authenticateAdmin, (req, res) => {
+app.post('/api/cars', authenticateAdmin, async (req, res) => {
   const { name, modelYear, weeklyPrice, bond, status, image } = req.body;
   const parsedModelYear = toPositiveInteger(modelYear);
   const parsedWeeklyPrice = toPositiveNumber(weeklyPrice);
@@ -122,15 +130,14 @@ app.post('/api/cars', authenticateAdmin, (req, res) => {
     return res.status(400).json({ error: 'Invalid car payload.' });
   }
 
-  const stmt = db.prepare(`
-    INSERT INTO cars (name, modelYear, weeklyPrice, bond, status, image)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  const result = stmt.run(name.trim(), parsedModelYear, parsedWeeklyPrice, parsedBond, parsedStatus, image.trim());
-  res.status(201).json({ id: result.lastInsertRowid });
+  const result = await db.execute({
+    sql: 'INSERT INTO cars (name, modelYear, weeklyPrice, bond, status, image) VALUES (?, ?, ?, ?, ?, ?)',
+    args: [name.trim(), parsedModelYear, parsedWeeklyPrice, parsedBond, parsedStatus, image.trim()]
+  });
+  res.status(201).json({ id: Number(result.lastInsertRowid) });
 });
 
-app.put('/api/cars/:id', authenticateAdmin, (req, res) => {
+app.put('/api/cars/:id', authenticateAdmin, async (req, res) => {
   const { name, modelYear, weeklyPrice, bond, status, image } = req.body;
   const carId = toPositiveInteger(req.params.id);
   const parsedModelYear = toPositiveInteger(modelYear);
@@ -150,32 +157,32 @@ app.put('/api/cars/:id', authenticateAdmin, (req, res) => {
     return res.status(400).json({ error: 'Invalid car payload.' });
   }
 
-  const stmt = db.prepare(`
-    UPDATE cars SET name = ?, modelYear = ?, weeklyPrice = ?, bond = ?, status = ?, image = ?
-    WHERE id = ?
-  `);
-  const result = stmt.run(name.trim(), parsedModelYear, parsedWeeklyPrice, parsedBond, status, image.trim(), carId);
-  if (result.changes === 0) return res.status(404).json({ error: 'Car not found' });
+  const result = await db.execute({
+    sql: 'UPDATE cars SET name = ?, modelYear = ?, weeklyPrice = ?, bond = ?, status = ?, image = ? WHERE id = ?',
+    args: [name.trim(), parsedModelYear, parsedWeeklyPrice, parsedBond, status, image.trim(), carId]
+  });
+  if (result.rowsAffected === 0) return res.status(404).json({ error: 'Car not found' });
   return res.json({ success: true });
 });
 
-app.delete('/api/cars/:id', authenticateAdmin, (req, res) => {
+app.delete('/api/cars/:id', authenticateAdmin, async (req, res) => {
   const carId = toPositiveInteger(req.params.id);
   if (!carId) return res.status(400).json({ error: 'Invalid car id.' });
-  const result = db.prepare('DELETE FROM cars WHERE id = ?').run(carId);
-  if (result.changes === 0) return res.status(404).json({ error: 'Car not found' });
+  const result = await db.execute({
+    sql: 'DELETE FROM cars WHERE id = ?',
+    args: [carId]
+  });
+  if (result.rowsAffected === 0) return res.status(404).json({ error: 'Car not found' });
   return res.json({ success: true });
 });
 
 // Applications
-app.get('/api/applications', authenticateAdmin, (req, res) => {
-  const applications = db.prepare(`
-    SELECT * FROM applications ORDER BY createdAt DESC
-  `).all();
-  res.json(applications);
+app.get('/api/applications', authenticateAdmin, async (req, res) => {
+  const result = await db.execute('SELECT * FROM applications ORDER BY createdAt DESC');
+  res.json(result.rows);
 });
 
-app.put('/api/applications/:id/status', authenticateAdmin, (req, res) => {
+app.put('/api/applications/:id/status', authenticateAdmin, async (req, res) => {
   const { status } = req.body;
   const applicationId = toPositiveInteger(req.params.id);
   if (
@@ -186,13 +193,16 @@ app.put('/api/applications/:id/status', authenticateAdmin, (req, res) => {
     return res.status(400).json({ error: 'Invalid application status update.' });
   }
 
-  const result = db.prepare('UPDATE applications SET status = ? WHERE id = ?').run(status, applicationId);
-  if (result.changes === 0) return res.status(404).json({ error: 'Application not found' });
+  const result = await db.execute({
+    sql: 'UPDATE applications SET status = ? WHERE id = ?',
+    args: [status, applicationId]
+  });
+  if (result.rowsAffected === 0) return res.status(404).json({ error: 'Application not found' });
   return res.json({ success: true });
 });
 
 // Create Application
-app.post('/api/applications', (req, res) => {
+app.post('/api/applications', async (req, res) => {
   const { 
     name, phone, email, licenseNumber, licenseExpiry, 
     uberStatus, experience, address, weeklyBudget, 
@@ -211,30 +221,29 @@ app.post('/api/applications', (req, res) => {
   }
 
   try {
-    const stmt = db.prepare(`
-      INSERT INTO applications (
+    const result = await db.execute({
+      sql: `INSERT INTO applications (
         name, phone, email, licenseNumber, licenseExpiry, 
         uberStatus, experience, address, weeklyBudget, 
         intendedStartDate, licensePhoto, uberScreenshot
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(
-      name.trim(),
-      phone.trim(),
-      email.trim(),
-      licenseNumber.trim(),
-      typeof licenseExpiry === 'string' ? licenseExpiry : null,
-      uberStatus.trim(),
-      typeof experience === 'string' ? experience : null,
-      address.trim(),
-      typeof weeklyBudget === 'string' ? weeklyBudget : null,
-      typeof intendedStartDate === 'string' ? intendedStartDate : null,
-      typeof licensePhoto === 'string' ? licensePhoto : null,
-      typeof uberScreenshot === 'string' ? uberScreenshot : null
-    );
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        name.trim(),
+        phone.trim(),
+        email.trim(),
+        licenseNumber.trim(),
+        typeof licenseExpiry === 'string' ? licenseExpiry : null,
+        uberStatus.trim(),
+        typeof experience === 'string' ? experience : null,
+        address.trim(),
+        typeof weeklyBudget === 'string' ? weeklyBudget : null,
+        typeof intendedStartDate === 'string' ? intendedStartDate : null,
+        typeof licensePhoto === 'string' ? licensePhoto : null,
+        typeof uberScreenshot === 'string' ? uberScreenshot : null
+      ]
+    });
 
-    return res.json({ success: true, applicationId: result.lastInsertRowid });
+    return res.json({ success: true, applicationId: Number(result.lastInsertRowid) });
   } catch (error: any) {
     console.error('Application error:', error);
     return res.status(500).json({ error: 'Application submission failed' });
@@ -242,18 +251,18 @@ app.post('/api/applications', (req, res) => {
 });
 
 // Rentals
-app.get('/api/rentals', authenticateAdmin, (req, res) => {
-  const rentals = db.prepare(`
+app.get('/api/rentals', authenticateAdmin, async (req, res) => {
+  const result = await db.execute(`
     SELECT r.*, a.name as driverName, c.name as carName 
     FROM rentals r 
     JOIN applications a ON r.applicationId = a.id
     JOIN cars c ON r.carId = c.id
     ORDER BY r.createdAt DESC
-  `).all();
-  res.json(rentals);
+  `);
+  res.json(result.rows);
 });
 
-app.post('/api/rentals', authenticateAdmin, (req, res) => {
+app.post('/api/rentals', authenticateAdmin, async (req, res) => {
   const { applicationId, carId, startDate, weeklyPrice } = req.body;
   const parsedApplicationId = toPositiveInteger(applicationId);
   const parsedCarId = toPositiveInteger(carId);
@@ -263,31 +272,39 @@ app.post('/api/rentals', authenticateAdmin, (req, res) => {
     return res.status(400).json({ error: 'Invalid rental payload.' });
   }
 
-  const application = db.prepare('SELECT id FROM applications WHERE id = ?').get(parsedApplicationId);
-  if (!application) return res.status(404).json({ error: 'Application not found.' });
+  const appResult = await db.execute({
+    sql: 'SELECT id FROM applications WHERE id = ?',
+    args: [parsedApplicationId]
+  });
+  if (appResult.rows.length === 0) return res.status(404).json({ error: 'Application not found.' });
 
-  const car = db.prepare('SELECT id, status FROM cars WHERE id = ?').get(parsedCarId) as any;
+  const carResult = await db.execute({
+    sql: 'SELECT id, status FROM cars WHERE id = ?',
+    args: [parsedCarId]
+  });
+  const car = carResult.rows[0] as any;
   if (!car) return res.status(404).json({ error: 'Car not found.' });
   if (car.status !== 'Available') return res.status(409).json({ error: 'Car is not available.' });
 
   try {
-    const tx = db.transaction(() => {
-      const stmt = db.prepare(`
-        INSERT INTO rentals (applicationId, carId, startDate, weeklyPrice)
-        VALUES (?, ?, ?, ?)
-      `);
-      const result = stmt.run(parsedApplicationId, parsedCarId, startDate.trim(), parsedWeeklyPrice);
-      db.prepare("UPDATE cars SET status = 'Rented' WHERE id = ?").run(parsedCarId);
-      return result.lastInsertRowid;
-    });
-    const rentalId = tx();
-    return res.json({ success: true, rentalId });
+    const batchResult = await db.batch([
+      {
+        sql: 'INSERT INTO rentals (applicationId, carId, startDate, weeklyPrice) VALUES (?, ?, ?, ?)',
+        args: [parsedApplicationId, parsedCarId, startDate.trim(), parsedWeeklyPrice]
+      },
+      {
+        sql: "UPDATE cars SET status = 'Rented' WHERE id = ?",
+        args: [parsedCarId]
+      }
+    ]);
+    return res.json({ success: true, rentalId: Number(batchResult[0].lastInsertRowid) });
   } catch (error: any) {
+    console.error('Rental creation error:', error);
     return res.status(500).json({ error: 'Failed to create rental' });
   }
 });
 
-app.put('/api/rentals/:id/status', authenticateAdmin, (req, res) => {
+app.put('/api/rentals/:id/status', authenticateAdmin, async (req, res) => {
   const { status } = req.body;
   const rentalId = toPositiveInteger(req.params.id);
   if (
@@ -298,18 +315,33 @@ app.put('/api/rentals/:id/status', authenticateAdmin, (req, res) => {
     return res.status(400).json({ error: 'Invalid rental status update.' });
   }
 
-  const rental = db.prepare('SELECT id, carId FROM rentals WHERE id = ?').get(rentalId) as any;
+  const rentalResult = await db.execute({
+    sql: 'SELECT id, carId FROM rentals WHERE id = ?',
+    args: [rentalId]
+  });
+  const rental = rentalResult.rows[0] as any;
   if (!rental) return res.status(404).json({ error: 'Rental not found.' });
 
-  const tx = db.transaction(() => {
-    db.prepare('UPDATE rentals SET status = ? WHERE id = ?').run(status, rentalId);
-    if (status === 'Completed' || status === 'Cancelled') {
-      db.prepare("UPDATE cars SET status = 'Available' WHERE id = ?").run(rental.carId);
-    } else if (status === 'Active') {
-      db.prepare("UPDATE cars SET status = 'Rented' WHERE id = ?").run(rental.carId);
+  const batch = [
+    {
+      sql: 'UPDATE rentals SET status = ? WHERE id = ?',
+      args: [status, rentalId]
     }
-  });
-  tx();
+  ];
+
+  if (status === 'Completed' || status === 'Cancelled') {
+    batch.push({
+      sql: "UPDATE cars SET status = 'Available' WHERE id = ?",
+      args: [rental.carId]
+    });
+  } else if (status === 'Active') {
+    batch.push({
+      sql: "UPDATE cars SET status = 'Rented' WHERE id = ?",
+      args: [rental.carId]
+    });
+  }
+
+  await db.batch(batch);
   return res.json({ success: true });
 });
 
@@ -332,7 +364,11 @@ app.post('/api/bookings', async (req, res) => {
     return res.status(400).json({ error: 'Invalid booking payload.' });
   }
 
-  const car = db.prepare('SELECT id, name, status FROM cars WHERE id = ?').get(parsedCarId) as any;
+  const carResult = await db.execute({
+    sql: 'SELECT id, name, status FROM cars WHERE id = ?',
+    args: [parsedCarId]
+  });
+  const car = carResult.rows[0] as any;
   if (!car) return res.status(404).json({ error: 'Car not found.' });
   if (car.status !== 'Available') return res.status(409).json({ error: 'Car is not available.' });
   if (!stripe) return res.status(503).json({ error: 'Payments are not configured.' });
@@ -363,22 +399,22 @@ app.post('/api/bookings', async (req, res) => {
       ],
     });
 
-    db.prepare(`
-      INSERT INTO bookings (
+    await db.execute({
+      sql: `INSERT INTO bookings (
         carId, customerName, email, phone, licenseNumber, startDate, endDate, totalPrice, status, stripeSessionId
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?)
-    `).run(
-      parsedCarId,
-      customerName.trim(),
-      email.trim(),
-      phone.trim(),
-      licenseNumber.trim(),
-      startDate.trim(),
-      endDate.trim(),
-      parsedTotalPrice,
-      session.id
-    );
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?)`,
+      args: [
+        parsedCarId,
+        customerName.trim(),
+        email.trim(),
+        phone.trim(),
+        licenseNumber.trim(),
+        startDate.trim(),
+        endDate.trim(),
+        parsedTotalPrice,
+        session.id
+      ]
+    });
 
     return res.json({ url: session.url, sessionId: session.id });
   } catch (error) {
@@ -400,16 +436,25 @@ app.post('/api/bookings/verify-payment', async (req, res) => {
       return res.json({ success: false });
     }
 
-    const booking = db.prepare('SELECT id, carId, status FROM bookings WHERE stripeSessionId = ?').get(sessionId) as any;
+    const bookingResult = await db.execute({
+      sql: 'SELECT id, carId, status FROM bookings WHERE stripeSessionId = ?',
+      args: [sessionId]
+    });
+    const booking = bookingResult.rows[0] as any;
     if (!booking) return res.status(404).json({ error: 'Booking not found.' });
 
-    const tx = db.transaction(() => {
-      db.prepare("UPDATE bookings SET status = 'Paid' WHERE id = ?").run(booking.id);
-      db.prepare("UPDATE cars SET status = 'Rented' WHERE id = ?").run(booking.carId);
-    });
-    tx();
+    await db.batch([
+      {
+        sql: "UPDATE bookings SET status = 'Paid' WHERE id = ?",
+        args: [booking.id]
+      },
+      {
+        sql: "UPDATE cars SET status = 'Rented' WHERE id = ?",
+        args: [booking.carId]
+      }
+    ]);
 
-    return res.json({ success: true, bookingId: booking.id });
+    return res.json({ success: true, bookingId: Number(booking.id) });
   } catch (error) {
     console.error('Payment verification error:', error);
     return res.status(500).json({ error: 'Failed to verify payment.' });
@@ -417,36 +462,44 @@ app.post('/api/bookings/verify-payment', async (req, res) => {
 });
 
 // Dashboard Stats
-app.get('/api/stats', authenticateAdmin, (req, res) => {
-  const totalApplications = (db.prepare('SELECT COUNT(*) as count FROM applications').get() as any).count;
-  const activeRentals = (db.prepare("SELECT COUNT(*) as count FROM rentals WHERE status = 'Active'").get() as any).count;
-  const totalWeeklyIncome = (db.prepare("SELECT SUM(weeklyPrice) as total FROM rentals WHERE status = 'Active'").get() as any).total || 0;
+app.get('/api/stats', authenticateAdmin, async (req, res) => {
+  const [apps, rentals, income] = await Promise.all([
+    db.execute('SELECT COUNT(*) as count FROM applications'),
+    db.execute("SELECT COUNT(*) as count FROM rentals WHERE status = 'Active'"),
+    db.execute("SELECT SUM(weeklyPrice) as total FROM rentals WHERE status = 'Active'")
+  ]);
   
   res.json({
-    totalApplications,
-    activeRentals,
-    totalWeeklyIncome
+    totalApplications: Number(apps.rows[0].count),
+    activeRentals: Number(rentals.rows[0].count),
+    totalWeeklyIncome: Number(income.rows[0].total) || 0
   });
 });
 
+export default app;
+
 // --- Vite Middleware ---
 async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
+  } else if (!process.env.VERCEL) {
     app.use(express.static('dist'));
     app.get('*', (req, res) => {
       res.sendFile('dist/index.html', { root: '.' });
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
