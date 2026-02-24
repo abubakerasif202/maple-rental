@@ -82,7 +82,7 @@ export default function Apply() {
           </div>
           <h1 className="text-3xl font-serif font-bold text-white mb-4 tracking-tight">Application Received</h1>
           <p className="text-brand-grey font-light leading-relaxed mb-10">
-            Thank you for applying to Maple Rentals. Our team will review your details and contact you within 24 hours.
+            Thank you for applying to MAPLE RENTALS. Our team will review your details and contact you within 24 hours.
           </p>
           <Link 
             to="/" 
@@ -113,7 +113,7 @@ export default function Apply() {
             transition={{ delay: 0.2 }}
             className="text-brand-grey text-lg font-light mb-6"
           >
-            Apply to rent a Toyota Camry Hybrid and start driving with Maple Rentals.
+            Apply to rent a Toyota Camry Hybrid and start driving with MAPLE RENTALS.
           </motion.p>
           <motion.div 
             initial={{ opacity: 0 }}
@@ -364,7 +364,7 @@ export default function Apply() {
               <div className="mt-8 flex items-start gap-3 p-4 bg-brand-charcoal/50 border border-white/5 rounded-lg">
                 <Lock className="w-4 h-4 text-brand-gold mt-0.5" />
                 <p className="text-[10px] text-brand-grey/60 font-light leading-relaxed">
-                  Files are securely stored and reviewed by Maple Rentals management only. Your information is never shared with third parties.
+                  Files are securely stored and reviewed by MAPLE RENTALS management only. Your information is never shared with third parties.
                 </p>
               </div>
             </motion.section>

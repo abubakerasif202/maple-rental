@@ -1,32 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { useState } from 'react';
-
-const LogoIcon = ({ className = "w-8 h-8" }) => (
-  <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Proper Iconic Maple Leaf */}
-    <path 
-      d="M50 95 V80 M50 80 C45 80 40 75 35 70 L20 75 L25 55 L10 50 L20 35 L15 15 L40 25 L50 5 L60 25 L85 15 L80 35 L90 50 L75 55 L80 75 L65 70 C60 75 55 80 50 80" 
-      fill="#E67E22" 
-      stroke="#8B4513" 
-      strokeWidth="1.2" 
-      strokeLinejoin="round"
-    />
-    {/* Centered MR Monogram */}
-    <text 
-      x="50" 
-      y="52" 
-      textAnchor="middle" 
-      fill="white" 
-      fontSize="10" 
-      fontWeight="900" 
-      fontFamily="Inter, sans-serif"
-      style={{ letterSpacing: '-0.02em' }}
-    >
-      MR
-    </text>
-  </svg>
-);
+import BrandMark from './BrandMark';
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -44,10 +19,9 @@ export default function Navbar() {
         <div className="flex justify-between items-center h-20 md:h-24">
           {/* Left: Logo */}
           <div className="flex-1 flex justify-start">
-            <Link to="/" className="flex items-center gap-4 group">
-              <span className="font-serif font-bold text-xl md:text-2xl text-white tracking-[0.15em] uppercase">MAPLE</span>
-              <LogoIcon className="w-8 h-8 md:w-10 md:h-10" />
-              <span className="font-script text-xl md:text-2xl text-brand-gold/80">Rentals</span>
+            <Link to="/" className="flex items-center gap-3 group">
+              <BrandMark className="w-11 h-11 md:w-12 md:h-12" />
+              <span className="font-serif font-bold text-base md:text-lg text-white tracking-[0.18em] uppercase">MAPLE RENTALS</span>
             </Link>
           </div>
           

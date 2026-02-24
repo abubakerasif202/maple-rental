@@ -117,7 +117,7 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-brand-gold flex items-center justify-center text-brand-charcoal font-black text-lg">MR</div>
             <div>
-              <h2 className="text-sm font-serif font-bold tracking-widest uppercase">Maple</h2>
+              <h2 className="text-sm font-serif font-bold tracking-widest uppercase">MAPLE RENTALS</h2>
               <p className="text-[10px] text-brand-gold font-medium tracking-[0.4em] uppercase">Admin</p>
             </div>
           </div>

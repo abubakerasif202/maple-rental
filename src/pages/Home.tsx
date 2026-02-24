@@ -67,7 +67,7 @@ export default function Home() {
                   href="tel:0420550556" 
                   className="bg-transparent border border-white/10 hover:border-brand-gold/30 text-white px-8 py-4 font-medium text-sm uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3"
                 >
-                  Call Maple Rentals
+                  Call MAPLE RENTALS
                 </a>
               </motion.div>
 
@@ -147,7 +147,7 @@ export default function Home() {
                   When you drive for Uber, your vehicle is your income engine.
                 </p>
                 <p>
-                  Maple Rentals provides professionally maintained Toyota Camry Hybrid vehicles designed for long hours, lower fuel costs, and reliable performance.
+                  MAPLE RENTALS provides professionally maintained Toyota Camry Hybrid vehicles designed for long hours, lower fuel costs, and reliable performance.
                 </p>
                 <p>
                   We keep your car running smoothly so you can focus on earning.
@@ -315,7 +315,7 @@ export default function Home() {
             variants={fadeIn}
           >
             <h2 className="text-4xl md:text-5xl font-serif font-bold mb-8 leading-tight">Ready to Drive with Sydney's Most Reliable Fleet?</h2>
-            <p className="text-xl text-brand-grey mb-12 font-light">Join hundreds of successful Uber drivers who trust Maple Rentals for their business.</p>
+            <p className="text-xl text-brand-grey mb-12 font-light">Join hundreds of successful Uber drivers who trust MAPLE RENTALS for their business.</p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
               <Link 
                 to="/apply" 
