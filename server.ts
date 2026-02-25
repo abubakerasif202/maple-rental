@@ -14,6 +14,7 @@ import {
   type Car, type Booking, type Admin, type Application, type Rental,
   CAR_STATUSES, APPLICATION_STATUSES, RENTAL_STATUSES
 } from './src/types.ts';
+import { getDateDiffInDays } from './src/utils/date.ts';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -77,14 +78,6 @@ const stripe = stripeSecretKey
   : null;
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-const getDateDiffInDays = (startDateInput: string, endDateInput: string): number | null => {
-  const startDate = new Date(startDateInput);
-  const endDate = new Date(endDateInput);
-  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return null;
-  const diffMs = endDate.getTime() - startDate.getTime();
-  if (diffMs <= 0) return null;
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-};
 
 const calculateBookingTotal = (weeklyPrice: number, startDate: string, endDate: string): number | null => {
   const days = getDateDiffInDays(startDate, endDate);
