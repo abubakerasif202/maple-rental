@@ -14,7 +14,6 @@ const PORT = 3000;
 // Middleware
 app.use(cors({ origin: true, credentials: true }));
 app.use(cookieParser());
-app.use(express.json({ limit: '10mb' }));
 
 const jwtSecretFromEnv = process.env.JWT_SECRET;
 if (!jwtSecretFromEnv && process.env.NODE_ENV === 'production') {
@@ -29,8 +28,9 @@ const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecretKey
   ? new Stripe(stripeSecretKey, { apiVersion: '2025-02-24.acacia' as any })
   : null;
+const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-const CAR_STATUSES = ['Available', 'Rented', 'Maintenance'] as const;
+const CAR_STATUSES = ['Available', 'Reserved', 'Rented', 'Maintenance'] as const;
 const APPLICATION_STATUSES = ['Pending', 'Approved', 'Rejected'] as const;
 const RENTAL_STATUSES = ['Active', 'Completed', 'Cancelled'] as const;
 
@@ -47,11 +47,132 @@ const toPositiveInteger = (value: unknown): number | null => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 };
 
+const getDateDiffInDays = (startDateInput: string, endDateInput: string): number | null => {
+  const startDate = new Date(startDateInput);
+  const endDate = new Date(endDateInput);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return null;
+  const diffMs = endDate.getTime() - startDate.getTime();
+  if (diffMs <= 0) return null;
+  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+};
+
+const calculateBookingTotal = (weeklyPrice: number, startDate: string, endDate: string): number | null => {
+  const days = getDateDiffInDays(startDate, endDate);
+  if (!days) return null;
+  const dailyRate = weeklyPrice / 7;
+  const total = Number((dailyRate * days).toFixed(2));
+  return total > 0 ? total : null;
+};
+
+const setAdminCookie = (res: express.Response, token: string) => {
+  res.cookie('admin_token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+  });
+};
+
+const clearAdminCookie = (res: express.Response) => {
+  res.clearCookie('admin_token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+  });
+};
+
+const markBookingPaid = async (sessionId: string) => {
+  const bookingResult = await db.execute({
+    sql: 'SELECT id, carId, status FROM bookings WHERE stripeSessionId = ?',
+    args: [sessionId]
+  });
+  const booking = bookingResult.rows[0] as any;
+  if (!booking) return { found: false as const };
+
+  if (booking.status !== 'Paid') {
+    await db.batch([
+      {
+        sql: "UPDATE bookings SET status = 'Paid' WHERE id = ?",
+        args: [booking.id]
+      },
+      {
+        sql: "UPDATE cars SET status = 'Rented' WHERE id = ?",
+        args: [booking.carId]
+      }
+    ]);
+  }
+
+  return { found: true as const, bookingId: Number(booking.id) };
+};
+
+const releasePendingBookingReservation = async (sessionId: string) => {
+  const bookingResult = await db.execute({
+    sql: 'SELECT id, carId, status FROM bookings WHERE stripeSessionId = ?',
+    args: [sessionId]
+  });
+  const booking = bookingResult.rows[0] as any;
+  if (!booking) return;
+
+  if (booking.status === 'Pending') {
+    await db.batch([
+      {
+        sql: "UPDATE bookings SET status = 'Cancelled' WHERE id = ?",
+        args: [booking.id]
+      },
+      {
+        sql: "UPDATE cars SET status = 'Available' WHERE id = ?",
+        args: [booking.carId]
+      }
+    ]);
+  }
+};
+
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe || !stripeWebhookSecret) {
+    return res.status(503).json({ error: 'Stripe webhook is not configured.' });
+  }
+
+  const signature = req.headers['stripe-signature'];
+  if (!signature || typeof signature !== 'string') {
+    return res.status(400).json({ error: 'Missing Stripe signature.' });
+  }
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, signature, stripeWebhookSecret);
+  } catch (err) {
+    console.error('Stripe webhook signature verification failed:', err);
+    return res.status(400).json({ error: 'Invalid Stripe signature.' });
+  }
+
+  try {
+    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.id && session.payment_status === 'paid') {
+        await markBookingPaid(session.id);
+      }
+    }
+
+    if (event.type === 'checkout.session.expired') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.id) {
+        await releasePendingBookingReservation(session.id);
+      }
+    }
+
+    return res.json({ received: true });
+  } catch (err) {
+    console.error('Stripe webhook handling error:', err);
+    return res.status(500).json({ error: 'Webhook handling failed.' });
+  }
+});
+
+app.use(express.json({ limit: '10mb' }));
+
 // Auth Middleware
 const authenticateAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const authHeader = req.headers.authorization;
-  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
-  const token = req.cookies.admin_token || bearerToken;
+  const token = req.cookies.admin_token;
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
@@ -83,12 +204,12 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   const token = jwt.sign({ id: Number(admin.id), username: admin.username }, JWT_SECRET, { expiresIn: '1d' });
-  res.cookie('admin_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' });
-  res.json({ token, username: admin.username });
+  setAdminCookie(res, token);
+  res.json({ username: admin.username });
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  res.clearCookie('admin_token');
+  clearAdminCookie(res);
   res.json({ message: 'Logged out' });
 });
 
@@ -347,10 +468,9 @@ app.put('/api/rentals/:id/status', authenticateAdmin, async (req, res) => {
 
 // Bookings
 app.post('/api/bookings', async (req, res) => {
-  const { customerName, email, phone, licenseNumber, carId, startDate, endDate, totalPrice } = req.body;
+  const { customerName, email, phone, licenseNumber, carId, startDate, endDate } = req.body;
 
   const parsedCarId = toPositiveInteger(carId);
-  const parsedTotalPrice = toPositiveNumber(totalPrice);
   if (
     !isNonEmptyString(customerName, 180) ||
     !isNonEmptyString(email, 320) ||
@@ -358,8 +478,7 @@ app.post('/api/bookings', async (req, res) => {
     !isNonEmptyString(licenseNumber, 80) ||
     !parsedCarId ||
     !isNonEmptyString(startDate, 40) ||
-    !isNonEmptyString(endDate, 40) ||
-    !parsedTotalPrice
+    !isNonEmptyString(endDate, 40)
   ) {
     return res.status(400).json({ error: 'Invalid booking payload.' });
   }
@@ -374,6 +493,19 @@ app.post('/api/bookings', async (req, res) => {
   if (!stripe) return res.status(503).json({ error: 'Payments are not configured.' });
 
   try {
+    const serverTotalPrice = calculateBookingTotal(Number(car.weeklyPrice), startDate.trim(), endDate.trim());
+    if (!serverTotalPrice) {
+      return res.status(400).json({ error: 'Invalid booking date range.' });
+    }
+
+    const reserveResult = await db.execute({
+      sql: "UPDATE cars SET status = 'Reserved' WHERE id = ? AND status = 'Available'",
+      args: [parsedCarId]
+    });
+    if (reserveResult.rowsAffected === 0) {
+      return res.status(409).json({ error: 'Car is no longer available.' });
+    }
+
     const appUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -393,7 +525,7 @@ app.post('/api/bookings', async (req, res) => {
               name: `${car.name} booking`,
               description: `${startDate.trim()} to ${endDate.trim()}`,
             },
-            unit_amount: Math.round(parsedTotalPrice * 100),
+            unit_amount: Math.round(serverTotalPrice * 100),
           },
         },
       ],
@@ -411,14 +543,18 @@ app.post('/api/bookings', async (req, res) => {
         licenseNumber.trim(),
         startDate.trim(),
         endDate.trim(),
-        parsedTotalPrice,
+        serverTotalPrice,
         session.id
       ]
     });
 
-    return res.json({ url: session.url, sessionId: session.id });
+    return res.json({ url: session.url, sessionId: session.id, totalPrice: serverTotalPrice });
   } catch (error) {
     console.error('Booking checkout error:', error);
+    await db.execute({
+      sql: "UPDATE cars SET status = 'Available' WHERE id = ? AND status = 'Reserved'",
+      args: [parsedCarId]
+    }).catch((rollbackError) => console.error('Failed to rollback car reservation:', rollbackError));
     return res.status(500).json({ error: 'Failed to create checkout session.' });
   }
 });
@@ -433,28 +569,15 @@ app.post('/api/bookings/verify-payment', async (req, res) => {
   try {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     if (session.payment_status !== 'paid') {
+      if (session.status === 'expired') {
+        await releasePendingBookingReservation(sessionId);
+      }
       return res.json({ success: false });
     }
 
-    const bookingResult = await db.execute({
-      sql: 'SELECT id, carId, status FROM bookings WHERE stripeSessionId = ?',
-      args: [sessionId]
-    });
-    const booking = bookingResult.rows[0] as any;
-    if (!booking) return res.status(404).json({ error: 'Booking not found.' });
-
-    await db.batch([
-      {
-        sql: "UPDATE bookings SET status = 'Paid' WHERE id = ?",
-        args: [booking.id]
-      },
-      {
-        sql: "UPDATE cars SET status = 'Rented' WHERE id = ?",
-        args: [booking.carId]
-      }
-    ]);
-
-    return res.json({ success: true, bookingId: Number(booking.id) });
+    const result = await markBookingPaid(sessionId);
+    if (!result.found) return res.status(404).json({ error: 'Booking not found.' });
+    return res.json({ success: true, bookingId: result.bookingId });
   } catch (error) {
     console.error('Payment verification error:', error);
     return res.status(500).json({ error: 'Failed to verify payment.' });

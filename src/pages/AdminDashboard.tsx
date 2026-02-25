@@ -23,25 +23,31 @@ export default function AdminDashboard() {
   });
   const navigate = useNavigate();
 
+  const authFetch = (url: string, init?: RequestInit) =>
+    fetch(url, {
+      ...init,
+      credentials: 'include',
+      headers: {
+        ...(init?.headers || {}),
+      },
+    });
+
   useEffect(() => {
-    const token = localStorage.getItem('admin_token');
-    if (!token) {
-      navigate('/admin/login');
-      return;
-    }
-
-    const headers = { Authorization: `Bearer ${token}` };
-
     const fetchData = async () => {
       try {
+        const verifyRes = await authFetch('/api/auth/verify');
+        if (!verifyRes.ok) throw new Error('Unauthorized');
+
         const [statsRes, carsRes, appsRes, rentalsRes] = await Promise.all([
-          fetch('/api/stats', { headers }),
-          fetch('/api/cars', { headers }),
-          fetch('/api/applications', { headers }),
-          fetch('/api/rentals', { headers })
+          authFetch('/api/stats'),
+          authFetch('/api/cars'),
+          authFetch('/api/applications'),
+          authFetch('/api/rentals')
         ]);
 
-        if (statsRes.status === 401) throw new Error('Unauthorized');
+        if (!statsRes.ok || !carsRes.ok || !appsRes.ok || !rentalsRes.ok) {
+          throw new Error('Failed to load dashboard data');
+        }
 
         setStats(await statsRes.json());
         setCars(await carsRes.json());
@@ -49,7 +55,6 @@ export default function AdminDashboard() {
         setRentals(await rentalsRes.json());
       } catch (err) {
         console.error('Fetch error:', err);
-        localStorage.removeItem('admin_token');
         navigate('/admin/login');
       }
     };
@@ -58,33 +63,32 @@ export default function AdminDashboard() {
   }, [navigate]);
 
   const handleLogout = () => {
-    localStorage.removeItem('admin_token');
-    navigate('/admin/login');
+    authFetch('/api/auth/logout', { method: 'POST' }).finally(() => navigate('/admin/login'));
   };
 
   const updateApplicationStatus = async (id: number, status: string) => {
-    const token = localStorage.getItem('admin_token');
-    await fetch(`/api/applications/${id}/status`, {
+    const response = await authFetch(`/api/applications/${id}/status`, {
       method: 'PUT',
       headers: { 
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
       },
       body: JSON.stringify({ status })
     });
-    
-    setApplications(applications.map(a => a.id === id ? { ...a, status } : a));
+
+    if (response.ok) {
+      setApplications(applications.map(a => a.id === id ? { ...a, status } : a));
+    } else {
+      alert('Failed to update application status');
+    }
   };
 
   const handleAddCar = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem('admin_token');
     try {
-      const response = await fetch('/api/cars', {
+      const response = await authFetch('/api/cars', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
         },
         body: JSON.stringify(newCar)
       });
@@ -112,12 +116,14 @@ export default function AdminDashboard() {
 
   const deleteCar = async (id: number) => {
     if (!confirm('Are you sure you want to delete this car?')) return;
-    const token = localStorage.getItem('admin_token');
-    await fetch(`/api/cars/${id}`, {
+    const response = await authFetch(`/api/cars/${id}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` }
     });
-    setCars(cars.filter(c => c.id !== id));
+    if (response.ok) {
+      setCars(cars.filter(c => c.id !== id));
+    } else {
+      alert('Failed to delete car');
+    }
   };
 
   const handleEditClick = (car: any) => {
@@ -129,13 +135,11 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!editingCar) return;
 
-    const token = localStorage.getItem('admin_token');
     try {
-      const response = await fetch(`/api/cars/${editingCar.id}`, {
+      const response = await authFetch(`/api/cars/${editingCar.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
         },
         body: JSON.stringify(editingCar)
       });
@@ -351,7 +355,13 @@ export default function AdminDashboard() {
                           <div className="text-[10px] text-brand-grey uppercase tracking-widest mt-1">Bond: ${car.bond}</div>
                         </td>
                         <td className="px-8 py-6">
-                          <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full ${car.status === 'Available' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                          <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full ${
+                            car.status === 'Available'
+                              ? 'bg-emerald-500/10 text-emerald-500'
+                              : car.status === 'Reserved'
+                                ? 'bg-brand-gold/10 text-brand-gold'
+                                : 'bg-red-500/10 text-red-500'
+                          }`}>
                             {car.status}
                           </span>
                         </td>
@@ -485,6 +495,7 @@ export default function AdminDashboard() {
                     onChange={(e) => setEditingCar({...editingCar, status: e.target.value})}
                   >
                     <option value="Available">Available</option>
+                    <option value="Reserved">Reserved</option>
                     <option value="Rented">Rented</option>
                     <option value="Maintenance">Maintenance</option>
                   </select>
@@ -584,6 +595,7 @@ export default function AdminDashboard() {
                     onChange={(e) => setNewCar({...newCar, status: e.target.value})}
                   >
                     <option value="Available">Available</option>
+                    <option value="Reserved">Reserved</option>
                     <option value="Rented">Rented</option>
                     <option value="Maintenance">Maintenance</option>
                   </select>
