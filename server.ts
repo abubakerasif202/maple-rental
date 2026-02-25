@@ -27,6 +27,15 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate Limiting for Applications
+const applicationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Limit each IP to 5 applications per hour
+  message: { error: 'Too many applications submitted, please try again after an hour' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Middleware
 app.use(cors({ origin: true, credentials: true }));
 app.use(cookieParser());
@@ -344,7 +353,7 @@ app.put('/api/applications/:id/status', authenticateAdmin, async (req, res) => {
 });
 
 // Create Application
-app.post('/api/applications', async (req, res) => {
+app.post('/api/applications', applicationLimiter, async (req, res) => {
   const validation = ApplicationSchema.safeParse(req.body);
   if (!validation.success) {
     return res.status(400).json({ error: 'Invalid application data', details: validation.error.format() });
