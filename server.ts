@@ -36,6 +36,16 @@ const applicationLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate Limiting for Bookings
+const bookingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 bookings per window
+  message: { error: 'Too many booking attempts, please try again after 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+
 // Middleware
 const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
   .split(',')
@@ -531,7 +541,7 @@ app.put('/api/rentals/:id/status', authenticateAdmin, async (req, res) => {
 });
 
 // Bookings
-app.post('/api/bookings', async (req, res) => {
+app.post('/api/bookings', bookingLimiter, async (req, res) => {
   const validation = BookingSchema.safeParse(req.body);
   if (!validation.success) {
     return res.status(400).json({ error: 'Invalid booking data', details: validation.error.format() });
