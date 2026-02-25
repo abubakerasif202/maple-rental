@@ -18,6 +18,10 @@ import {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Pre-computed hash for timing attack mitigation.
+// Hash of "dummypassword" with cost 10
+const DUMMY_HASH = '$2b$10$21/pM0hAsUD6iydmwrg5NOo2VnplXLPzHPidJCySSYJqj/MBW2GJe';
+
 // Rate Limiting for Auth
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -232,7 +236,11 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     });
     const admin = result.rows[0] as unknown as Admin | undefined;
 
-    if (!admin || !admin.password || !bcrypt.compareSync(password, admin.password)) {
+    // Timing attack mitigation: always compare hash
+    const targetHash = (admin && admin.password) ? admin.password : DUMMY_HASH;
+    const isPasswordValid = bcrypt.compareSync(password, targetHash);
+
+    if (!admin || !admin.password || !isPasswordValid) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
