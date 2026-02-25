@@ -8,6 +8,7 @@ import Stripe from 'stripe';
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import db from './src/db/index.ts';
+import { stripe, stripeWebhookSecret } from './src/lib/stripe.ts';
 import { 
   LoginSchema, CarSchema, ApplicationSchema, ApplicationStatusSchema, 
   RentalSchema, RentalStatusSchema, BookingSchema,
@@ -40,11 +41,6 @@ if (!jwtSecretFromEnv) {
   console.warn('JWT_SECRET is not set. Using an in-memory generated secret for this process.');
 }
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-const stripe = stripeSecretKey
-  ? new Stripe(stripeSecretKey, { apiVersion: '2025-02-24.acacia' as Stripe.StripeConfig['apiVersion'] })
-  : null;
-const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
 const getDateDiffInDays = (startDateInput: string, endDateInput: string): number | null => {
   const startDate = new Date(startDateInput);
