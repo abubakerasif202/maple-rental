@@ -1,6 +1,5 @@
 import { createClient } from '@libsql/client';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -92,18 +91,19 @@ async function initDb() {
   const adminCount = Number(adminCheck.rows[0].count);
   
   if (adminCount === 0) {
-    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
-    const adminPassword = process.env.ADMIN_PASSWORD || crypto.randomBytes(18).toString('base64url');
+    if (process.env.ADMIN_PASSWORD) {
+      const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+      const adminPassword = process.env.ADMIN_PASSWORD;
 
-    if (!process.env.ADMIN_PASSWORD) {
-      console.warn(`No ADMIN_PASSWORD provided. Generated one-time admin password for "${adminUsername}": ${adminPassword}`);
+      const hashedPassword = bcrypt.hashSync(adminPassword, 10);
+      await db.execute({
+        sql: 'INSERT INTO admin (username, password) VALUES (?, ?)',
+        args: [adminUsername, hashedPassword]
+      });
+      console.log(`Admin account created for "${adminUsername}"`);
+    } else {
+      console.warn('No ADMIN_PASSWORD provided. Skipping admin account creation. Set ADMIN_PASSWORD environment variable to create an admin account.');
     }
-
-    const hashedPassword = bcrypt.hashSync(adminPassword, 10);
-    await db.execute({
-      sql: 'INSERT INTO admin (username, password) VALUES (?, ?)',
-      args: [adminUsername, hashedPassword]
-    });
   }
 
   // Seed cars if empty
