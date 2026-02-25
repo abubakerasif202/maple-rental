@@ -232,7 +232,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     });
     const admin = result.rows[0] as unknown as Admin | undefined;
 
-    if (!admin || !admin.password || !bcrypt.compareSync(password, admin.password)) {
+    if (!admin || !admin.password || !(await bcrypt.compare(password, admin.password))) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
