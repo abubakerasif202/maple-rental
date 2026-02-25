@@ -198,7 +198,17 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
   }
 });
 
-app.use(express.json({ limit: '10mb' }));
+// Configurable limits
+const jsonParserDefault = express.json({ limit: '100kb' });
+const jsonParserLarge = express.json({ limit: '10mb' });
+
+app.use((req, res, next) => {
+  if (req.path === '/api/applications') {
+    jsonParserLarge(req, res, next);
+  } else {
+    jsonParserDefault(req, res, next);
+  }
+});
 
 // Auth Middleware
 const authenticateAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
