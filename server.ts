@@ -6,10 +6,26 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import Stripe from 'stripe';
 import crypto from 'crypto';
+import rateLimit from 'express-rate-limit';
 import db from './src/db/index.ts';
+import { 
+  LoginSchema, CarSchema, ApplicationSchema, ApplicationStatusSchema, 
+  RentalSchema, RentalStatusSchema, BookingSchema,
+  type Car, type Booking, type Admin, type Application, type Rental,
+  CAR_STATUSES, APPLICATION_STATUSES, RENTAL_STATUSES
+} from './src/types.ts';
 
 const app = express();
 const PORT = 3000;
+
+// Rate Limiting for Auth
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 login attempts per window
+  message: { error: 'Too many login attempts, please try again after 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Middleware
 app.use(cors({ origin: true, credentials: true }));
@@ -26,26 +42,9 @@ if (!jwtSecretFromEnv) {
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecretKey
-  ? new Stripe(stripeSecretKey, { apiVersion: '2025-02-24.acacia' as any })
+  ? new Stripe(stripeSecretKey, { apiVersion: '2025-02-24.acacia' as Stripe.StripeConfig['apiVersion'] })
   : null;
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-const CAR_STATUSES = ['Available', 'Reserved', 'Rented', 'Maintenance'] as const;
-const APPLICATION_STATUSES = ['Pending', 'Approved', 'Rejected'] as const;
-const RENTAL_STATUSES = ['Active', 'Completed', 'Cancelled'] as const;
-
-const isNonEmptyString = (value: unknown, maxLength = 500): value is string =>
-  typeof value === 'string' && value.trim().length > 0 && value.trim().length <= maxLength;
-
-const toPositiveNumber = (value: unknown): number | null => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-};
-
-const toPositiveInteger = (value: unknown): number | null => {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-};
 
 const getDateDiffInDays = (startDateInput: string, endDateInput: string): number | null => {
   const startDate = new Date(startDateInput);
@@ -87,7 +86,7 @@ const markBookingPaid = async (sessionId: string) => {
     sql: 'SELECT id, carId, status FROM bookings WHERE stripeSessionId = ?',
     args: [sessionId]
   });
-  const booking = bookingResult.rows[0] as any;
+  const booking = bookingResult.rows[0] as unknown as Booking | undefined;
   if (!booking) return { found: false as const };
 
   if (booking.status !== 'Paid') {
@@ -111,7 +110,7 @@ const releasePendingBookingReservation = async (sessionId: string) => {
     sql: 'SELECT id, carId, status FROM bookings WHERE stripeSessionId = ?',
     args: [sessionId]
   });
-  const booking = bookingResult.rows[0] as any;
+  const booking = bookingResult.rows[0] as unknown as Booking | undefined;
   if (!booking) return;
 
   if (booking.status === 'Pending') {
@@ -176,8 +175,8 @@ const authenticateAdmin = (req: express.Request, res: express.Response, next: ex
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    (req as any).admin = decoded;
+    const decoded = jwt.verify(token, JWT_SECRET) as Admin;
+    req.admin = decoded;
     next();
   } catch (err) {
     res.status(401).json({ error: 'Invalid token' });
@@ -187,25 +186,32 @@ const authenticateAdmin = (req: express.Request, res: express.Response, next: ex
 // --- API Routes ---
 
 // Auth
-app.post('/api/auth/login', async (req, res) => {
-  const { username, password } = req.body;
-  if (!isNonEmptyString(username, 120) || !isNonEmptyString(password, 256)) {
-    return res.status(400).json({ error: 'Username and password are required.' });
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
+  const validation = LoginSchema.safeParse(req.body);
+  if (!validation.success) {
+    return res.status(400).json({ error: 'Invalid input', details: validation.error.format() });
   }
 
-  const result = await db.execute({
-    sql: 'SELECT * FROM admin WHERE username = ?',
-    args: [username]
-  });
-  const admin = result.rows[0] as any;
+  const { username, password } = validation.data;
 
-  if (!admin || !bcrypt.compareSync(password, admin.password)) {
-    return res.status(401).json({ error: 'Invalid credentials' });
+  try {
+    const result = await db.execute({
+      sql: 'SELECT * FROM admin WHERE username = ?',
+      args: [username]
+    });
+    const admin = result.rows[0] as unknown as Admin | undefined;
+
+    if (!admin || !admin.password || !bcrypt.compareSync(password, admin.password)) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign({ id: Number(admin.id), username: admin.username }, JWT_SECRET, { expiresIn: '1d' });
+    setAdminCookie(res, token);
+    res.json({ username: admin.username });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
-
-  const token = jwt.sign({ id: Number(admin.id), username: admin.username }, JWT_SECRET, { expiresIn: '1d' });
-  setAdminCookie(res, token);
-  res.json({ username: admin.username });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -214,132 +220,141 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 app.get('/api/auth/verify', authenticateAdmin, (req, res) => {
-  res.json({ user: (req as any).admin });
+  res.json({ user: req.admin });
 });
 
 // Cars
 app.get('/api/cars', async (req, res) => {
-  const result = await db.execute('SELECT * FROM cars');
-  res.json(result.rows);
+  try {
+    const result = await db.execute('SELECT * FROM cars');
+    res.json(result.rows as unknown as Car[]);
+  } catch (error) {
+    console.error('Fetch cars error:', error);
+    res.status(500).json({ error: 'Failed to fetch cars' });
+  }
 });
 
 app.get('/api/cars/:id', async (req, res) => {
-  const result = await db.execute({
-    sql: 'SELECT * FROM cars WHERE id = ?',
-    args: [req.params.id]
-  });
-  const car = result.rows[0];
-  if (!car) return res.status(404).json({ error: 'Car not found' });
-  res.json(car);
+  try {
+    const result = await db.execute({
+      sql: 'SELECT * FROM cars WHERE id = ?',
+      args: [req.params.id]
+    });
+    const car = result.rows[0] as unknown as Car | undefined;
+    if (!car) return res.status(404).json({ error: 'Car not found' });
+    res.json(car);
+  } catch (error) {
+    console.error('Fetch car error:', error);
+    res.status(500).json({ error: 'Failed to fetch car' });
+  }
 });
 
 app.post('/api/cars', authenticateAdmin, async (req, res) => {
-  const { name, modelYear, weeklyPrice, bond, status, image } = req.body;
-  const parsedModelYear = toPositiveInteger(modelYear);
-  const parsedWeeklyPrice = toPositiveNumber(weeklyPrice);
-  const parsedBond = toPositiveNumber(bond);
-  const parsedStatus = typeof status === 'string' ? status : 'Available';
-
-  if (
-    !isNonEmptyString(name, 180) ||
-    !isNonEmptyString(image, 2000) ||
-    !parsedModelYear ||
-    !parsedWeeklyPrice ||
-    !parsedBond ||
-    !CAR_STATUSES.includes(parsedStatus as (typeof CAR_STATUSES)[number])
-  ) {
-    return res.status(400).json({ error: 'Invalid car payload.' });
+  const validation = CarSchema.safeParse(req.body);
+  if (!validation.success) {
+    return res.status(400).json({ error: 'Invalid car data', details: validation.error.format() });
   }
 
-  const result = await db.execute({
-    sql: 'INSERT INTO cars (name, modelYear, weeklyPrice, bond, status, image) VALUES (?, ?, ?, ?, ?, ?)',
-    args: [name.trim(), parsedModelYear, parsedWeeklyPrice, parsedBond, parsedStatus, image.trim()]
-  });
-  res.status(201).json({ id: Number(result.lastInsertRowid) });
+  const { name, modelYear, weeklyPrice, bond, status, image } = validation.data;
+
+  try {
+    const result = await db.execute({
+      sql: 'INSERT INTO cars (name, modelYear, weeklyPrice, bond, status, image) VALUES (?, ?, ?, ?, ?, ?)',
+      args: [name.trim(), modelYear, weeklyPrice, bond, status, image.trim()]
+    });
+    res.status(201).json({ id: Number(result.lastInsertRowid) });
+  } catch (error) {
+    console.error('Create car error:', error);
+    res.status(500).json({ error: 'Failed to create car' });
+  }
 });
 
 app.put('/api/cars/:id', authenticateAdmin, async (req, res) => {
-  const { name, modelYear, weeklyPrice, bond, status, image } = req.body;
-  const carId = toPositiveInteger(req.params.id);
-  const parsedModelYear = toPositiveInteger(modelYear);
-  const parsedWeeklyPrice = toPositiveNumber(weeklyPrice);
-  const parsedBond = toPositiveNumber(bond);
+  const carId = Number(req.params.id);
+  if (isNaN(carId)) return res.status(400).json({ error: 'Invalid car ID' });
 
-  if (
-    !carId ||
-    !isNonEmptyString(name, 180) ||
-    !isNonEmptyString(image, 2000) ||
-    !parsedModelYear ||
-    !parsedWeeklyPrice ||
-    !parsedBond ||
-    typeof status !== 'string' ||
-    !CAR_STATUSES.includes(status as (typeof CAR_STATUSES)[number])
-  ) {
-    return res.status(400).json({ error: 'Invalid car payload.' });
+  const validation = CarSchema.safeParse(req.body);
+  if (!validation.success) {
+    return res.status(400).json({ error: 'Invalid car data', details: validation.error.format() });
   }
 
-  const result = await db.execute({
-    sql: 'UPDATE cars SET name = ?, modelYear = ?, weeklyPrice = ?, bond = ?, status = ?, image = ? WHERE id = ?',
-    args: [name.trim(), parsedModelYear, parsedWeeklyPrice, parsedBond, status, image.trim(), carId]
-  });
-  if (result.rowsAffected === 0) return res.status(404).json({ error: 'Car not found' });
-  return res.json({ success: true });
+  const { name, modelYear, weeklyPrice, bond, status, image } = validation.data;
+
+  try {
+    const result = await db.execute({
+      sql: 'UPDATE cars SET name = ?, modelYear = ?, weeklyPrice = ?, bond = ?, status = ?, image = ? WHERE id = ?',
+      args: [name.trim(), modelYear, weeklyPrice, bond, status, image.trim(), carId]
+    });
+    if (result.rowsAffected === 0) return res.status(404).json({ error: 'Car not found' });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Update car error:', error);
+    res.status(500).json({ error: 'Failed to update car' });
+  }
 });
 
 app.delete('/api/cars/:id', authenticateAdmin, async (req, res) => {
-  const carId = toPositiveInteger(req.params.id);
-  if (!carId) return res.status(400).json({ error: 'Invalid car id.' });
-  const result = await db.execute({
-    sql: 'DELETE FROM cars WHERE id = ?',
-    args: [carId]
-  });
-  if (result.rowsAffected === 0) return res.status(404).json({ error: 'Car not found' });
-  return res.json({ success: true });
+  const carId = Number(req.params.id);
+  if (isNaN(carId)) return res.status(400).json({ error: 'Invalid car ID' });
+
+  try {
+    const result = await db.execute({
+      sql: 'DELETE FROM cars WHERE id = ?',
+      args: [carId]
+    });
+    if (result.rowsAffected === 0) return res.status(404).json({ error: 'Car not found' });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Delete car error:', error);
+    res.status(500).json({ error: 'Failed to delete car' });
+  }
 });
 
 // Applications
 app.get('/api/applications', authenticateAdmin, async (req, res) => {
-  const result = await db.execute('SELECT * FROM applications ORDER BY createdAt DESC');
-  res.json(result.rows);
+  try {
+    const result = await db.execute('SELECT * FROM applications ORDER BY createdAt DESC');
+    res.json(result.rows as unknown as Application[]);
+  } catch (error) {
+    console.error('Fetch applications error:', error);
+    res.status(500).json({ error: 'Failed to fetch applications' });
+  }
 });
 
 app.put('/api/applications/:id/status', authenticateAdmin, async (req, res) => {
-  const { status } = req.body;
-  const applicationId = toPositiveInteger(req.params.id);
-  if (
-    !applicationId ||
-    typeof status !== 'string' ||
-    !APPLICATION_STATUSES.includes(status as (typeof APPLICATION_STATUSES)[number])
-  ) {
-    return res.status(400).json({ error: 'Invalid application status update.' });
+  const applicationId = Number(req.params.id);
+  if (isNaN(applicationId)) return res.status(400).json({ error: 'Invalid application ID' });
+
+  const validation = ApplicationStatusSchema.safeParse(req.body);
+  if (!validation.success) {
+    return res.status(400).json({ error: 'Invalid application status', details: validation.error.format() });
   }
 
-  const result = await db.execute({
-    sql: 'UPDATE applications SET status = ? WHERE id = ?',
-    args: [status, applicationId]
-  });
-  if (result.rowsAffected === 0) return res.status(404).json({ error: 'Application not found' });
-  return res.json({ success: true });
+  try {
+    const result = await db.execute({
+      sql: 'UPDATE applications SET status = ? WHERE id = ?',
+      args: [validation.data.status, applicationId]
+    });
+    if (result.rowsAffected === 0) return res.status(404).json({ error: 'Application not found' });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Update application status error:', error);
+    res.status(500).json({ error: 'Failed to update application status' });
+  }
 });
 
 // Create Application
 app.post('/api/applications', async (req, res) => {
+  const validation = ApplicationSchema.safeParse(req.body);
+  if (!validation.success) {
+    return res.status(400).json({ error: 'Invalid application data', details: validation.error.format() });
+  }
+
   const { 
     name, phone, email, licenseNumber, licenseExpiry, 
     uberStatus, experience, address, weeklyBudget, 
     intendedStartDate, licensePhoto, uberScreenshot 
-  } = req.body;
-
-  if (
-    !isNonEmptyString(name, 180) ||
-    !isNonEmptyString(phone, 40) ||
-    !isNonEmptyString(email, 320) ||
-    !isNonEmptyString(licenseNumber, 80) ||
-    !isNonEmptyString(address, 300) ||
-    !isNonEmptyString(uberStatus, 80)
-  ) {
-    return res.status(400).json({ error: 'Missing required application fields.' });
-  }
+  } = validation.data;
 
   try {
     const result = await db.execute({
@@ -353,19 +368,19 @@ app.post('/api/applications', async (req, res) => {
         phone.trim(),
         email.trim(),
         licenseNumber.trim(),
-        typeof licenseExpiry === 'string' ? licenseExpiry : null,
+        licenseExpiry,
         uberStatus.trim(),
-        typeof experience === 'string' ? experience : null,
+        experience,
         address.trim(),
-        typeof weeklyBudget === 'string' ? weeklyBudget : null,
-        typeof intendedStartDate === 'string' ? intendedStartDate : null,
-        typeof licensePhoto === 'string' ? licensePhoto : null,
-        typeof uberScreenshot === 'string' ? uberScreenshot : null
+        weeklyBudget,
+        intendedStartDate,
+        licensePhoto,
+        uberScreenshot
       ]
     });
 
     return res.json({ success: true, applicationId: Number(result.lastInsertRowid) });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Application error:', error);
     return res.status(500).json({ error: 'Application submission failed' });
   }
@@ -373,126 +388,126 @@ app.post('/api/applications', async (req, res) => {
 
 // Rentals
 app.get('/api/rentals', authenticateAdmin, async (req, res) => {
-  const result = await db.execute(`
-    SELECT r.*, a.name as driverName, c.name as carName 
-    FROM rentals r 
-    JOIN applications a ON r.applicationId = a.id
-    JOIN cars c ON r.carId = c.id
-    ORDER BY r.createdAt DESC
-  `);
-  res.json(result.rows);
+  try {
+    const result = await db.execute(`
+      SELECT r.*, a.name as driverName, c.name as carName 
+      FROM rentals r 
+      JOIN applications a ON r.applicationId = a.id
+      JOIN cars c ON r.carId = c.id
+      ORDER BY r.createdAt DESC
+    `);
+    res.json(result.rows as unknown as Rental[]);
+  } catch (error) {
+    console.error('Fetch rentals error:', error);
+    res.status(500).json({ error: 'Failed to fetch rentals' });
+  }
 });
 
 app.post('/api/rentals', authenticateAdmin, async (req, res) => {
-  const { applicationId, carId, startDate, weeklyPrice } = req.body;
-  const parsedApplicationId = toPositiveInteger(applicationId);
-  const parsedCarId = toPositiveInteger(carId);
-  const parsedWeeklyPrice = toPositiveNumber(weeklyPrice);
-
-  if (!parsedApplicationId || !parsedCarId || !parsedWeeklyPrice || !isNonEmptyString(startDate, 40)) {
-    return res.status(400).json({ error: 'Invalid rental payload.' });
+  const validation = RentalSchema.safeParse(req.body);
+  if (!validation.success) {
+    return res.status(400).json({ error: 'Invalid rental data', details: validation.error.format() });
   }
 
-  const appResult = await db.execute({
-    sql: 'SELECT id FROM applications WHERE id = ?',
-    args: [parsedApplicationId]
-  });
-  if (appResult.rows.length === 0) return res.status(404).json({ error: 'Application not found.' });
-
-  const carResult = await db.execute({
-    sql: 'SELECT id, status FROM cars WHERE id = ?',
-    args: [parsedCarId]
-  });
-  const car = carResult.rows[0] as any;
-  if (!car) return res.status(404).json({ error: 'Car not found.' });
-  if (car.status !== 'Available') return res.status(409).json({ error: 'Car is not available.' });
+  const { applicationId, carId, startDate, weeklyPrice } = validation.data;
 
   try {
+    const appResult = await db.execute({
+      sql: 'SELECT id FROM applications WHERE id = ?',
+      args: [applicationId]
+    });
+    if (appResult.rows.length === 0) return res.status(404).json({ error: 'Application not found.' });
+
+    const carResult = await db.execute({
+      sql: 'SELECT id, status FROM cars WHERE id = ?',
+      args: [carId]
+    });
+    const car = carResult.rows[0] as unknown as Car | undefined;
+    if (!car) return res.status(404).json({ error: 'Car not found.' });
+    if (car.status !== 'Available') return res.status(409).json({ error: 'Car is not available.' });
+
     const batchResult = await db.batch([
       {
         sql: 'INSERT INTO rentals (applicationId, carId, startDate, weeklyPrice) VALUES (?, ?, ?, ?)',
-        args: [parsedApplicationId, parsedCarId, startDate.trim(), parsedWeeklyPrice]
+        args: [applicationId, carId, startDate.trim(), weeklyPrice]
       },
       {
         sql: "UPDATE cars SET status = 'Rented' WHERE id = ?",
-        args: [parsedCarId]
+        args: [carId]
       }
     ]);
     return res.json({ success: true, rentalId: Number(batchResult[0].lastInsertRowid) });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Rental creation error:', error);
     return res.status(500).json({ error: 'Failed to create rental' });
   }
 });
 
 app.put('/api/rentals/:id/status', authenticateAdmin, async (req, res) => {
-  const { status } = req.body;
-  const rentalId = toPositiveInteger(req.params.id);
-  if (
-    !rentalId ||
-    typeof status !== 'string' ||
-    !RENTAL_STATUSES.includes(status as (typeof RENTAL_STATUSES)[number])
-  ) {
-    return res.status(400).json({ error: 'Invalid rental status update.' });
+  const rentalId = Number(req.params.id);
+  if (isNaN(rentalId)) return res.status(400).json({ error: 'Invalid rental ID' });
+
+  const validation = RentalStatusSchema.safeParse(req.body);
+  if (!validation.success) {
+    return res.status(400).json({ error: 'Invalid rental status', details: validation.error.format() });
   }
 
-  const rentalResult = await db.execute({
-    sql: 'SELECT id, carId FROM rentals WHERE id = ?',
-    args: [rentalId]
-  });
-  const rental = rentalResult.rows[0] as any;
-  if (!rental) return res.status(404).json({ error: 'Rental not found.' });
+  const { status } = validation.data;
 
-  const batch = [
-    {
-      sql: 'UPDATE rentals SET status = ? WHERE id = ?',
-      args: [status, rentalId]
+  try {
+    const rentalResult = await db.execute({
+      sql: 'SELECT id, carId FROM rentals WHERE id = ?',
+      args: [rentalId]
+    });
+    const rental = rentalResult.rows[0] as unknown as Rental | undefined;
+    if (!rental) return res.status(404).json({ error: 'Rental not found.' });
+
+    const batch = [
+      {
+        sql: 'UPDATE rentals SET status = ? WHERE id = ?',
+        args: [status, rentalId]
+      }
+    ];
+
+    if (status === 'Completed' || status === 'Cancelled') {
+      batch.push({
+        sql: "UPDATE cars SET status = 'Available' WHERE id = ?",
+        args: [rental.carId]
+      });
+    } else if (status === 'Active') {
+      batch.push({
+        sql: "UPDATE cars SET status = 'Rented' WHERE id = ?",
+        args: [rental.carId]
+      });
     }
-  ];
 
-  if (status === 'Completed' || status === 'Cancelled') {
-    batch.push({
-      sql: "UPDATE cars SET status = 'Available' WHERE id = ?",
-      args: [rental.carId]
-    });
-  } else if (status === 'Active') {
-    batch.push({
-      sql: "UPDATE cars SET status = 'Rented' WHERE id = ?",
-      args: [rental.carId]
-    });
+    await db.batch(batch);
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Update rental status error:', error);
+    res.status(500).json({ error: 'Failed to update rental status' });
   }
-
-  await db.batch(batch);
-  return res.json({ success: true });
 });
 
 // Bookings
 app.post('/api/bookings', async (req, res) => {
-  const { customerName, email, phone, licenseNumber, carId, startDate, endDate } = req.body;
-
-  const parsedCarId = toPositiveInteger(carId);
-  if (
-    !isNonEmptyString(customerName, 180) ||
-    !isNonEmptyString(email, 320) ||
-    !isNonEmptyString(phone, 40) ||
-    !isNonEmptyString(licenseNumber, 80) ||
-    !parsedCarId ||
-    !isNonEmptyString(startDate, 40) ||
-    !isNonEmptyString(endDate, 40)
-  ) {
-    return res.status(400).json({ error: 'Invalid booking payload.' });
+  const validation = BookingSchema.safeParse(req.body);
+  if (!validation.success) {
+    return res.status(400).json({ error: 'Invalid booking data', details: validation.error.format() });
   }
 
-  const carResult = await db.execute({
-    sql: 'SELECT id, name, status FROM cars WHERE id = ?',
-    args: [parsedCarId]
-  });
-  const car = carResult.rows[0] as any;
-  if (!car) return res.status(404).json({ error: 'Car not found.' });
-  if (car.status !== 'Available') return res.status(409).json({ error: 'Car is not available.' });
-  if (!stripe) return res.status(503).json({ error: 'Payments are not configured.' });
+  const { customerName, email, phone, licenseNumber, carId, startDate, endDate } = validation.data;
 
   try {
+    const carResult = await db.execute({
+      sql: 'SELECT id, name, status, weeklyPrice FROM cars WHERE id = ?',
+      args: [carId]
+    });
+    const car = carResult.rows[0] as unknown as Car | undefined;
+    if (!car) return res.status(404).json({ error: 'Car not found.' });
+    if (car.status !== 'Available') return res.status(409).json({ error: 'Car is not available.' });
+    if (!stripe) return res.status(503).json({ error: 'Payments are not configured.' });
+
     const serverTotalPrice = calculateBookingTotal(Number(car.weeklyPrice), startDate.trim(), endDate.trim());
     if (!serverTotalPrice) {
       return res.status(400).json({ error: 'Invalid booking date range.' });
@@ -500,7 +515,7 @@ app.post('/api/bookings', async (req, res) => {
 
     const reserveResult = await db.execute({
       sql: "UPDATE cars SET status = 'Reserved' WHERE id = ? AND status = 'Available'",
-      args: [parsedCarId]
+      args: [carId]
     });
     if (reserveResult.rowsAffected === 0) {
       return res.status(409).json({ error: 'Car is no longer available.' });
@@ -511,9 +526,9 @@ app.post('/api/bookings', async (req, res) => {
       mode: 'payment',
       customer_email: email.trim(),
       success_url: `${appUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/cars/${parsedCarId}`,
+      cancel_url: `${appUrl}/cars/${carId}`,
       metadata: {
-        carId: String(parsedCarId),
+        carId: String(carId),
         customerName: customerName.trim(),
       },
       line_items: [
@@ -536,7 +551,7 @@ app.post('/api/bookings', async (req, res) => {
         carId, customerName, email, phone, licenseNumber, startDate, endDate, totalPrice, status, stripeSessionId
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?)`,
       args: [
-        parsedCarId,
+        carId,
         customerName.trim(),
         email.trim(),
         phone.trim(),
@@ -553,7 +568,7 @@ app.post('/api/bookings', async (req, res) => {
     console.error('Booking checkout error:', error);
     await db.execute({
       sql: "UPDATE cars SET status = 'Available' WHERE id = ? AND status = 'Reserved'",
-      args: [parsedCarId]
+      args: [carId]
     }).catch((rollbackError) => console.error('Failed to rollback car reservation:', rollbackError));
     return res.status(500).json({ error: 'Failed to create checkout session.' });
   }
@@ -561,7 +576,7 @@ app.post('/api/bookings', async (req, res) => {
 
 app.post('/api/bookings/verify-payment', async (req, res) => {
   const { sessionId } = req.body;
-  if (!isNonEmptyString(sessionId, 200)) {
+  if (typeof sessionId !== 'string' || !sessionId) {
     return res.status(400).json({ error: 'Invalid session id.' });
   }
   if (!stripe) return res.status(503).json({ error: 'Payments are not configured.' });
@@ -586,17 +601,22 @@ app.post('/api/bookings/verify-payment', async (req, res) => {
 
 // Dashboard Stats
 app.get('/api/stats', authenticateAdmin, async (req, res) => {
-  const [apps, rentals, income] = await Promise.all([
-    db.execute('SELECT COUNT(*) as count FROM applications'),
-    db.execute("SELECT COUNT(*) as count FROM rentals WHERE status = 'Active'"),
-    db.execute("SELECT SUM(weeklyPrice) as total FROM rentals WHERE status = 'Active'")
-  ]);
-  
-  res.json({
-    totalApplications: Number(apps.rows[0].count),
-    activeRentals: Number(rentals.rows[0].count),
-    totalWeeklyIncome: Number(income.rows[0].total) || 0
-  });
+  try {
+    const [apps, rentals, income] = await Promise.all([
+      db.execute('SELECT COUNT(*) as count FROM applications'),
+      db.execute("SELECT COUNT(*) as count FROM rentals WHERE status = 'Active'"),
+      db.execute("SELECT SUM(weeklyPrice) as total FROM rentals WHERE status = 'Active'")
+    ]);
+    
+    res.json({
+      totalApplications: Number(apps.rows[0].count),
+      activeRentals: Number(rentals.rows[0].count),
+      totalWeeklyIncome: Number(income.rows[0].total) || 0
+    });
+  } catch (error) {
+    console.error('Fetch stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+  }
 });
 
 export default app;

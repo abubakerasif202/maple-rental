@@ -36,10 +36,9 @@ export default function Checkout() {
     try {
       const data = await createCheckoutSession({
         ...formData,
-        carId: id,
+        carId: Number(id),
         startDate,
         endDate,
-        totalPrice,
       });
       
       if (data.url) {

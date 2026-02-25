@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchCars } from '../lib/api';
-import { CarFront, Filter, Ban, ArrowRight } from 'lucide-react';
+import { CarFront, Filter, Ban, ArrowRight, AlertCircle } from 'lucide-react';
+import type { Car } from '../types';
 
 export default function Cars() {
-  const [cars, setCars] = useState<any[]>([]);
+  const [cars, setCars] = useState<Car[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('all'); // all, available
 
   useEffect(() => {
     fetchCars()
       .then(data => setCars(data))
-      .catch(err => console.error(err))
+      .catch(err => {
+        console.error(err);
+        setError('Failed to fetch our fleet. Please try again later.');
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -45,11 +50,19 @@ export default function Cars() {
           </div>
         </div>
 
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/50 text-red-500 p-8 rounded-2xl text-center mb-16">
+            <AlertCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <h3 className="text-xl font-bold mb-2">Something went wrong</h3>
+            <p className="font-light">{error}</p>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex justify-center py-32">
             <div className="w-12 h-12 border-2 border-brand-gold border-t-transparent rounded-full animate-spin"></div>
           </div>
-        ) : (
+        ) : !error && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredCars.map(car => (
               <div key={car.id} className="bg-brand-charcoal border border-white/5 overflow-hidden hover:border-brand-gold/30 hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 ease-out group flex flex-col relative">

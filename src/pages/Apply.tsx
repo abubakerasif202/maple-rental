@@ -54,11 +54,13 @@ export default function Apply() {
         body: JSON.stringify(formData),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
         setIsSubmitted(true);
         window.scrollTo(0, 0);
       } else {
-        alert('Something went wrong. Please try again.');
+        alert(data.error || 'Something went wrong. Please try again.');
       }
     } catch (error) {
       console.error('Error submitting application:', error);

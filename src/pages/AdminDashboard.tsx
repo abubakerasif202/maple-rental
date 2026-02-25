@@ -1,19 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Car, Calendar, DollarSign, Plus, Edit, Trash2, Users, FileText, CheckCircle, XCircle, Clock, ExternalLink } from 'lucide-react';
+import { LogOut, Car as CarIcon, Calendar, DollarSign, Plus, Edit, Trash2, Users, FileText, CheckCircle, XCircle, Clock, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import type { Car, Application, Rental, CarStatus, ApplicationStatus } from '../types';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [stats, setStats] = useState({ totalApplications: 0, activeRentals: 0, totalWeeklyIncome: 0 });
-  const [cars, setCars] = useState<any[]>([]);
-  const [applications, setApplications] = useState<any[]>([]);
-  const [rentals, setRentals] = useState<any[]>([]);
+  const [cars, setCars] = useState<Car[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [rentals, setRentals] = useState<Rental[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [editingCar, setEditingCar] = useState<any | null>(null);
+  const [editingCar, setEditingCar] = useState<Car | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newCar, setNewCar] = useState({
+  const [newCar, setNewCar] = useState<Omit<Car, 'id'>>({
     name: '',
     modelYear: new Date().getFullYear(),
     weeklyPrice: 0,
@@ -21,6 +22,7 @@ export default function AdminDashboard() {
     status: 'Available',
     image: ''
   });
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const authFetch = (url: string, init?: RequestInit) =>
@@ -66,24 +68,30 @@ export default function AdminDashboard() {
     authFetch('/api/auth/logout', { method: 'POST' }).finally(() => navigate('/admin/login'));
   };
 
-  const updateApplicationStatus = async (id: number, status: string) => {
-    const response = await authFetch(`/api/applications/${id}/status`, {
-      method: 'PUT',
-      headers: { 
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ status })
-    });
+  const updateApplicationStatus = async (id: number, status: ApplicationStatus) => {
+    try {
+      const response = await authFetch(`/api/applications/${id}/status`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status })
+      });
 
-    if (response.ok) {
-      setApplications(applications.map(a => a.id === id ? { ...a, status } : a));
-    } else {
-      alert('Failed to update application status');
+      if (response.ok) {
+        setApplications(applications.map(a => a.id === id ? { ...a, status } : a));
+      } else {
+        setError('Failed to update application status');
+      }
+    } catch (err) {
+      console.error('Update app status error:', err);
+      setError('An error occurred while updating application status');
     }
   };
 
   const handleAddCar = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     try {
       const response = await authFetch('/api/cars', {
         method: 'POST',
@@ -95,7 +103,7 @@ export default function AdminDashboard() {
 
       if (response.ok) {
         const { id } = await response.json();
-        setCars([...cars, { ...newCar, id }]);
+        setCars([...cars, { ...newCar, id } as Car]);
         setIsAddModalOpen(false);
         setNewCar({
           name: '',
@@ -106,27 +114,34 @@ export default function AdminDashboard() {
           image: ''
         });
       } else {
-        alert('Failed to add car');
+        const data = await response.json();
+        setError(data.error || 'Failed to add car');
       }
     } catch (error) {
       console.error('Error adding car:', error);
-      alert('An error occurred while adding the car');
+      setError('An error occurred while adding the car');
     }
   };
 
   const deleteCar = async (id: number) => {
     if (!confirm('Are you sure you want to delete this car?')) return;
-    const response = await authFetch(`/api/cars/${id}`, {
-      method: 'DELETE',
-    });
-    if (response.ok) {
-      setCars(cars.filter(c => c.id !== id));
-    } else {
-      alert('Failed to delete car');
+    setError(null);
+    try {
+      const response = await authFetch(`/api/cars/${id}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        setCars(cars.filter(c => c.id !== id));
+      } else {
+        setError('Failed to delete car');
+      }
+    } catch (err) {
+      console.error('Delete car error:', err);
+      setError('An error occurred while deleting the car');
     }
   };
 
-  const handleEditClick = (car: any) => {
+  const handleEditClick = (car: Car) => {
     setEditingCar({ ...car });
     setIsEditModalOpen(true);
   };
@@ -134,6 +149,7 @@ export default function AdminDashboard() {
   const handleUpdateCar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCar) return;
+    setError(null);
 
     try {
       const response = await authFetch(`/api/cars/${editingCar.id}`, {
@@ -149,11 +165,12 @@ export default function AdminDashboard() {
         setIsEditModalOpen(false);
         setEditingCar(null);
       } else {
-        alert('Failed to update car');
+        const data = await response.json();
+        setError(data.error || 'Failed to update car');
       }
     } catch (error) {
       console.error('Error updating car:', error);
-      alert('An error occurred while updating the car');
+      setError('An error occurred while updating the car');
     }
   };
 
@@ -175,7 +192,7 @@ export default function AdminDashboard() {
             { id: 'dashboard', icon: DollarSign, label: 'Dashboard' },
             { id: 'applications', icon: FileText, label: 'Applications' },
             { id: 'rentals', icon: Calendar, label: 'Rentals' },
-            { id: 'cars', icon: Car, label: 'Fleet' },
+            { id: 'cars', icon: CarIcon, label: 'Fleet' },
           ].map((item) => (
             <button 
               key={item.id}
@@ -198,6 +215,20 @@ export default function AdminDashboard() {
 
       {/* Main Content */}
       <div className="flex-1 p-12 overflow-y-auto">
+        <AnimatePresence>
+          {error && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="bg-red-500/10 border border-red-500/50 text-red-500 px-6 py-4 rounded-xl mb-8 flex justify-between items-center"
+            >
+              <span className="text-sm font-bold uppercase tracking-widest">{error}</span>
+              <button onClick={() => setError(null)} className="text-red-500 hover:text-white"><XCircle className="w-5 h-5" /></button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && (
             <motion.div 
@@ -227,7 +258,7 @@ export default function AdminDashboard() {
                 <div className="bg-brand-charcoal p-10 border border-white/5 relative overflow-hidden shadow-2xl">
                   <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
                   <div className="flex items-center gap-4 mb-6">
-                    <Car className="w-6 h-6 text-emerald-500" />
+                    <CarIcon className="w-6 h-6 text-emerald-500" />
                     <h3 className="text-xs font-bold text-brand-grey uppercase tracking-widest">Active Rentals</h3>
                   </div>
                   <p className="text-4xl font-bold text-white">{stats.activeRentals}</p>
@@ -281,7 +312,7 @@ export default function AdminDashboard() {
                           <select 
                             className="bg-brand-charcoal border border-white/10 text-[10px] font-bold uppercase tracking-widest px-3 py-2 outline-none focus:border-brand-gold/50"
                             value={app.status}
-                            onChange={(e) => updateApplicationStatus(app.id, e.target.value)}
+                            onChange={(e) => updateApplicationStatus(app.id, e.target.value as ApplicationStatus)}
                           >
                             <option value="Pending">Pending</option>
                             <option value="Approved">Approved</option>
@@ -492,7 +523,7 @@ export default function AdminDashboard() {
                   <select 
                     className="bg-brand-charcoal border border-white/10 text-[10px] font-bold uppercase tracking-widest px-4 py-3 outline-none focus:border-brand-gold/50"
                     value={editingCar.status}
-                    onChange={(e) => setEditingCar({...editingCar, status: e.target.value})}
+                    onChange={(e) => setEditingCar({...editingCar, status: e.target.value as CarStatus})}
                   >
                     <option value="Available">Available</option>
                     <option value="Reserved">Reserved</option>
@@ -592,7 +623,7 @@ export default function AdminDashboard() {
                   <select 
                     className="bg-brand-charcoal border border-white/10 text-[10px] font-bold uppercase tracking-widest px-4 py-3 outline-none focus:border-brand-gold/50"
                     value={newCar.status}
-                    onChange={(e) => setNewCar({...newCar, status: e.target.value})}
+                    onChange={(e) => setNewCar({...newCar, status: e.target.value as CarStatus})}
                   >
                     <option value="Available">Available</option>
                     <option value="Reserved">Reserved</option>

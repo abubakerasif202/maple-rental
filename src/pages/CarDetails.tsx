@@ -1,24 +1,40 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { fetchCar } from '../lib/api';
-import { Calendar, ShieldCheck, Droplets, ArrowLeft, CheckCircle, Car, ChevronRight, Info } from 'lucide-react';
+import { Calendar, ShieldCheck, Droplets, ArrowLeft, CheckCircle, Car as CarIcon, ChevronRight, Info, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
+import type { Car } from '../types';
 
 export default function CarDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [car, setCar] = useState<any>(null);
+  const [car, setCar] = useState<Car | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchCar(id!)
+    if (!id) return;
+    fetchCar(id)
       .then(data => setCar(data))
-      .catch(err => console.error(err))
+      .catch(err => {
+        console.error(err);
+        setError('The vehicle details could not be retrieved.');
+      })
       .finally(() => setLoading(false));
   }, [id]);
 
   if (loading) return <div className="flex justify-center py-32 bg-brand-charcoal min-h-screen"><div className="w-12 h-12 border-2 border-brand-gold border-t-transparent rounded-full animate-spin"></div></div>;
-  if (!car) return <div className="text-center py-32 text-2xl font-serif font-bold text-brand-grey bg-brand-charcoal min-h-screen">Vehicle not found</div>;
+  
+  if (error || !car) return (
+    <div className="bg-brand-charcoal min-h-screen py-32 text-center flex flex-col items-center px-4">
+      <AlertCircle className="w-16 h-16 text-red-500/50 mb-6" />
+      <h2 className="text-3xl font-serif font-bold text-white mb-4">Vehicle Not Found</h2>
+      <p className="text-brand-grey font-light mb-12 max-w-md">{error || "We couldn't find the vehicle you're looking for."}</p>
+      <Link to="/cars" className="bg-brand-gold text-brand-charcoal px-10 py-4 font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors">
+        Return to Fleet
+      </Link>
+    </div>
+  );
 
   return (
     <div className="bg-brand-charcoal min-h-screen py-24 text-white selection:bg-brand-gold selection:text-brand-charcoal">

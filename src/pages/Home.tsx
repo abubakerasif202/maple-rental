@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
 import { ShieldCheck, ArrowRight, CarFront, Droplets, Check, Wrench } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useEffect, useState } from 'react';
+import { fetchCars } from '../lib/api';
+import type { Car } from '../types';
 
 const fadeIn = {
   hidden: { opacity: 0, y: 30 },
@@ -28,6 +31,20 @@ const staggerContainer = {
 };
 
 export default function Home() {
+  const [priceRange, setPriceRange] = useState<{ min: number; max: number } | null>(null);
+
+  useEffect(() => {
+    fetchCars().then((cars) => {
+      if (cars.length > 0) {
+        const prices = cars.map(c => c.weeklyPrice);
+        setPriceRange({
+          min: Math.min(...prices),
+          max: Math.max(...prices)
+        });
+      }
+    }).catch(err => console.error('Failed to fetch car prices for home page:', err));
+  }, []);
+
   return (
     <div className="bg-brand-charcoal text-white min-h-screen font-sans selection:bg-brand-gold selection:text-black">
       {/* HERO SECTION */}
@@ -52,7 +69,9 @@ export default function Home() {
                 Toyota Camry Hybrid Fleet for <span className="text-brand-gold opacity-90">Professional Uber Drivers</span>
               </motion.h1>
               <motion.p variants={fadeIn} className="text-sm md:text-base text-brand-grey mb-10 max-w-lg font-light leading-relaxed">
-                Reliable hybrid vehicles from <strong className="text-white font-medium">$200 – $350 per week</strong>.<br/>
+                Reliable hybrid vehicles from <strong className="text-white font-medium">
+                  {priceRange ? `$${priceRange.min} – $${priceRange.max}` : '$200 – $350'} per week
+                </strong>.<br/>
                 Insurance, servicing, and Uber compliance included.
               </motion.p>
               
@@ -188,7 +207,7 @@ export default function Home() {
           >
             <h2 className="text-3xl md:text-4xl font-serif font-bold mb-6 tracking-tight">Simple Weekly Pricing</h2>
             <p className="text-lg text-brand-grey font-light leading-relaxed mb-8">
-              Vehicles available from $200 to $350 per week.<br/>
+              Vehicles available from {priceRange ? `$${priceRange.min} to $${priceRange.max}` : '$200 to $350'} per week.<br/>
               Bond is two weeks rental based on selected vehicle.
             </p>
             <div className="flex flex-wrap justify-center items-center gap-6 text-sm font-light text-gray-300">
@@ -213,11 +232,11 @@ export default function Home() {
               </div>
               <div className="mb-8 pb-8 border-b border-white/5">
                 <p className="text-xs text-brand-grey uppercase tracking-widest mb-2">Weekly Rate</p>
-                <div className="text-4xl font-bold text-white">$250</div>
+                <div className="text-4xl font-bold text-white">${priceRange?.min || 250}</div>
               </div>
               <div>
                 <p className="text-xs text-brand-gold uppercase tracking-widest mb-2">Required Bond</p>
-                <div className="text-2xl font-bold text-gray-300">$500</div>
+                <div className="text-2xl font-bold text-gray-300">${(priceRange?.min || 250) * 2}</div>
                 <p className="text-xs text-gray-600 mt-2 font-light">Calculated as 2x Weekly Rate</p>
               </div>
             </motion.div>
@@ -231,11 +250,11 @@ export default function Home() {
               </div>
               <div className="mb-8 pb-8 border-b border-white/5">
                 <p className="text-xs text-brand-grey uppercase tracking-widest mb-2">Weekly Rate</p>
-                <div className="text-4xl font-bold text-white">$350</div>
+                <div className="text-4xl font-bold text-white">${priceRange?.max || 350}</div>
               </div>
               <div>
                 <p className="text-xs text-brand-gold uppercase tracking-widest mb-2">Required Bond</p>
-                <div className="text-2xl font-bold text-gray-300">$700</div>
+                <div className="text-2xl font-bold text-gray-300">${(priceRange?.max || 350) * 2}</div>
                 <p className="text-xs text-gray-600 mt-2 font-light">Calculated as 2x Weekly Rate</p>
               </div>
             </motion.div>
@@ -249,7 +268,7 @@ export default function Home() {
             className="mt-16 text-center"
           >
             <p className="text-sm text-gray-500 font-light italic">
-              * Example pricing only. Actual rates depend on vehicle availability and model year.
+              * Actual rates depend on vehicle availability and model year.
             </p>
           </motion.div>
         </div>
