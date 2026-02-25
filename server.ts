@@ -27,8 +27,39 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate Limiting for Applications
+const applicationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Limit each IP to 5 applications per hour
+  message: { error: 'Too many applications submitted, please try again after an hour' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Middleware
-app.use(cors({ origin: true, credentials: true }));
+const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  credentials: true,
+  origin: (origin, callback) => {
+    // Allow server-to-server and same-origin requests with no Origin header.
+    if (!origin) return callback(null, true);
+
+    // Keep local development simple without opening production to all origins.
+    if (process.env.NODE_ENV !== 'production') {
+      if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+        return callback(null, true);
+      }
+    }
+
+    if (corsAllowedOrigins.includes(origin)) return callback(null, true);
+
+    return callback(new Error('CORS origin not allowed.'));
+  }
+}));
 app.use(cookieParser());
 
 const jwtSecretFromEnv = process.env.JWT_SECRET;
@@ -344,7 +375,7 @@ app.put('/api/applications/:id/status', authenticateAdmin, async (req, res) => {
 });
 
 // Create Application
-app.post('/api/applications', async (req, res) => {
+app.post('/api/applications', applicationLimiter, async (req, res) => {
   const validation = ApplicationSchema.safeParse(req.body);
   if (!validation.success) {
     return res.status(400).json({ error: 'Invalid application data', details: validation.error.format() });
@@ -368,14 +399,14 @@ app.post('/api/applications', async (req, res) => {
         phone.trim(),
         email.trim(),
         licenseNumber.trim(),
-        licenseExpiry,
+        licenseExpiry || null,
         uberStatus.trim(),
-        experience,
+        experience || null,
         address.trim(),
-        weeklyBudget,
-        intendedStartDate,
-        licensePhoto,
-        uberScreenshot
+        weeklyBudget || null,
+        intendedStartDate || null,
+        licensePhoto || null,
+        uberScreenshot || null
       ]
     });
 
@@ -419,24 +450,34 @@ app.post('/api/rentals', authenticateAdmin, async (req, res) => {
     if (appResult.rows.length === 0) return res.status(404).json({ error: 'Application not found.' });
 
     const carResult = await db.execute({
-      sql: 'SELECT id, status FROM cars WHERE id = ?',
+      sql: 'SELECT id FROM cars WHERE id = ?',
       args: [carId]
     });
     const car = carResult.rows[0] as unknown as Car | undefined;
     if (!car) return res.status(404).json({ error: 'Car not found.' });
-    if (car.status !== 'Available') return res.status(409).json({ error: 'Car is not available.' });
 
-    const batchResult = await db.batch([
-      {
+    // Atomically reserve the car for this rental creation attempt.
+    const reserveCarResult = await db.execute({
+      sql: "UPDATE cars SET status = 'Rented' WHERE id = ? AND status = 'Available'",
+      args: [carId]
+    });
+    if (reserveCarResult.rowsAffected === 0) {
+      return res.status(409).json({ error: 'Car is not available.' });
+    }
+
+    try {
+      const insertResult = await db.execute({
         sql: 'INSERT INTO rentals (applicationId, carId, startDate, weeklyPrice) VALUES (?, ?, ?, ?)',
         args: [applicationId, carId, startDate.trim(), weeklyPrice]
-      },
-      {
-        sql: "UPDATE cars SET status = 'Rented' WHERE id = ?",
+      });
+      return res.json({ success: true, rentalId: Number(insertResult.lastInsertRowid) });
+    } catch (insertError) {
+      await db.execute({
+        sql: "UPDATE cars SET status = 'Available' WHERE id = ? AND status = 'Rented'",
         args: [carId]
-      }
-    ]);
-    return res.json({ success: true, rentalId: Number(batchResult[0].lastInsertRowid) });
+      }).catch((rollbackError) => console.error('Failed to rollback car rental reservation:', rollbackError));
+      throw insertError;
+    }
   } catch (error) {
     console.error('Rental creation error:', error);
     return res.status(500).json({ error: 'Failed to create rental' });
@@ -637,7 +678,7 @@ async function startServer() {
   }
 
   if (!process.env.VERCEL) {
-    app.listen(PORT, '0.0.0.0', () => {
+    app.listen(Number(PORT), '0.0.0.0', () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   }
