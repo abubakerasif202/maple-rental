@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, Car as CarIcon, Calendar, DollarSign, Plus, Edit, Trash2, Users, FileText, CheckCircle, XCircle, Clock, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { authFetch } from '../lib/api';
 import type { Car, Application, Rental, CarStatus, ApplicationStatus } from '../types';
 
 export default function AdminDashboard() {
@@ -24,15 +25,6 @@ export default function AdminDashboard() {
   });
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-
-  const authFetch = (url: string, init?: RequestInit) =>
-    fetch(url, {
-      ...init,
-      credentials: 'include',
-      headers: {
-        ...(init?.headers || {}),
-      },
-    });
 
   useEffect(() => {
     const fetchData = async () => {
