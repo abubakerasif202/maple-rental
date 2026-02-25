@@ -16,13 +16,22 @@ import {
 } from './src/types.ts';
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Rate Limiting for Auth
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // Limit each IP to 10 login attempts per window
   message: { error: 'Too many login attempts, please try again after 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Rate Limiting for Applications
+const applicationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Limit each IP to 5 applications per hour
+  message: { error: 'Too many applications submitted, please try again after an hour' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -344,7 +353,7 @@ app.put('/api/applications/:id/status', authenticateAdmin, async (req, res) => {
 });
 
 // Create Application
-app.post('/api/applications', async (req, res) => {
+app.post('/api/applications', applicationLimiter, async (req, res) => {
   const validation = ApplicationSchema.safeParse(req.body);
   if (!validation.success) {
     return res.status(400).json({ error: 'Invalid application data', details: validation.error.format() });
