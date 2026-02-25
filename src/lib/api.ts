@@ -25,3 +25,12 @@ export const createCheckoutSession = async (bookingData: Partial<Booking>) => {
   if (!res.ok) throw new Error(data.error || 'Failed to create booking');
   return data;
 };
+
+export const authFetch = (url: string, init?: RequestInit) =>
+  fetch(url, {
+    ...init,
+    credentials: 'include',
+    headers: {
+      ...(init?.headers || {}),
+    },
+  });

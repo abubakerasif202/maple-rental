@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock } from 'lucide-react';
+import { authFetch } from '../lib/api';
 
 export default function AdminLogin() {
   const [username, setUsername] = useState('');
@@ -13,10 +14,9 @@ export default function AdminLogin() {
     setError('');
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await authFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ username, password }),
       });
 
