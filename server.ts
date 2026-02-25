@@ -412,16 +412,19 @@ app.post('/api/rentals', authenticateAdmin, async (req, res) => {
   const { applicationId, carId, startDate, weeklyPrice } = validation.data;
 
   try {
-    const appResult = await db.execute({
-      sql: 'SELECT id FROM applications WHERE id = ?',
-      args: [applicationId]
-    });
+    const [appResult, carResult] = await Promise.all([
+      db.execute({
+        sql: 'SELECT id FROM applications WHERE id = ?',
+        args: [applicationId]
+      }),
+      db.execute({
+        sql: 'SELECT id, status FROM cars WHERE id = ?',
+        args: [carId]
+      })
+    ]);
+
     if (appResult.rows.length === 0) return res.status(404).json({ error: 'Application not found.' });
 
-    const carResult = await db.execute({
-      sql: 'SELECT id, status FROM cars WHERE id = ?',
-      args: [carId]
-    });
     const car = carResult.rows[0] as unknown as Car | undefined;
     if (!car) return res.status(404).json({ error: 'Car not found.' });
     if (car.status !== 'Available') return res.status(409).json({ error: 'Car is not available.' });
