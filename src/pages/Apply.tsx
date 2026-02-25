@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { ShieldCheck, Lock, CheckCircle2, Upload, Calendar, User, Phone, Mail, MapPin, CreditCard, Clock, ChevronRight, AlertCircle, Car } from 'lucide-react';
+import { motion } from 'motion/react';
+import { ShieldCheck, CheckCircle2, ChevronRight, AlertCircle, Car, CreditCard } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import PersonalDetails from '../components/apply/PersonalDetails';
+import DriverInfo from '../components/apply/DriverInfo';
+import VehiclePreferences from '../components/apply/VehiclePreferences';
+import DocumentUpload from '../components/apply/DocumentUpload';
+import { ApplicationFormData } from '../types/application';
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -11,7 +16,7 @@ const fadeIn = {
 export default function Apply() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ApplicationFormData>({
     name: '',
     phone: '',
     email: '',
@@ -22,8 +27,8 @@ export default function Apply() {
     experience: '',
     weeklyBudget: '$250 - $300',
     intendedStartDate: '',
-    licensePhoto: null as string | null,
-    uberScreenshot: null as string | null,
+    licensePhoto: null,
+    uberScreenshot: null,
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -138,238 +143,16 @@ export default function Apply() {
           <form onSubmit={handleSubmit} className="p-8 md:p-12 space-y-12">
             
             {/* SECTION 1: Personal Details */}
-            <motion.section
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-100px" }}
-              variants={fadeIn}
-            >
-              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/5">
-                <User className="w-5 h-5 text-brand-gold" />
-                <h2 className="text-xl font-serif font-bold text-white tracking-tight">Personal Details</h2>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Full Name</label>
-                  <input 
-                    required
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    placeholder="As shown on license"
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Phone Number</label>
-                  <input 
-                    required
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    placeholder="04XX XXX XXX"
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Email Address</label>
-                  <input 
-                    required
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    placeholder="example@email.com"
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Residential Address</label>
-                  <input 
-                    required
-                    type="text"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    placeholder="Street, Suburb, Postcode"
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
-                  />
-                </div>
-              </div>
-            </motion.section>
+            <PersonalDetails formData={formData} onChange={handleInputChange} />
 
             {/* SECTION 2: Driver Information */}
-            <motion.section
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-100px" }}
-              variants={fadeIn}
-            >
-              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/5">
-                <CreditCard className="w-5 h-5 text-brand-gold" />
-                <h2 className="text-xl font-serif font-bold text-white tracking-tight">Driver Information</h2>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Driver License Number</label>
-                  <input 
-                    required
-                    type="text"
-                    name="licenseNumber"
-                    value={formData.licenseNumber}
-                    onChange={handleInputChange}
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">License Expiry Date</label>
-                  <input 
-                    required
-                    type="date"
-                    name="licenseExpiry"
-                    value={formData.licenseExpiry}
-                    onChange={handleInputChange}
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Uber Status</label>
-                  <select 
-                    name="uberStatus"
-                    value={formData.uberStatus}
-                    onChange={handleInputChange}
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light appearance-none"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Applying">Applying</option>
-                    <option value="Not Yet Registered">Not Yet Registered</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Years of Driving Experience</label>
-                  <input 
-                    required
-                    type="text"
-                    name="experience"
-                    value={formData.experience}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 5 years"
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
-                  />
-                </div>
-              </div>
-            </motion.section>
+            <DriverInfo formData={formData} onChange={handleInputChange} />
 
             {/* SECTION 3: Vehicle Preference */}
-            <motion.section
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-100px" }}
-              variants={fadeIn}
-            >
-              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/5">
-                <Clock className="w-5 h-5 text-brand-gold" />
-                <h2 className="text-xl font-serif font-bold text-white tracking-tight">Vehicle Preference</h2>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Preferred Weekly Budget</label>
-                  <select 
-                    name="weeklyBudget"
-                    value={formData.weeklyBudget}
-                    onChange={handleInputChange}
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light appearance-none"
-                  >
-                    <option value="$200 - $250">$200 - $250</option>
-                    <option value="$250 - $300">$250 - $300</option>
-                    <option value="$300 - $350">$300 - $350</option>
-                  </select>
-                  <p className="text-[10px] text-brand-grey/60 mt-2 font-light italic">Bond is two weeks rental amount based on selected vehicle.</p>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Intended Start Date</label>
-                  <input 
-                    required
-                    type="date"
-                    name="intendedStartDate"
-                    value={formData.intendedStartDate}
-                    onChange={handleInputChange}
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
-                  />
-                </div>
-              </div>
-            </motion.section>
+            <VehiclePreferences formData={formData} onChange={handleInputChange} />
 
             {/* SECTION 4: Document Upload */}
-            <motion.section
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-100px" }}
-              variants={fadeIn}
-            >
-              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/5">
-                <Upload className="w-5 h-5 text-brand-gold" />
-                <h2 className="text-xl font-serif font-bold text-white tracking-tight">Document Upload</h2>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Driver License (Front & Back)</label>
-                  <div className="relative group">
-                    <input 
-                      type="file" 
-                      accept="image/*"
-                      onChange={(e) => handleFileUpload(e, 'licensePhoto')}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                    />
-                    <div className={`border-2 border-dashed ${formData.licensePhoto ? 'border-brand-gold/50 bg-brand-gold/5' : 'border-white/10 group-hover:border-brand-gold/30'} p-8 text-center transition-all rounded-xl`}>
-                      {formData.licensePhoto ? (
-                        <div className="flex flex-col items-center gap-2">
-                          <CheckCircle2 className="w-8 h-8 text-brand-gold" />
-                          <span className="text-xs text-brand-gold font-bold uppercase tracking-widest">File Uploaded</span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2">
-                          <Upload className="w-8 h-8 text-brand-grey/40 group-hover:text-brand-gold transition-colors" />
-                          <span className="text-xs text-brand-grey/60 font-light">Drag & drop or click to upload</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Uber Profile Screenshot (if active)</label>
-                  <div className="relative group">
-                    <input 
-                      type="file" 
-                      accept="image/*"
-                      onChange={(e) => handleFileUpload(e, 'uberScreenshot')}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                    />
-                    <div className={`border-2 border-dashed ${formData.uberScreenshot ? 'border-brand-gold/50 bg-brand-gold/5' : 'border-white/10 group-hover:border-brand-gold/30'} p-8 text-center transition-all rounded-xl`}>
-                      {formData.uberScreenshot ? (
-                        <div className="flex flex-col items-center gap-2">
-                          <CheckCircle2 className="w-8 h-8 text-brand-gold" />
-                          <span className="text-xs text-brand-gold font-bold uppercase tracking-widest">File Uploaded</span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2">
-                          <Upload className="w-8 h-8 text-brand-grey/40 group-hover:text-brand-gold transition-colors" />
-                          <span className="text-xs text-brand-grey/60 font-light">Drag & drop or click to upload</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-8 flex items-start gap-3 p-4 bg-brand-charcoal/50 border border-white/5 rounded-lg">
-                <Lock className="w-4 h-4 text-brand-gold mt-0.5" />
-                <p className="text-[10px] text-brand-grey/60 font-light leading-relaxed">
-                  Files are securely stored and reviewed by MAPLE RENTALS management only. Your information is never shared with third parties.
-                </p>
-              </div>
-            </motion.section>
+            <DocumentUpload formData={formData} onUpload={handleFileUpload} />
 
             {/* SUBMIT */}
             <div className="pt-8">
