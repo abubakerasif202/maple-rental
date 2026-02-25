@@ -399,14 +399,14 @@ app.post('/api/applications', applicationLimiter, async (req, res) => {
         phone.trim(),
         email.trim(),
         licenseNumber.trim(),
-        licenseExpiry,
+        licenseExpiry || null,
         uberStatus.trim(),
-        experience,
+        experience || null,
         address.trim(),
-        weeklyBudget,
-        intendedStartDate,
-        licensePhoto,
-        uberScreenshot
+        weeklyBudget || null,
+        intendedStartDate || null,
+        licensePhoto || null,
+        uberScreenshot || null
       ]
     });
 
