@@ -1,4 +1,5 @@
 import express from 'express';
+import helmet from 'helmet';
 import { createServer as createViteServer } from 'vite';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -16,6 +17,9 @@ import {
 } from './src/types.ts';
 
 const app = express();
+
+// Security Headers
+app.use(helmet());
 const PORT = process.env.PORT || 3000;
 
 // Rate Limiting for Auth
