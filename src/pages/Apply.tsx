@@ -54,13 +54,11 @@ export default function Apply() {
         body: JSON.stringify(formData),
       });
 
-      const data = await response.json();
-
       if (response.ok) {
         setIsSubmitted(true);
         window.scrollTo(0, 0);
       } else {
-        alert(data.error || 'Something went wrong. Please try again.');
+        alert('Something went wrong. Please try again.');
       }
     } catch (error) {
       console.error('Error submitting application:', error);
@@ -72,11 +70,11 @@ export default function Apply() {
 
   if (isSubmitted) {
     return (
-      <div className="min-h-screen bg-brand-charcoal pt-32 pb-20 px-4 flex items-center justify-center">
+      <div className="min-h-screen bg-brand-navy pt-32 pb-20 px-4 flex items-center justify-center">
         <motion.div 
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="max-w-md w-full bg-brand-charcoal border border-brand-gold/30 p-12 text-center rounded-2xl shadow-2xl relative overflow-hidden"
+          className="max-w-md w-full bg-brand-navy-light border border-brand-gold/30 p-12 text-center shadow-2xl relative overflow-hidden"
         >
           <div className="absolute top-0 left-0 w-full h-1 bg-brand-gold"></div>
           <div className="w-20 h-20 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-8">
@@ -84,11 +82,11 @@ export default function Apply() {
           </div>
           <h1 className="text-3xl font-serif font-bold text-white mb-4 tracking-tight">Application Received</h1>
           <p className="text-brand-grey font-light leading-relaxed mb-10">
-            Thank you for applying to MAPLE RENTALS. Our team will review your details and contact you within 24 hours.
+            Thank you for applying to Maple Rentals. Our team will review your details and contact you within 24 hours.
           </p>
           <Link 
             to="/" 
-            className="inline-block bg-brand-gold text-brand-charcoal px-10 py-4 font-bold text-sm uppercase tracking-widest hover:bg-white transition-colors w-full"
+            className="inline-block bg-brand-gold text-brand-navy px-10 py-4 font-bold text-sm uppercase tracking-widest hover:bg-brand-gold-light transition-colors w-full"
           >
             Return Home
           </Link>
@@ -98,14 +96,14 @@ export default function Apply() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-charcoal pt-32 pb-32 px-4 selection:bg-brand-gold selection:text-brand-charcoal">
+    <div className="min-h-screen bg-brand-navy pt-32 pb-32 px-4 selection:bg-brand-gold selection:text-brand-navy">
       <div className="max-w-4xl mx-auto">
         {/* HEADER */}
         <div className="text-center mb-16">
           <motion.h1 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-4xl md:text-5xl font-serif font-bold text-white mb-4 tracking-tight"
+            className="text-4xl md:text-6xl font-serif font-bold text-white mb-4 tracking-tight"
           >
             Driver Application
           </motion.h1>
@@ -115,7 +113,7 @@ export default function Apply() {
             transition={{ delay: 0.2 }}
             className="text-brand-grey text-lg font-light mb-6"
           >
-            Apply to rent a Toyota Camry Hybrid and start driving with MAPLE RENTALS.
+            Apply to rent a Toyota Camry Hybrid and start driving with Maple Rentals.
           </motion.p>
           <motion.div 
             initial={{ opacity: 0 }}
@@ -133,7 +131,7 @@ export default function Apply() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="bg-brand-charcoal border border-white/5 rounded-2xl shadow-2xl overflow-hidden"
+          className="bg-brand-navy-light border border-white/10 shadow-2xl overflow-hidden"
         >
           <form onSubmit={handleSubmit} className="p-8 md:p-12 space-y-12">
             
@@ -144,13 +142,13 @@ export default function Apply() {
               viewport={{ once: true, margin: "-100px" }}
               variants={fadeIn}
             >
-              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/5">
+              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/10">
                 <User className="w-5 h-5 text-brand-gold" />
                 <h2 className="text-xl font-serif font-bold text-white tracking-tight">Personal Details</h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Full Name</label>
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Full Name</label>
                   <input 
                     required
                     type="text"
@@ -158,11 +156,11 @@ export default function Apply() {
                     value={formData.name}
                     onChange={handleInputChange}
                     placeholder="As shown on license"
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
+                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Phone Number</label>
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Phone Number</label>
                   <input 
                     required
                     type="tel"
@@ -170,11 +168,11 @@ export default function Apply() {
                     value={formData.phone}
                     onChange={handleInputChange}
                     placeholder="04XX XXX XXX"
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
+                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Email Address</label>
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Email Address</label>
                   <input 
                     required
                     type="email"
@@ -182,11 +180,11 @@ export default function Apply() {
                     value={formData.email}
                     onChange={handleInputChange}
                     placeholder="example@email.com"
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
+                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Residential Address</label>
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Residential Address</label>
                   <input 
                     required
                     type="text"
@@ -194,7 +192,7 @@ export default function Apply() {
                     value={formData.address}
                     onChange={handleInputChange}
                     placeholder="Street, Suburb, Postcode"
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
+                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                   />
                 </div>
               </div>
@@ -207,40 +205,40 @@ export default function Apply() {
               viewport={{ once: true, margin: "-100px" }}
               variants={fadeIn}
             >
-              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/5">
+              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/10">
                 <CreditCard className="w-5 h-5 text-brand-gold" />
                 <h2 className="text-xl font-serif font-bold text-white tracking-tight">Driver Information</h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Driver License Number</label>
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Driver License Number</label>
                   <input 
                     required
                     type="text"
                     name="licenseNumber"
                     value={formData.licenseNumber}
                     onChange={handleInputChange}
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
+                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">License Expiry Date</label>
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">License Expiry Date</label>
                   <input 
                     required
                     type="date"
                     name="licenseExpiry"
                     value={formData.licenseExpiry}
                     onChange={handleInputChange}
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
+                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Uber Status</label>
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Uber Status</label>
                   <select 
                     name="uberStatus"
                     value={formData.uberStatus}
                     onChange={handleInputChange}
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light appearance-none"
+                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light appearance-none"
                   >
                     <option value="Active">Active</option>
                     <option value="Applying">Applying</option>
@@ -248,7 +246,7 @@ export default function Apply() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Years of Driving Experience</label>
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Years of Driving Experience</label>
                   <input 
                     required
                     type="text"
@@ -256,7 +254,7 @@ export default function Apply() {
                     value={formData.experience}
                     onChange={handleInputChange}
                     placeholder="e.g. 5 years"
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
+                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                   />
                 </div>
               </div>
@@ -269,18 +267,18 @@ export default function Apply() {
               viewport={{ once: true, margin: "-100px" }}
               variants={fadeIn}
             >
-              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/5">
+              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/10">
                 <Clock className="w-5 h-5 text-brand-gold" />
                 <h2 className="text-xl font-serif font-bold text-white tracking-tight">Vehicle Preference</h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Preferred Weekly Budget</label>
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Preferred Weekly Budget</label>
                   <select 
                     name="weeklyBudget"
                     value={formData.weeklyBudget}
                     onChange={handleInputChange}
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light appearance-none"
+                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light appearance-none"
                   >
                     <option value="$200 - $250">$200 - $250</option>
                     <option value="$250 - $300">$250 - $300</option>
@@ -289,14 +287,14 @@ export default function Apply() {
                   <p className="text-[10px] text-brand-grey/60 mt-2 font-light italic">Bond is two weeks rental amount based on selected vehicle.</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Intended Start Date</label>
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Intended Start Date</label>
                   <input 
                     required
                     type="date"
                     name="intendedStartDate"
                     value={formData.intendedStartDate}
                     onChange={handleInputChange}
-                    className="w-full bg-brand-charcoal border border-white/10 px-4 py-3 text-white focus:border-brand-gold/50 outline-none transition-colors font-light"
+                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                   />
                 </div>
               </div>
@@ -309,13 +307,13 @@ export default function Apply() {
               viewport={{ once: true, margin: "-100px" }}
               variants={fadeIn}
             >
-              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/5">
+              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/10">
                 <Upload className="w-5 h-5 text-brand-gold" />
                 <h2 className="text-xl font-serif font-bold text-white tracking-tight">Document Upload</h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-4">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Driver License (Front & Back)</label>
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Driver License (Front & Back)</label>
                   <div className="relative group">
                     <input 
                       type="file" 
@@ -339,7 +337,7 @@ export default function Apply() {
                   </div>
                 </div>
                 <div className="space-y-4">
-                  <label className="text-xs font-bold text-brand-grey uppercase tracking-widest">Uber Profile Screenshot (if active)</label>
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Uber Profile Screenshot (if active)</label>
                   <div className="relative group">
                     <input 
                       type="file" 
@@ -363,10 +361,10 @@ export default function Apply() {
                   </div>
                 </div>
               </div>
-              <div className="mt-8 flex items-start gap-3 p-4 bg-brand-charcoal/50 border border-white/5 rounded-lg">
+              <div className="mt-8 flex items-start gap-3 p-4 bg-brand-navy/50 border border-white/10 rounded-lg">
                 <Lock className="w-4 h-4 text-brand-gold mt-0.5" />
                 <p className="text-[10px] text-brand-grey/60 font-light leading-relaxed">
-                  Files are securely stored and reviewed by MAPLE RENTALS management only. Your information is never shared with third parties.
+                  Files are securely stored and reviewed by Maple Rentals management only. Your information is never shared with third parties.
                 </p>
               </div>
             </motion.section>
@@ -376,7 +374,7 @@ export default function Apply() {
               <button 
                 disabled={isSubmitting}
                 type="submit"
-                className="w-full bg-brand-gold hover:bg-white text-brand-charcoal px-12 py-5 font-bold text-sm uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(198,169,79,0.1)] hover:shadow-[0_0_30px_rgba(198,169,79,0.2)] flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-12 py-5 font-bold text-sm uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? 'Processing...' : 'Submit Application'}
                 {!isSubmitting && <ChevronRight className="w-4 h-4" />}
@@ -407,7 +405,7 @@ export default function Apply() {
             <motion.div 
               key={i} 
               variants={fadeIn}
-              className="flex flex-col items-center text-center p-6 bg-brand-charcoal border border-white/5 rounded-xl"
+              className="flex flex-col items-center text-center p-6 bg-brand-navy-light border border-white/10"
             >
               <item.icon className="w-5 h-5 text-brand-gold mb-3" />
               <span className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">{item.text}</span>

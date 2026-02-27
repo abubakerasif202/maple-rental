@@ -6,34 +6,18 @@
   --font-serif: "Playfair Display", serif;
   --font-script: "Dancing Script", cursive;
   
-  --color-brand-gold: #C6A94F;
-  --color-brand-charcoal: #0E1117;
+  --color-brand-gold: #D4AF37;
+  --color-brand-gold-light: #F9E29C;
+  --color-brand-gold-dark: #A68A2D;
+  --color-brand-navy: #0B162C;
+  --color-brand-navy-light: #162440;
+  --color-brand-charcoal: #0B162C;
   --color-brand-grey: #8A8F98;
   --color-brand-orange: #E67E22;
 }
 
 @layer base {
   body {
-    @apply bg-brand-charcoal text-white;
-  }
-}
-
-@layer components {
-  .app-car-bg {
-    position: relative;
-    isolation: isolate;
-  }
-
-  .app-car-bg::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    background-image:
-      linear-gradient(to bottom, rgba(8, 10, 14, 0.9), rgba(8, 10, 14, 0.86)),
-      url("https://images.unsplash.com/photo-1494905998402-395d579af36f?auto=format&fit=crop&q=80&w=2000");
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
+    @apply bg-brand-navy text-white;
   }
 }
