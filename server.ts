@@ -1,12 +1,12 @@
 import 'dotenv/config';
 import crypto from 'crypto';
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import db, { initializeDB } from './src/db/index.js';
+import { ensureEsbuildBinaryPath } from './scripts/ensureEsbuildBinaryPath.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -291,6 +291,8 @@ async function startServer() {
   await initializeDB();
 
   if (process.env.NODE_ENV !== 'production') {
+    ensureEsbuildBinaryPath();
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

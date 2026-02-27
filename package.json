@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "node server.ts",
-    "build": "vite build",
-    "preview": "vite preview",
+    "build": "node scripts/run-vite.js build",
+    "preview": "node scripts/run-vite.js preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
   },
