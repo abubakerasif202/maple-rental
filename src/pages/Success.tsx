@@ -5,14 +5,15 @@ import { CheckCircle, Home } from 'lucide-react';
 export default function Success() {
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get('session_id');
+  const paymentIntentId = searchParams.get('payment_intent');
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
 
   useEffect(() => {
-    if (sessionId) {
+    if (sessionId || paymentIntentId) {
       fetch('/api/bookings/verify-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId }),
+        body: JSON.stringify({ sessionId, paymentIntentId }),
       })
         .then(res => res.json())
         .then(data => {
@@ -26,7 +27,7 @@ export default function Success() {
     } else {
       setStatus('error');
     }
-  }, [sessionId]);
+  }, [sessionId, paymentIntentId]);
 
   return (
     <div className="min-h-screen bg-brand-charcoal flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-brand-gold selection:text-brand-charcoal">
