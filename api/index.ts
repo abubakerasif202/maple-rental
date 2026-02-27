@@ -82,6 +82,62 @@ const authenticateAdmin = (req: express.Request, res: express.Response, next: ex
   }
 };
 
+app.post('/api/create-subscription', async (req, res) => {
+  const { amount, recurringAmount, carName, currency = 'aud' } = req.body;
+  
+  if (!amount || !recurringAmount || Number(amount) <= 0 || Number(recurringAmount) <= 0) {
+    return res.status(400).json({ error: 'Invalid amount parameters' });
+  }
+
+  try {
+    const customer = await stripe.customers.create({
+      description: 'Maple Rental Subscription Customer',
+    });
+
+    const product = await stripe.products.create({
+      name: carName || 'Car Rental',
+    });
+
+    const price = await stripe.prices.create({
+      product: product.id,
+      unit_amount: Math.round(Number(recurringAmount) * 100),
+      currency: currency,
+      recurring: { interval: 'week' },
+    });
+
+    const upfrontExtra = Math.round((Number(amount) - Number(recurringAmount)) * 100);
+
+    if (upfrontExtra > 0) {
+      await stripe.invoiceItems.create({
+        customer: customer.id,
+        amount: upfrontExtra,
+        currency: currency,
+        description: 'Upfront bond and initial payment',
+      });
+    }
+
+    const subscription = await stripe.subscriptions.create({
+      customer: customer.id,
+      items: [{ price: price.id }],
+      payment_behavior: 'default_incomplete',
+      payment_settings: { save_default_payment_method: 'on_subscription' },
+      expand: ['latest_invoice.payment_intent'],
+    });
+
+    const invoice = subscription.latest_invoice as any;
+    const paymentIntent = invoice.payment_intent;
+
+    res.json({
+      clientSecret: paymentIntent.client_secret,
+      subscriptionId: subscription.id,
+      paymentIntentId: paymentIntent.id
+    });
+  } catch (error: any) {
+    console.error('Subscription intent error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/create-payment-intent', async (req, res) => {
   const { amount, currency = 'aud' } = req.body;
   if (!amount || Number(amount) <= 0) {

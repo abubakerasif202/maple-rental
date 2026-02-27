@@ -56,12 +56,16 @@ export default function Checkout() {
   const [clientSecret, setClientSecret] = useState('');
 
   useEffect(() => {
-    if (totalAmount) {
-      api.post('/create-payment-intent', { amount: totalAmount })
+    if (car && totalAmount) {
+      api.post('/create-subscription', {
+        amount: totalAmount,
+        recurringAmount: car.weeklyPrice,
+        carName: car.name
+      })
         .then(res => setClientSecret(res.data.clientSecret))
         .catch(err => console.error('Stripe error:', err));
     }
-  }, [totalAmount]);
+  }, [car, totalAmount]);
 
   if (!car) return <div className="min-h-screen bg-brand-navy pt-32 text-center text-white">No vehicle selected</div>;
 
@@ -71,7 +75,7 @@ export default function Checkout() {
         <h1 className="text-3xl font-serif font-bold text-white mb-8 tracking-tight">Secure Checkout</h1>
         <div className="bg-brand-navy-light p-8 md:p-12 border border-white/10 shadow-2xl overflow-hidden relative">
           <div className="absolute top-0 left-0 w-full h-1 bg-brand-gold"></div>
-          
+
           <div className="mb-10 pb-10 border-b border-white/10 flex justify-between items-end">
             <div>
               <p className="text-brand-grey text-[10px] font-bold uppercase tracking-widest mb-2">Vehicle</p>
@@ -82,9 +86,9 @@ export default function Checkout() {
               <p className="text-3xl font-bold text-brand-gold">${totalAmount}</p>
             </div>
           </div>
-          
+
           {clientSecret ? (
-            <Elements stripe={stripePromise} options={{ 
+            <Elements stripe={stripePromise} options={{
               clientSecret,
               appearance: {
                 theme: 'night',
