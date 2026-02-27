@@ -16,7 +16,7 @@ export default function Checkout() {
 
   useEffect(() => {
     fetchCars().then(cars => {
-      const found = cars.find(c => c.id === id);
+      const found = cars.find(c => String(c.id) === id);
       setCar(found);
       setLoading(false);
     });

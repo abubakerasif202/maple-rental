@@ -27,9 +27,6 @@ if (process.env.NODE_ENV === 'production' && !process.env.ADMIN_PASSWORD) {
   console.error('ADMIN_PASSWORD must be provided when NODE_ENV=production.');
   process.exit(1);
 }
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_dummy', {
-  apiVersion: '2025-02-24.acacia' as any,
-});
 
 // Auth Middleware
 const authenticateAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -50,6 +47,9 @@ const authenticateAdmin = (req: express.Request, res: express.Response, next: ex
 // Auth
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password are required' });
+  }
   const admin = db.prepare('SELECT * FROM admin WHERE username = ?').get(username) as any;
 
   if (!admin || !bcrypt.compareSync(password, admin.password)) {
@@ -103,8 +103,13 @@ app.put('/api/cars/:id', authenticateAdmin, (req, res) => {
 });
 
 app.delete('/api/cars/:id', authenticateAdmin, (req, res) => {
-  db.prepare('DELETE FROM cars WHERE id = ?').run(req.params.id);
-  res.json({ success: true });
+  try {
+    db.prepare('DELETE FROM cars WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Car deletion error:', err);
+    res.status(400).json({ error: 'Cannot delete car with active rentals' });
+  }
 });
 
 // Applications

@@ -41,7 +41,9 @@ export default function AdminDashboard() {
           fetch('/api/rentals', { headers })
         ]);
 
-        if (statsRes.status === 401) throw new Error('Unauthorized');
+        if ([statsRes, carsRes, appsRes, rentalsRes].some(res => res.status === 401)) {
+          throw new Error('Unauthorized');
+        }
 
         setStats(await statsRes.json());
         setCars(await carsRes.json());
