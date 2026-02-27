@@ -6,11 +6,10 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import Stripe from 'stripe';
-import db from './src/db/index.js';
+import db, { initializeDB } from './src/db/index.js';
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // Middleware
 app.use(cors());
@@ -45,20 +44,29 @@ const authenticateAdmin = (req: express.Request, res: express.Response, next: ex
 // --- API Routes ---
 
 // Auth
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
-  const admin = db.prepare('SELECT * FROM admin WHERE username = ?').get(username) as any;
 
-  if (!admin || !bcrypt.compareSync(password, admin.password)) {
-    return res.status(401).json({ error: 'Invalid credentials' });
+  try {
+    const result = await db.execute({
+      sql: 'SELECT * FROM admin WHERE username = ?',
+      args: [username]
+    });
+    const admin = result.rows[0];
+
+    if (!admin || !bcrypt.compareSync(password, String(admin.password))) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign({ id: admin.id, username: admin.username }, JWT_SECRET, { expiresIn: '1d' });
+    res.cookie('admin_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' });
+    res.json({ token, username: admin.username });
+  } catch (err) {
+    res.status(500).json({ error: 'Login failed' });
   }
-
-  const token = jwt.sign({ id: admin.id, username: admin.username }, JWT_SECRET, { expiresIn: '1d' });
-  res.cookie('admin_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' });
-  res.json({ token, username: admin.username });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -71,40 +79,53 @@ app.get('/api/auth/verify', authenticateAdmin, (req, res) => {
 });
 
 // Cars
-app.get('/api/cars', (req, res) => {
-  const cars = db.prepare('SELECT * FROM cars').all();
-  res.json(cars);
+app.get('/api/cars', async (req, res) => {
+  const result = await db.execute('SELECT * FROM cars');
+  res.json(result.rows);
 });
 
-app.get('/api/cars/:id', (req, res) => {
-  const car = db.prepare('SELECT * FROM cars WHERE id = ?').get(req.params.id);
+app.get('/api/cars/:id', async (req, res) => {
+  const result = await db.execute({
+    sql: 'SELECT * FROM cars WHERE id = ?',
+    args: [req.params.id]
+  });
+  const car = result.rows[0];
   if (!car) return res.status(404).json({ error: 'Car not found' });
   res.json(car);
 });
 
-app.post('/api/cars', authenticateAdmin, (req, res) => {
+app.post('/api/cars', authenticateAdmin, async (req, res) => {
   const { name, modelYear, weeklyPrice, bond, status, image } = req.body;
-  const stmt = db.prepare(`
-    INSERT INTO cars (name, modelYear, weeklyPrice, bond, status, image)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  const result = stmt.run(name, modelYear, weeklyPrice, bond, status, image);
-  res.status(201).json({ id: result.lastInsertRowid });
-});
-
-app.put('/api/cars/:id', authenticateAdmin, (req, res) => {
-  const { name, modelYear, weeklyPrice, bond, status, image } = req.body;
-  const stmt = db.prepare(`
-    UPDATE cars SET name = ?, modelYear = ?, weeklyPrice = ?, bond = ?, status = ?, image = ?
-    WHERE id = ?
-  `);
-  stmt.run(name, modelYear, weeklyPrice, bond, status, image, req.params.id);
-  res.json({ success: true });
-});
-
-app.delete('/api/cars/:id', authenticateAdmin, (req, res) => {
   try {
-    db.prepare('DELETE FROM cars WHERE id = ?').run(req.params.id);
+    const result = await db.execute({
+      sql: `INSERT INTO cars (name, modelYear, weeklyPrice, bond, status, image) VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [name, modelYear, weeklyPrice, bond, status, image]
+    });
+    res.status(201).json({ id: String(result.lastInsertRowid) });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create car' });
+  }
+});
+
+app.put('/api/cars/:id', authenticateAdmin, async (req, res) => {
+  const { name, modelYear, weeklyPrice, bond, status, image } = req.body;
+  try {
+    await db.execute({
+      sql: `UPDATE cars SET name = ?, modelYear = ?, weeklyPrice = ?, bond = ?, status = ?, image = ? WHERE id = ?`,
+      args: [name, modelYear, weeklyPrice, bond, status, image, req.params.id]
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update car' });
+  }
+});
+
+app.delete('/api/cars/:id', authenticateAdmin, async (req, res) => {
+  try {
+    await db.execute({
+      sql: 'DELETE FROM cars WHERE id = ?',
+      args: [req.params.id]
+    });
     res.json({ success: true });
   } catch (err: any) {
     console.error('Car deletion error:', err);
@@ -113,21 +134,22 @@ app.delete('/api/cars/:id', authenticateAdmin, (req, res) => {
 });
 
 // Applications
-app.get('/api/applications', authenticateAdmin, (req, res) => {
-  const applications = db.prepare(`
-    SELECT * FROM applications ORDER BY createdAt DESC
-  `).all();
-  res.json(applications);
+app.get('/api/applications', authenticateAdmin, async (req, res) => {
+  const result = await db.execute('SELECT * FROM applications ORDER BY createdAt DESC');
+  res.json(result.rows);
 });
 
-app.put('/api/applications/:id/status', authenticateAdmin, (req, res) => {
+app.put('/api/applications/:id/status', authenticateAdmin, async (req, res) => {
   const { status } = req.body;
-  db.prepare('UPDATE applications SET status = ? WHERE id = ?').run(status, req.params.id);
+  await db.execute({
+    sql: 'UPDATE applications SET status = ? WHERE id = ?',
+    args: [status, req.params.id]
+  });
   res.json({ success: true });
 });
 
 // Create Application
-app.post('/api/applications', (req, res) => {
+app.post('/api/applications', async (req, res) => {
   const { 
     name, phone, email, licenseNumber, licenseExpiry, 
     uberStatus, experience, address, weeklyBudget, 
@@ -135,21 +157,20 @@ app.post('/api/applications', (req, res) => {
   } = req.body;
 
   try {
-    const stmt = db.prepare(`
-      INSERT INTO applications (
+    const result = await db.execute({
+      sql: `INSERT INTO applications (
         name, phone, email, licenseNumber, licenseExpiry, 
         uberStatus, experience, address, weeklyBudget, 
         intendedStartDate, licensePhoto, uberScreenshot
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(
-      name, phone, email, licenseNumber, licenseExpiry, 
-      uberStatus, experience, address, weeklyBudget, 
-      intendedStartDate, licensePhoto, uberScreenshot
-    );
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        name, phone, email, licenseNumber, licenseExpiry, 
+        uberStatus, experience, address, weeklyBudget, 
+        intendedStartDate, licensePhoto, uberScreenshot
+      ]
+    });
 
-    res.json({ success: true, applicationId: result.lastInsertRowid });
+    res.json({ success: true, applicationId: String(result.lastInsertRowid) });
   } catch (error: any) {
     console.error('Application error:', error);
     res.status(500).json({ error: 'Application submission failed' });
@@ -157,47 +178,55 @@ app.post('/api/applications', (req, res) => {
 });
 
 // Rentals
-app.get('/api/rentals', authenticateAdmin, (req, res) => {
-  const rentals = db.prepare(`
+app.get('/api/rentals', authenticateAdmin, async (req, res) => {
+  const result = await db.execute(`
     SELECT r.*, a.name as driverName, c.name as carName 
     FROM rentals r 
     JOIN applications a ON r.applicationId = a.id
     JOIN cars c ON r.carId = c.id
     ORDER BY r.createdAt DESC
-  `).all();
-  res.json(rentals);
+  `);
+  res.json(result.rows);
 });
 
-app.post('/api/rentals', authenticateAdmin, (req, res) => {
+app.post('/api/rentals', authenticateAdmin, async (req, res) => {
   const { applicationId, carId, startDate, weeklyPrice } = req.body;
   try {
-    const stmt = db.prepare(`
-      INSERT INTO rentals (applicationId, carId, startDate, weeklyPrice)
-      VALUES (?, ?, ?, ?)
-    `);
-    const result = stmt.run(applicationId, carId, startDate, weeklyPrice);
+    const result = await db.execute({
+      sql: `INSERT INTO rentals (applicationId, carId, startDate, weeklyPrice) VALUES (?, ?, ?, ?)`,
+      args: [applicationId, carId, startDate, weeklyPrice]
+    });
     
     // Update car status
-    db.prepare("UPDATE cars SET status = 'Rented' WHERE id = ?").run(carId);
+    await db.execute({
+      sql: "UPDATE cars SET status = 'Rented' WHERE id = ?",
+      args: [carId]
+    });
     
-    res.json({ success: true, rentalId: result.lastInsertRowid });
+    res.json({ success: true, rentalId: String(result.lastInsertRowid) });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to create rental' });
   }
 });
 
-app.put('/api/rentals/:id/status', authenticateAdmin, (req, res) => {
+app.put('/api/rentals/:id/status', authenticateAdmin, async (req, res) => {
   const { status, carId } = req.body;
-  db.prepare('UPDATE rentals SET status = ? WHERE id = ?').run(status, req.params.id);
+  await db.execute({
+    sql: 'UPDATE rentals SET status = ? WHERE id = ?',
+    args: [status, req.params.id]
+  });
   
   if (status === 'Completed' || status === 'Cancelled') {
-    db.prepare("UPDATE cars SET status = 'Available' WHERE id = ?").run(carId);
+    await db.execute({
+      sql: "UPDATE cars SET status = 'Available' WHERE id = ?",
+      args: [carId]
+    });
   }
   
   res.json({ success: true });
 });
 
-app.post('/api/bookings', (req, res) => {
+app.post('/api/bookings', async (req, res) => {
   const { carId, applicationId, startDate, endDate, totalAmount } = req.body;
   if (!carId || !startDate || !endDate || !totalAmount) {
     return res.status(400).json({ error: 'carId, startDate, endDate, and totalAmount are required' });
@@ -205,48 +234,60 @@ app.post('/api/bookings', (req, res) => {
 
   try {
     const sessionId = crypto.randomUUID();
-    const stmt = db.prepare(`
-      INSERT INTO bookings (carId, applicationId, sessionId, startDate, endDate, totalAmount, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(carId, applicationId || null, sessionId, startDate, endDate, totalAmount, 'pending');
-    res.status(201).json({ bookingId: result.lastInsertRowid, sessionId });
+    const result = await db.execute({
+      sql: `INSERT INTO bookings (carId, applicationId, sessionId, startDate, endDate, totalAmount, status) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      args: [carId, applicationId || null, sessionId, startDate, endDate, totalAmount, 'pending']
+    });
+    res.status(201).json({ bookingId: String(result.lastInsertRowid), sessionId });
   } catch (error: any) {
     console.error('Booking creation error:', error);
     res.status(500).json({ error: 'Failed to create booking' });
   }
 });
 
-app.post('/api/bookings/verify-payment', (req, res) => {
+app.post('/api/bookings/verify-payment', async (req, res) => {
   const { sessionId } = req.body;
   if (!sessionId) {
     return res.status(400).json({ success: false, error: 'sessionId is required' });
   }
 
-  const booking = db.prepare('SELECT * FROM bookings WHERE sessionId = ?').get(sessionId);
+  const result = await db.execute({
+    sql: 'SELECT * FROM bookings WHERE sessionId = ?',
+    args: [sessionId]
+  });
+  const booking = result.rows[0];
   if (!booking) {
     return res.status(404).json({ success: false, error: 'Booking not found' });
   }
 
-  db.prepare('UPDATE bookings SET status = ? WHERE id = ?').run('confirmed', booking.id);
+  await db.execute({
+    sql: 'UPDATE bookings SET status = ? WHERE id = ?',
+    args: ['confirmed', booking.id]
+  });
   res.json({ success: true, bookingId: booking.id });
 });
 
 // Dashboard Stats
-app.get('/api/stats', authenticateAdmin, (req, res) => {
-  const totalApplications = (db.prepare('SELECT COUNT(*) as count FROM applications').get() as any).count;
-  const activeRentals = (db.prepare("SELECT COUNT(*) as count FROM rentals WHERE status = 'Active'").get() as any).count;
-  const totalWeeklyIncome = (db.prepare("SELECT SUM(weeklyPrice) as total FROM rentals WHERE status = 'Active'").get() as any).total || 0;
-  
-  res.json({
-    totalApplications,
-    activeRentals,
-    totalWeeklyIncome
-  });
+app.get('/api/stats', authenticateAdmin, async (req, res) => {
+  try {
+    const appsResult = await db.execute('SELECT COUNT(*) as count FROM applications');
+    const rentalsResult = await db.execute("SELECT COUNT(*) as count FROM rentals WHERE status = 'Active'");
+    const incomeResult = await db.execute("SELECT SUM(weeklyPrice) as total FROM rentals WHERE status = 'Active'");
+    
+    res.json({
+      totalApplications: Number(appsResult.rows[0].count),
+      activeRentals: Number(rentalsResult.rows[0].count),
+      totalWeeklyIncome: Number(incomeResult.rows[0].total) || 0
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
 });
 
 // --- Vite Middleware ---
 async function startServer() {
+  await initializeDB();
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
