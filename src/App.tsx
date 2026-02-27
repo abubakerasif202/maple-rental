@@ -5,8 +5,8 @@ import Home from './pages/Home';
 import Cars from './pages/Cars';
 import CarDetails from './pages/CarDetails';
 import Apply from './pages/Apply';
-import Rewards from './pages/Rewards';
 import Checkout from './pages/Checkout';
+import Success from './pages/Success';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 
@@ -22,7 +22,7 @@ export default function App() {
             <Route path="/cars/:id" element={<CarDetails />} />
             <Route path="/checkout/:id" element={<Checkout />} />
             <Route path="/apply" element={<Apply />} />
-            <Route path="/rewards" element={<Rewards />} />
+            <Route path="/success" element={<Success />} />
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
           </Routes>

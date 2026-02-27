@@ -94,7 +94,7 @@ export const initializeDB = async () => {
   if (Number(carCount.rows[0].count) === 0) {
     await client.execute({
       sql: `INSERT INTO cars (name, modelYear, weeklyPrice, bond, status, image) VALUES (?, ?, ?, ?, ?, ?)`,
-      args: ['Toyota Camry Hybrid Ascent', 2021, 250, 500, 'Available', 'https://images.unsplash.com/photo-1621007947382-bb3c3994e3fd?auto=format&fit=crop&q=80&w=1000']
+      args: ['Toyota Camry Hybrid Ascent', 2021, 250, 500, 'Available', 'https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=1000']
     });
     await client.execute({
       sql: `INSERT INTO cars (name, modelYear, weeklyPrice, bond, status, image) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -103,6 +103,18 @@ export const initializeDB = async () => {
     await client.execute({
       sql: `INSERT INTO cars (name, modelYear, weeklyPrice, bond, status, image) VALUES (?, ?, ?, ?, ?, ?)`,
       args: ['Toyota Camry Hybrid Ascent Sport', 2022, 300, 600, 'Available', 'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&q=80&w=1000']
+    });
+    await client.execute({
+      sql: `INSERT INTO cars (name, modelYear, weeklyPrice, bond, status, image) VALUES (?, ?, ?, ?, ?, ?)`,
+      args: ['Toyota Camry Hybrid SX', 2022, 320, 640, 'Available', 'https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=1000']
+    });
+    await client.execute({
+      sql: `INSERT INTO cars (name, modelYear, weeklyPrice, bond, status, image) VALUES (?, ?, ?, ?, ?, ?)`,
+      args: ['Toyota Camry Hybrid Ascent', 2020, 240, 480, 'Available', 'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&q=80&w=1000']
+    });
+    await client.execute({
+      sql: `INSERT INTO cars (name, modelYear, weeklyPrice, bond, status, image) VALUES (?, ?, ?, ?, ?, ?)`,
+      args: ['Toyota Camry Hybrid SL Premium', 2024, 380, 760, 'Available', 'https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=1000']
     });
   }
 };

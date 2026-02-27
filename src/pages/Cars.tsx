@@ -20,7 +20,7 @@ export default function Cars() {
     return true;
   });
 
-  const PLACEHOLDER_IMAGE = "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?auto=format&fit=crop&q=80&w=1600";
+  const PLACEHOLDER_IMAGE = "https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=1600";
 
   return (
     <div className="bg-brand-navy min-h-screen py-24 text-white selection:bg-brand-gold selection:text-brand-navy">

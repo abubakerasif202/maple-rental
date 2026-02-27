@@ -73,7 +73,7 @@ export default function Home() {
               className="relative"
             >
               <img 
-                src="https://images.unsplash.com/photo-1621007947382-bb3c3994e3fd?auto=format&fit=crop&q=80&w=1600" 
+                src="https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=1600" 
                 alt="Toyota Camry Hybrid" 
                 className="w-full h-auto object-cover relative z-10"
                 referrerPolicy="no-referrer"

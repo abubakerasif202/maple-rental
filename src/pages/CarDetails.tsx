@@ -17,7 +17,7 @@ export default function CarDetails() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  const PLACEHOLDER_IMAGE = "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?auto=format&fit=crop&q=80&w=1600";
+  const PLACEHOLDER_IMAGE = "https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=1600";
 
   if (loading) return <div className="flex justify-center py-32 bg-brand-navy min-h-screen"><div className="w-12 h-12 border-2 border-brand-gold border-t-transparent rounded-full animate-spin"></div></div>;
   if (!car) return <div className="text-center py-32 text-2xl font-serif font-bold text-brand-grey bg-brand-navy min-h-screen">Vehicle not found</div>;

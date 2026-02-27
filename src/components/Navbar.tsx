@@ -29,7 +29,6 @@ export default function Navbar() {
     { name: 'Home', path: '/' },
     { name: 'Our Fleet', path: '/cars' },
     { name: 'Apply', path: '/apply' },
-    { name: 'Rewards', path: '/rewards' },
     { name: 'Contact', path: '/#contact' },
   ];
 
