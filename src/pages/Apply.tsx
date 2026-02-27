@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { ShieldCheck, Lock, CheckCircle2, Upload, User, Phone, Mail, CreditCard, Clock, ChevronRight, AlertCircle, Car } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, User, CreditCard, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,20 +19,18 @@ const applySchema = z.object({
   address: z.string().min(5, 'Residential address is required'),
   licenseNumber: z.string().min(5, 'License number is required'),
   licenseExpiry: z.string().min(1, 'License expiry date is required'),
-  uberStatus: z.string(),
+  uberStatus: z.enum(['Active', 'Applying', 'Not Yet Registered']),
   experience: z.string().min(1, 'Experience is required'),
-  weeklyBudget: z.string(),
+  weeklyBudget: z.string().optional(),
   intendedStartDate: z.string().min(1, 'Start date is required'),
-  licensePhoto: z.any().optional(),
-  uberScreenshot: z.any().optional(),
+  licensePhoto: z.string().optional().nullable(),
+  uberScreenshot: z.string().optional().nullable(),
 });
 
 type ApplyValues = z.infer<typeof applySchema>;
 
 export default function Apply() {
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [licensePhotoBase64, setLicensePhotoBase64] = useState<string | null>(null);
-  const [uberScreenshotBase64, setUberScreenshotBase64] = useState<string | null>(null);
 
   const {
     register,
@@ -53,8 +51,6 @@ export default function Apply() {
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64 = reader.result as string;
-        if (field === 'licensePhoto') setLicensePhotoBase64(base64);
-        else setUberScreenshotBase64(base64);
         setValue(field, base64);
       };
       reader.readAsDataURL(file);
@@ -63,11 +59,7 @@ export default function Apply() {
 
   const onSubmit = async (data: ApplyValues) => {
     try {
-      await api.post('/applications', {
-        ...data,
-        licensePhoto: licensePhotoBase64,
-        uberScreenshot: uberScreenshotBase64,
-      });
+      await api.post('/applications', data);
       setIsSubmitted(true);
       window.scrollTo(0, 0);
     } catch (error) {

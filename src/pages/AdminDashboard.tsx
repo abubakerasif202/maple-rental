@@ -1,19 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Car, Calendar, DollarSign, Plus, Edit, Trash2, Users, FileText, CheckCircle, XCircle, Clock, ExternalLink } from 'lucide-react';
+import { LogOut, Car, Calendar, DollarSign, Plus, Edit, Trash2, Users, FileText, CheckCircle, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import * as api from '../lib/api';
+import { Car as CarType, Application, Rental, DashboardStats } from '../types';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [stats, setStats] = useState({ totalApplications: 0, activeRentals: 0, totalWeeklyIncome: 0 });
-  const [cars, setCars] = useState<any[]>([]);
-  const [applications, setApplications] = useState<any[]>([]);
-  const [rentals, setRentals] = useState<any[]>([]);
-  const [editingCar, setEditingCar] = useState<any | null>(null);
+  const [editingCar, setEditingCar] = useState<CarType | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [newCar, setNewCar] = useState({
+  const [newCar, setNewCar] = useState<Omit<CarType, 'id'>>({
     name: '',
     modelYear: new Date().getFullYear(),
     weeklyPrice: 0,
@@ -22,42 +21,79 @@ export default function AdminDashboard() {
     image: ''
   });
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const token = localStorage.getItem('admin_token');
-    if (!token) {
-      navigate('/admin/login');
-      return;
-    }
+  // Queries
+  const { data: stats = { totalApplications: 0, activeRentals: 0, totalWeeklyIncome: 0 } as DashboardStats, isLoading: isLoadingStats } = useQuery({
+    queryKey: ['stats'],
+    queryFn: api.fetchStats,
+  });
 
-    const headers = { Authorization: `Bearer ${token}` };
+  const { data: cars = [] as CarType[], isLoading: isLoadingCars } = useQuery({
+    queryKey: ['cars'],
+    queryFn: api.fetchCars,
+    enabled: activeTab === 'cars' || activeTab === 'dashboard',
+  });
 
-    const fetchData = async () => {
-      try {
-        const [statsRes, carsRes, appsRes, rentalsRes] = await Promise.all([
-          fetch('/api/stats', { headers }),
-          fetch('/api/cars', { headers }),
-          fetch('/api/applications', { headers }),
-          fetch('/api/rentals', { headers })
-        ]);
+  const { data: applications = [] as Application[], isLoading: isLoadingApplications } = useQuery({
+    queryKey: ['applications'],
+    queryFn: api.fetchApplications,
+    enabled: activeTab === 'applications' || activeTab === 'dashboard',
+  });
 
-        if ([statsRes, carsRes, appsRes, rentalsRes].some(res => res.status === 401)) {
-          throw new Error('Unauthorized');
-        }
+  const { data: rentals = [] as Rental[], isLoading: isLoadingRentals } = useQuery({
+    queryKey: ['rentals'],
+    queryFn: api.fetchRentals,
+    enabled: activeTab === 'rentals' || activeTab === 'dashboard',
+  });
 
-        setStats(await statsRes.json());
-        setCars(await carsRes.json());
-        setApplications(await appsRes.json());
-        setRentals(await rentalsRes.json());
-      } catch (err) {
-        console.error('Fetch error:', err);
-        localStorage.removeItem('admin_token');
-        navigate('/admin/login');
-      }
-    };
+  // Mutations
+  const updateAppStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) => api.updateApplicationStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['applications'] });
+      showNotification('Application status updated');
+    },
+    onError: () => showNotification('Failed to update status', 'error'),
+  });
 
-    fetchData();
-  }, [navigate]);
+  const deleteCarMutation = useMutation({
+    mutationFn: (id: number) => api.deleteCar(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cars'] });
+      showNotification('Vehicle deleted successfully');
+    },
+    onError: () => showNotification('Failed to delete vehicle', 'error'),
+  });
+
+  const updateCarMutation = useMutation({
+    mutationFn: (car: CarType) => api.updateCar(car.id, car),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cars'] });
+      setIsEditModalOpen(false);
+      setEditingCar(null);
+      showNotification('Vehicle details updated successfully');
+    },
+    onError: () => showNotification('Failed to update vehicle', 'error'),
+  });
+
+  const addCarMutation = useMutation({
+    mutationFn: (car: Omit<CarType, 'id'>) => api.createCar(car),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cars'] });
+      setIsAddModalOpen(false);
+      setNewCar({
+        name: '',
+        modelYear: new Date().getFullYear(),
+        weeklyPrice: 0,
+        bond: 0,
+        status: 'Available',
+        image: ''
+      });
+      showNotification('New vehicle added to fleet');
+    },
+    onError: () => showNotification('Failed to add vehicle', 'error'),
+  });
 
   const handleLogout = () => {
     localStorage.removeItem('admin_token');
@@ -69,112 +105,29 @@ export default function AdminDashboard() {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const updateApplicationStatus = async (id: number, status: string) => {
-    const token = localStorage.getItem('admin_token');
-    try {
-      const response = await fetch(`/api/applications/${id}/status`, {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ status })
-      });
-      
-      if (!response.ok) throw new Error('Failed to update status');
-      
-      setApplications(applications.map(a => a.id === id ? { ...a, status } : a));
-      showNotification(`Application status updated to ${status}`);
-    } catch (err) {
-      showNotification('Failed to update application status', 'error');
+  const updateApplicationStatus = (id: number, status: string) => {
+    updateAppStatusMutation.mutate({ id, status });
+  };
+
+  const deleteCar = (id: number) => {
+    if (confirm('Are you sure you want to delete this car?')) {
+      deleteCarMutation.mutate(id);
     }
   };
 
-  const deleteCar = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this car?')) return;
-    const token = localStorage.getItem('admin_token');
-    try {
-      const response = await fetch(`/api/cars/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      if (!response.ok) throw new Error('Failed to delete car');
-      
-      setCars(cars.filter(c => c.id !== id));
-      showNotification('Vehicle deleted successfully');
-    } catch (err) {
-      showNotification('Failed to delete vehicle', 'error');
-    }
-  };
-
-  const handleEditClick = (car: any) => {
+  const handleEditClick = (car: CarType) => {
     setEditingCar({ ...car });
     setIsEditModalOpen(true);
   };
 
-  const handleUpdateCar = async (e: React.FormEvent) => {
+  const handleUpdateCar = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingCar) return;
-
-    const token = localStorage.getItem('admin_token');
-    try {
-      const response = await fetch(`/api/cars/${editingCar.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(editingCar)
-      });
-
-      if (response.ok) {
-        setCars(cars.map(c => c.id === editingCar.id ? editingCar : c));
-        setIsEditModalOpen(false);
-        setEditingCar(null);
-        showNotification('Vehicle details updated successfully');
-      } else {
-        showNotification('Failed to update vehicle details', 'error');
-      }
-    } catch (error) {
-      console.error('Error updating car:', error);
-      showNotification('An error occurred while updating the vehicle', 'error');
-    }
+    if (editingCar) updateCarMutation.mutate(editingCar);
   };
 
-  const handleAddCar = async (e: React.FormEvent) => {
+  const handleAddCar = (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem('admin_token');
-    try {
-      const response = await fetch('/api/cars', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(newCar)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setCars([...cars, { ...newCar, id: data.id }]);
-        setIsAddModalOpen(false);
-        setNewCar({
-          name: '',
-          modelYear: new Date().getFullYear(),
-          weeklyPrice: 0,
-          bond: 0,
-          status: 'Available',
-          image: ''
-        });
-        showNotification('New vehicle added to fleet');
-      } else {
-        showNotification('Failed to add vehicle', 'error');
-      }
-    } catch (error) {
-      console.error('Error adding car:', error);
-      showNotification('An error occurred while adding the vehicle', 'error');
-    }
+    addCarMutation.mutate(newCar);
   };
 
   return (
@@ -234,7 +187,9 @@ export default function AdminDashboard() {
                     <DollarSign className="w-6 h-6 text-brand-gold" />
                     <h3 className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Weekly Income</h3>
                   </div>
-                  <p className="text-4xl font-bold text-white">${stats.totalWeeklyIncome.toLocaleString()}</p>
+                  <p className="text-4xl font-bold text-white">
+                    {isLoadingStats ? '...' : `$${stats.totalWeeklyIncome.toLocaleString()}`}
+                  </p>
                 </div>
                 <div className="bg-brand-navy-light p-10 border border-white/10 relative overflow-hidden shadow-2xl">
                   <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
@@ -242,7 +197,9 @@ export default function AdminDashboard() {
                     <Users className="w-6 h-6 text-blue-500" />
                     <h3 className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Total Applications</h3>
                   </div>
-                  <p className="text-4xl font-bold text-white">{stats.totalApplications}</p>
+                  <p className="text-4xl font-bold text-white">
+                    {isLoadingStats ? '...' : stats.totalApplications}
+                  </p>
                 </div>
                 <div className="bg-brand-navy-light p-10 border border-white/10 relative overflow-hidden shadow-2xl">
                   <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
@@ -250,7 +207,9 @@ export default function AdminDashboard() {
                     <Car className="w-6 h-6 text-emerald-500" />
                     <h3 className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Active Rentals</h3>
                   </div>
-                  <p className="text-4xl font-bold text-white">{stats.activeRentals}</p>
+                  <p className="text-4xl font-bold text-white">
+                    {isLoadingStats ? '...' : stats.activeRentals}
+                  </p>
                 </div>
               </div>
             </motion.div>
@@ -276,40 +235,50 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/10">
-                    {applications.map(app => (
-                      <tr key={app.id} className="hover:bg-white/5 transition-colors">
-                        <td className="px-8 py-6">
-                          <div className="text-sm font-bold text-white">{app.name}</div>
-                          <div className="text-xs text-brand-grey mt-1 font-light">{app.phone} • {app.email}</div>
-                        </td>
-                        <td className="px-8 py-6">
-                          <span className="text-xs text-brand-grey font-light">{app.uberStatus}</span>
-                        </td>
-                        <td className="px-8 py-6">
-                          <span className="text-xs text-brand-grey font-light">{app.weeklyBudget}</span>
-                        </td>
-                        <td className="px-8 py-6">
-                          <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full ${
-                            app.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500' :
-                            app.status === 'Rejected' ? 'bg-red-500/10 text-red-500' :
-                            'bg-brand-gold/10 text-brand-gold'
-                          }`}>
-                            {app.status}
-                          </span>
-                        </td>
-                        <td className="px-8 py-6 text-right">
-                          <select 
-                            className="bg-brand-navy border border-white/10 text-[10px] font-bold uppercase tracking-widest px-3 py-2 outline-none focus:border-brand-gold"
-                            value={app.status}
-                            onChange={(e) => updateApplicationStatus(app.id, e.target.value)}
-                          >
-                            <option value="Pending">Pending</option>
-                            <option value="Approved">Approved</option>
-                            <option value="Rejected">Rejected</option>
-                          </select>
-                        </td>
+                    {isLoadingApplications ? (
+                      <tr>
+                        <td colSpan={5} className="px-8 py-12 text-center text-brand-grey text-sm">Loading applications...</td>
                       </tr>
-                    ))}
+                    ) : applications.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-8 py-12 text-center text-brand-grey text-sm">No applications found</td>
+                      </tr>
+                    ) : (
+                      applications.map((app: any) => (
+                        <tr key={app.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-8 py-6">
+                            <div className="text-sm font-bold text-white">{app.name}</div>
+                            <div className="text-xs text-brand-grey mt-1 font-light">{app.phone} • {app.email}</div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <span className="text-xs text-brand-grey font-light">{app.uberStatus}</span>
+                          </td>
+                          <td className="px-8 py-6">
+                            <span className="text-xs text-brand-grey font-light">{app.weeklyBudget}</span>
+                          </td>
+                          <td className="px-8 py-6">
+                            <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full ${
+                              app.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500' :
+                              app.status === 'Rejected' ? 'bg-red-500/10 text-red-500' :
+                              'bg-brand-gold/10 text-brand-gold'
+                            }`}>
+                              {app.status}
+                            </span>
+                          </td>
+                          <td className="px-8 py-6 text-right">
+                            <select 
+                              className="bg-brand-navy border border-white/10 text-[10px] font-bold uppercase tracking-widest px-3 py-2 outline-none focus:border-brand-gold"
+                              value={app.status}
+                              onChange={(e) => updateApplicationStatus(app.id, e.target.value)}
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="Approved">Approved</option>
+                              <option value="Rejected">Rejected</option>
+                            </select>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -343,32 +312,42 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/10">
-                    {cars.map(car => (
-                      <tr key={car.id} className="hover:bg-white/5 transition-colors">
-                        <td className="px-8 py-6">
-                          <div className="flex items-center gap-6">
-                            <img className="h-12 w-20 object-cover border border-white/10" src={car.image} alt="" referrerPolicy="no-referrer" />
-                            <div>
-                              <div className="text-sm font-bold text-white">{car.name}</div>
-                              <div className="text-xs text-brand-grey mt-1 font-light">{car.modelYear} Model</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-8 py-6">
-                          <div className="text-sm font-bold text-white">${car.weeklyPrice}</div>
-                          <div className="text-[10px] text-brand-grey uppercase tracking-widest mt-1">Bond: ${car.bond}</div>
-                        </td>
-                        <td className="px-8 py-6">
-                          <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full ${car.status === 'Available' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
-                            {car.status}
-                          </span>
-                        </td>
-                        <td className="px-8 py-6 text-right">
-                          <button onClick={() => handleEditClick(car)} className="text-brand-grey hover:text-brand-gold transition-colors mr-6"><Edit className="w-5 h-5" /></button>
-                          <button onClick={() => deleteCar(car.id)} className="text-brand-grey hover:text-red-500 transition-colors"><Trash2 className="w-5 h-5" /></button>
-                        </td>
+                    {isLoadingCars ? (
+                      <tr>
+                        <td colSpan={4} className="px-8 py-12 text-center text-brand-grey text-sm">Loading fleet...</td>
                       </tr>
-                    ))}
+                    ) : cars.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-8 py-12 text-center text-brand-grey text-sm">No vehicles in fleet</td>
+                      </tr>
+                    ) : (
+                      cars.map((car: any) => (
+                        <tr key={car.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-8 py-6">
+                            <div className="flex items-center gap-6">
+                              <img className="h-12 w-20 object-cover border border-white/10" src={car.image} alt="" referrerPolicy="no-referrer" />
+                              <div>
+                                <div className="text-sm font-bold text-white">{car.name}</div>
+                                <div className="text-xs text-brand-grey mt-1 font-light">{car.modelYear} Model</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <div className="text-sm font-bold text-white">${car.weeklyPrice}</div>
+                            <div className="text-[10px] text-brand-grey uppercase tracking-widest mt-1">Bond: ${car.bond}</div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full ${car.status === 'Available' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                              {car.status}
+                            </span>
+                          </td>
+                          <td className="px-8 py-6 text-right">
+                            <button onClick={() => handleEditClick(car)} className="text-brand-grey hover:text-brand-gold transition-colors mr-6"><Edit className="w-5 h-5" /></button>
+                            <button onClick={() => deleteCar(car.id)} className="text-brand-grey hover:text-red-500 transition-colors"><Trash2 className="w-5 h-5" /></button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -395,27 +374,37 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/10">
-                    {rentals.map(rental => (
-                      <tr key={rental.id} className="hover:bg-white/5 transition-colors">
-                        <td className="px-8 py-6">
-                          <div className="text-sm font-bold text-white">{rental.driverName}</div>
-                        </td>
-                        <td className="px-8 py-6">
-                          <div className="text-sm font-bold text-white">{rental.carName}</div>
-                        </td>
-                        <td className="px-8 py-6">
-                          <div className="text-sm text-brand-grey font-light">{rental.startDate}</div>
-                        </td>
-                        <td className="px-8 py-6">
-                          <div className="text-sm font-bold text-white">${rental.weeklyPrice}/wk</div>
-                        </td>
-                        <td className="px-8 py-6">
-                          <span className="px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full bg-blue-500/10 text-blue-500">
-                            {rental.status}
-                          </span>
-                        </td>
+                    {isLoadingRentals ? (
+                      <tr>
+                        <td colSpan={5} className="px-8 py-12 text-center text-brand-grey text-sm">Loading rentals...</td>
                       </tr>
-                    ))}
+                    ) : rentals.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-8 py-12 text-center text-brand-grey text-sm">No active rentals</td>
+                      </tr>
+                    ) : (
+                      rentals.map((rental: any) => (
+                        <tr key={rental.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-8 py-6">
+                            <div className="text-sm font-bold text-white">{rental.applicantName || rental.driverName}</div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <div className="text-sm font-bold text-white">{rental.carName}</div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <div className="text-sm text-brand-grey font-light">{rental.startDate}</div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <div className="text-sm font-bold text-white">${rental.weeklyPrice}/wk</div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <span className="px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full bg-blue-500/10 text-blue-500">
+                              {rental.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
