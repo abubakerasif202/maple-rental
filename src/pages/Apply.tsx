@@ -1,70 +1,78 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { ShieldCheck, Lock, CheckCircle2, Upload, Calendar, User, Phone, Mail, MapPin, CreditCard, Clock, ChevronRight, AlertCircle, Car } from 'lucide-react';
+import { motion } from 'motion/react';
+import { ShieldCheck, Lock, CheckCircle2, Upload, User, Phone, Mail, CreditCard, Clock, ChevronRight, AlertCircle, Car } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import api from '../lib/api';
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.5 } }
 };
 
+const applySchema = z.object({
+  name: z.string().min(2, 'Full name is required'),
+  phone: z.string().min(10, 'Valid phone number is required'),
+  email: z.string().email('Invalid email address'),
+  address: z.string().min(5, 'Residential address is required'),
+  licenseNumber: z.string().min(5, 'License number is required'),
+  licenseExpiry: z.string().min(1, 'License expiry date is required'),
+  uberStatus: z.string(),
+  experience: z.string().min(1, 'Experience is required'),
+  weeklyBudget: z.string(),
+  intendedStartDate: z.string().min(1, 'Start date is required'),
+  licensePhoto: z.any().optional(),
+  uberScreenshot: z.any().optional(),
+});
+
+type ApplyValues = z.infer<typeof applySchema>;
+
 export default function Apply() {
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    address: '',
-    licenseNumber: '',
-    licenseExpiry: '',
-    uberStatus: 'Not Yet Registered',
-    experience: '',
-    weeklyBudget: '$250 - $300',
-    intendedStartDate: '',
-    licensePhoto: null as string | null,
-    uberScreenshot: null as string | null,
-  });
+  const [licensePhotoBase64, setLicensePhotoBase64] = useState<string | null>(null);
+  const [uberScreenshotBase64, setUberScreenshotBase64] = useState<string | null>(null);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<ApplyValues>({
+    resolver: zodResolver(applySchema),
+    defaultValues: {
+      uberStatus: 'Not Yet Registered',
+      weeklyBudget: '$250 - $300',
+    }
+  });
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, field: 'licensePhoto' | 'uberScreenshot') => {
     const file = e.target.files?.[0];
     if (file) {
-      // In a real app, we'd upload to a server. Here we'll just use a dummy string or base64
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, [field]: reader.result as string }));
+        const base64 = reader.result as string;
+        if (field === 'licensePhoto') setLicensePhotoBase64(base64);
+        else setUberScreenshotBase64(base64);
+        setValue(field, base64);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    
+  const onSubmit = async (data: ApplyValues) => {
     try {
-      const response = await fetch('/api/applications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+      await api.post('/applications', {
+        ...data,
+        licensePhoto: licensePhotoBase64,
+        uberScreenshot: uberScreenshotBase64,
       });
-
-      if (response.ok) {
-        setIsSubmitted(true);
-        window.scrollTo(0, 0);
-      } else {
-        alert('Something went wrong. Please try again.');
-      }
+      setIsSubmitted(true);
+      window.scrollTo(0, 0);
     } catch (error) {
       console.error('Error submitting application:', error);
       alert('Failed to submit application. Please check your connection.');
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -98,7 +106,6 @@ export default function Apply() {
   return (
     <div className="min-h-screen bg-brand-navy pt-32 pb-32 px-4 selection:bg-brand-gold selection:text-brand-navy">
       <div className="max-w-4xl mx-auto">
-        {/* HEADER */}
         <div className="text-center mb-16">
           <motion.h1 
             initial={{ opacity: 0, y: -20 }}
@@ -126,22 +133,15 @@ export default function Apply() {
           </motion.div>
         </div>
 
-        {/* FORM */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
           className="bg-brand-navy-light border border-white/10 shadow-2xl overflow-hidden"
         >
-          <form onSubmit={handleSubmit} className="p-8 md:p-12 space-y-12">
+          <form onSubmit={handleSubmit(onSubmit)} className="p-8 md:p-12 space-y-12">
             
-            {/* SECTION 1: Personal Details */}
-            <motion.section
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-100px" }}
-              variants={fadeIn}
-            >
+            <motion.section variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }}>
               <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/10">
                 <User className="w-5 h-5 text-brand-gold" />
                 <h2 className="text-xl font-serif font-bold text-white tracking-tight">Personal Details</h2>
@@ -149,62 +149,28 @@ export default function Apply() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Full Name</label>
-                  <input 
-                    required
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    placeholder="As shown on license"
-                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
-                  />
+                  <input {...register('name')} placeholder="As shown on license" className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light" />
+                  {errors.name && <p className="text-red-500 text-[10px]">{errors.name.message}</p>}
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Phone Number</label>
-                  <input 
-                    required
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    placeholder="04XX XXX XXX"
-                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
-                  />
+                  <input {...register('phone')} placeholder="04XX XXX XXX" className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light" />
+                  {errors.phone && <p className="text-red-500 text-[10px]">{errors.phone.message}</p>}
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Email Address</label>
-                  <input 
-                    required
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    placeholder="example@email.com"
-                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
-                  />
+                  <input {...register('email')} placeholder="example@email.com" className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light" />
+                  {errors.email && <p className="text-red-500 text-[10px]">{errors.email.message}</p>}
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Residential Address</label>
-                  <input 
-                    required
-                    type="text"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    placeholder="Street, Suburb, Postcode"
-                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
-                  />
+                  <input {...register('address')} placeholder="Street, Suburb, Postcode" className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light" />
+                  {errors.address && <p className="text-red-500 text-[10px]">{errors.address.message}</p>}
                 </div>
               </div>
             </motion.section>
 
-            {/* SECTION 2: Driver Information */}
-            <motion.section
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-100px" }}
-              variants={fadeIn}
-            >
+            <motion.section variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }}>
               <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/10">
                 <CreditCard className="w-5 h-5 text-brand-gold" />
                 <h2 className="text-xl font-serif font-bold text-white tracking-tight">Driver Information</h2>
@@ -212,34 +178,17 @@ export default function Apply() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Driver License Number</label>
-                  <input 
-                    required
-                    type="text"
-                    name="licenseNumber"
-                    value={formData.licenseNumber}
-                    onChange={handleInputChange}
-                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
-                  />
+                  <input {...register('licenseNumber')} className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light" />
+                  {errors.licenseNumber && <p className="text-red-500 text-[10px]">{errors.licenseNumber.message}</p>}
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">License Expiry Date</label>
-                  <input 
-                    required
-                    type="date"
-                    name="licenseExpiry"
-                    value={formData.licenseExpiry}
-                    onChange={handleInputChange}
-                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
-                  />
+                  <input type="date" {...register('licenseExpiry')} className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light" />
+                  {errors.licenseExpiry && <p className="text-red-500 text-[10px]">{errors.licenseExpiry.message}</p>}
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Uber Status</label>
-                  <select 
-                    name="uberStatus"
-                    value={formData.uberStatus}
-                    onChange={handleInputChange}
-                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light appearance-none"
-                  >
+                  <select {...register('uberStatus')} className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light appearance-none">
                     <option value="Active">Active</option>
                     <option value="Applying">Applying</option>
                     <option value="Not Yet Registered">Not Yet Registered</option>
@@ -247,170 +196,19 @@ export default function Apply() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Years of Driving Experience</label>
-                  <input 
-                    required
-                    type="text"
-                    name="experience"
-                    value={formData.experience}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 5 years"
-                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
-                  />
+                  <input {...register('experience')} placeholder="e.g. 5 years" className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light" />
+                  {errors.experience && <p className="text-red-500 text-[10px]">{errors.experience.message}</p>}
                 </div>
               </div>
             </motion.section>
 
-            {/* SECTION 3: Vehicle Preference */}
-            <motion.section
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-100px" }}
-              variants={fadeIn}
-            >
-              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/10">
-                <Clock className="w-5 h-5 text-brand-gold" />
-                <h2 className="text-xl font-serif font-bold text-white tracking-tight">Vehicle Preference</h2>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Preferred Weekly Budget</label>
-                  <select 
-                    name="weeklyBudget"
-                    value={formData.weeklyBudget}
-                    onChange={handleInputChange}
-                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light appearance-none"
-                  >
-                    <option value="$200 - $250">$200 - $250</option>
-                    <option value="$250 - $300">$250 - $300</option>
-                    <option value="$300 - $350">$300 - $350</option>
-                  </select>
-                  <p className="text-[10px] text-brand-grey/60 mt-2 font-light italic">Bond is two weeks rental amount based on selected vehicle.</p>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Intended Start Date</label>
-                  <input 
-                    required
-                    type="date"
-                    name="intendedStartDate"
-                    value={formData.intendedStartDate}
-                    onChange={handleInputChange}
-                    className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
-                  />
-                </div>
-              </div>
-            </motion.section>
-
-            {/* SECTION 4: Document Upload */}
-            <motion.section
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-100px" }}
-              variants={fadeIn}
-            >
-              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/10">
-                <Upload className="w-5 h-5 text-brand-gold" />
-                <h2 className="text-xl font-serif font-bold text-white tracking-tight">Document Upload</h2>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Driver License (Front & Back)</label>
-                  <div className="relative group">
-                    <input 
-                      type="file" 
-                      accept="image/*"
-                      onChange={(e) => handleFileUpload(e, 'licensePhoto')}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                    />
-                    <div className={`border-2 border-dashed ${formData.licensePhoto ? 'border-brand-gold/50 bg-brand-gold/5' : 'border-white/10 group-hover:border-brand-gold/30'} p-8 text-center transition-all rounded-xl`}>
-                      {formData.licensePhoto ? (
-                        <div className="flex flex-col items-center gap-2">
-                          <CheckCircle2 className="w-8 h-8 text-brand-gold" />
-                          <span className="text-xs text-brand-gold font-bold uppercase tracking-widest">File Uploaded</span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2">
-                          <Upload className="w-8 h-8 text-brand-grey/40 group-hover:text-brand-gold transition-colors" />
-                          <span className="text-xs text-brand-grey/60 font-light">Drag & drop or click to upload</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Uber Profile Screenshot (if active)</label>
-                  <div className="relative group">
-                    <input 
-                      type="file" 
-                      accept="image/*"
-                      onChange={(e) => handleFileUpload(e, 'uberScreenshot')}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                    />
-                    <div className={`border-2 border-dashed ${formData.uberScreenshot ? 'border-brand-gold/50 bg-brand-gold/5' : 'border-white/10 group-hover:border-brand-gold/30'} p-8 text-center transition-all rounded-xl`}>
-                      {formData.uberScreenshot ? (
-                        <div className="flex flex-col items-center gap-2">
-                          <CheckCircle2 className="w-8 h-8 text-brand-gold" />
-                          <span className="text-xs text-brand-gold font-bold uppercase tracking-widest">File Uploaded</span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2">
-                          <Upload className="w-8 h-8 text-brand-grey/40 group-hover:text-brand-gold transition-colors" />
-                          <span className="text-xs text-brand-grey/60 font-light">Drag & drop or click to upload</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-8 flex items-start gap-3 p-4 bg-brand-navy/50 border border-white/10 rounded-lg">
-                <Lock className="w-4 h-4 text-brand-gold mt-0.5" />
-                <p className="text-[10px] text-brand-grey/60 font-light leading-relaxed">
-                  Files are securely stored and reviewed by Maple Rentals management only. Your information is never shared with third parties.
-                </p>
-              </div>
-            </motion.section>
-
-            {/* SUBMIT */}
             <div className="pt-8">
-              <button 
-                disabled={isSubmitting}
-                type="submit"
-                className="w-full bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-12 py-5 font-bold text-sm uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <button disabled={isSubmitting} type="submit" className="w-full bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-12 py-5 font-bold text-sm uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-3 disabled:opacity-50">
                 {isSubmitting ? 'Processing...' : 'Submit Application'}
                 {!isSubmitting && <ChevronRight className="w-4 h-4" />}
               </button>
-              <p className="text-center text-[10px] text-brand-grey/60 mt-6 uppercase tracking-[0.2em] font-medium">
-                Our team will contact you within 24 hours.
-              </p>
             </div>
           </form>
-        </motion.div>
-
-        {/* TRUST ELEMENTS */}
-        <motion.div 
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true }}
-          variants={{
-            visible: { transition: { staggerChildren: 0.1 } }
-          }}
-          className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4"
-        >
-          {[
-            { icon: ShieldCheck, text: 'Secure & Confidential' },
-            { icon: AlertCircle, text: 'No Hidden Fees' },
-            { icon: CreditCard, text: 'Transparent Bond' },
-            { icon: Car, text: 'Professional Fleet' }
-          ].map((item, i) => (
-            <motion.div 
-              key={i} 
-              variants={fadeIn}
-              className="flex flex-col items-center text-center p-6 bg-brand-navy-light border border-white/10"
-            >
-              <item.icon className="w-5 h-5 text-brand-gold mb-3" />
-              <span className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">{item.text}</span>
-            </motion.div>
-          ))}
         </motion.div>
       </div>
     </div>

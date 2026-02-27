@@ -1,39 +1,39 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Calendar, User, Mail, Phone, Send, CheckCircle2 } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+
+const inquirySchema = z.object({
+  name: z.string().min(2, 'Name is required'),
+  email: z.string().email('Invalid email address'),
+  phone: z.string().min(10, 'Phone number is required'),
+  startDate: z.string().min(1, 'Start date is required'),
+  endDate: z.string().min(1, 'End date is required'),
+  message: z.string().optional(),
+});
+
+type InquiryValues = z.infer<typeof inquirySchema>;
 
 export default function InquiryForm() {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    startDate: '',
-    endDate: '',
-    message: ''
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setIsSuccess(true);
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        startDate: '',
-        endDate: '',
-        message: ''
-      });
-    }, 1500);
-  };
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<InquiryValues>({
+    resolver: zodResolver(inquirySchema),
+  });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const onSubmit = async (data: InquiryValues) => {
+    // Simulate API call
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    console.log('Inquiry submitted:', data);
+    setIsSuccess(true);
+    reset();
   };
 
   if (isSuccess) {
@@ -68,37 +68,31 @@ export default function InquiryForm() {
       <h3 className="text-2xl md:text-3xl font-serif font-bold text-white mb-2">Check Availability</h3>
       <p className="text-brand-grey text-sm font-light mb-10 uppercase tracking-widest">Reserve your professional fleet vehicle</p>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
             <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Full Name</label>
             <div className="relative">
               <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
               <input 
-                type="text" 
-                name="name"
-                required
-                value={formData.name}
-                onChange={handleChange}
+                {...register('name')}
                 placeholder="John Doe"
-                className="w-full bg-brand-navy border border-white/10 p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20"
+                className={`w-full bg-brand-navy border ${errors.name ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
               />
             </div>
+            {errors.name && <p className="text-red-500 text-[10px] uppercase tracking-widest">{errors.name.message}</p>}
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Email Address</label>
             <div className="relative">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
               <input 
-                type="email" 
-                name="email"
-                required
-                value={formData.email}
-                onChange={handleChange}
+                {...register('email')}
                 placeholder="john@example.com"
-                className="w-full bg-brand-navy border border-white/10 p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20"
+                className={`w-full bg-brand-navy border ${errors.email ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
               />
             </div>
+            {errors.email && <p className="text-red-500 text-[10px] uppercase tracking-widest">{errors.email.message}</p>}
           </div>
         </div>
 
@@ -108,38 +102,31 @@ export default function InquiryForm() {
             <div className="relative">
               <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
               <input 
-                type="tel" 
-                name="phone"
-                required
-                value={formData.phone}
-                onChange={handleChange}
+                {...register('phone')}
                 placeholder="0400 000 000"
-                className="w-full bg-brand-navy border border-white/10 p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20"
+                className={`w-full bg-brand-navy border ${errors.phone ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
               />
             </div>
+            {errors.phone && <p className="text-red-500 text-[10px] uppercase tracking-widest">{errors.phone.message}</p>}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Start Date</label>
               <input 
                 type="date" 
-                name="startDate"
-                required
-                value={formData.startDate}
-                onChange={handleChange}
-                className="w-full bg-brand-navy border border-white/10 p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors"
+                {...register('startDate')}
+                className={`w-full bg-brand-navy border ${errors.startDate ? 'border-red-500' : 'border-white/10'} p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors`}
               />
+              {errors.startDate && <p className="text-red-500 text-[10px] uppercase tracking-widest">{errors.startDate.message}</p>}
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">End Date</label>
               <input 
                 type="date" 
-                name="endDate"
-                required
-                value={formData.endDate}
-                onChange={handleChange}
-                className="w-full bg-brand-navy border border-white/10 p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors"
+                {...register('endDate')}
+                className={`w-full bg-brand-navy border ${errors.endDate ? 'border-red-500' : 'border-white/10'} p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors`}
               />
+              {errors.endDate && <p className="text-red-500 text-[10px] uppercase tracking-widest">{errors.endDate.message}</p>}
             </div>
           </div>
         </div>
@@ -147,10 +134,8 @@ export default function InquiryForm() {
         <div className="space-y-2">
           <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Additional Notes (Optional)</label>
           <textarea 
-            name="message"
+            {...register('message')}
             rows={3}
-            value={formData.message}
-            onChange={handleChange}
             placeholder="Tell us about your requirements..."
             className="w-full bg-brand-navy border border-white/10 p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20 resize-none"
           ></textarea>

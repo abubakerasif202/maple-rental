@@ -1,208 +1,112 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { fetchCars } from '../lib/api';
-import { Calendar, Shield, CreditCard, ArrowLeft } from 'lucide-react';
-import { motion } from 'motion/react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import api from '../lib/api';
 
-export default function Checkout() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const [car, setCar] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState('');
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
-  useEffect(() => {
-    fetchCars().then(cars => {
-      const found = cars.find(c => String(c.id) === id);
-      setCar(found);
-      setLoading(false);
+function CheckoutForm({ amount }: { amount: number }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [error, setError] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!stripe || !elements) return;
+
+    setProcessing(true);
+    const { error: submitError } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/success`,
+      },
     });
-  }, [id]);
 
-  const calculateTotal = () => {
-    if (!startDate || !endDate || !car) return 0;
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    const weeks = diffDays / 7;
-    return Math.round(weeks * car.weeklyPrice);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!car) return;
-    setFormError('');
-    setIsSubmitting(true);
-
-    if (!startDate || !endDate) {
-      setFormError('Select both start and end dates');
-      setIsSubmitting(false);
-      return;
-    }
-
-    try {
-      const totalAmount = calculateTotal();
-      if (totalAmount <= 0) {
-        throw new Error('Choose valid rental dates');
-      }
-      const res = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          carId: car.id,
-          startDate,
-          endDate,
-          totalAmount,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Booking request failed');
-      navigate(`/success?session_id=${encodeURIComponent(data.sessionId)}`);
-    } catch (error) {
-      console.error('Booking submit error:', error);
-      setFormError((error as Error).message || 'Unable to create booking');
-    } finally {
-      setIsSubmitting(false);
+    if (submitError) {
+      setError(submitError.message || 'An error occurred');
+      setProcessing(false);
     }
   };
-
-  if (loading) return (
-    <div className="min-h-screen bg-brand-navy flex items-center justify-center">
-      <div className="w-12 h-12 border-2 border-brand-gold border-t-transparent rounded-full animate-spin"></div>
-    </div>
-  );
-
-  if (!car) return (
-    <div className="min-h-screen bg-brand-navy flex flex-col items-center justify-center text-white p-6">
-      <h1 className="text-2xl font-serif mb-4">Vehicle Not Found</h1>
-      <button onClick={() => navigate('/cars')} className="text-brand-gold hover:underline">Back to Fleet</button>
-    </div>
-  );
 
   return (
-    <div className="bg-brand-navy min-h-screen py-24 text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <button 
-          onClick={() => navigate('/cars')}
-          className="flex items-center gap-2 text-brand-grey hover:text-white mb-12 transition-colors group"
-        >
-          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> Back to Fleet
-        </button>
+    <form onSubmit={handleSubmit} className="space-y-8">
+      <div className="bg-brand-navy p-6 border border-white/10 rounded-xl">
+        <PaymentElement options={{ layout: 'tabs' }} />
+      </div>
+      {error && <div className="text-red-500 text-[10px] font-bold uppercase tracking-widest">{error}</div>}
+      <button
+        disabled={!stripe || processing}
+        className="w-full bg-brand-gold text-brand-navy py-5 font-bold uppercase tracking-widest text-sm hover:bg-brand-gold-light transition-all shadow-lg flex items-center justify-center gap-3 disabled:opacity-50"
+      >
+        {processing ? (
+          <div className="w-5 h-5 border-2 border-brand-navy border-t-transparent rounded-full animate-spin"></div>
+        ) : (
+          `Securely Pay $${amount}`
+        )}
+      </button>
+    </form>
+  );
+}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
-          {/* Left: Booking Form */}
-          <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="bg-brand-navy-light p-8 md:p-12 border border-white/10 shadow-xl"
-          >
-            <h1 className="text-3xl font-serif font-bold mb-8">Secure Your Vehicle</h1>
-            
-            <form onSubmit={handleSubmit} className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Rental Start Date</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold" />
-                    <input 
-                      type="date" 
-                      required
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full bg-brand-navy border border-white/10 p-4 pl-12 text-sm focus:border-brand-gold outline-none transition-colors"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Expected End Date</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold" />
-                    <input 
-                      type="date" 
-                      required
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full bg-brand-navy border border-white/10 p-4 pl-12 text-sm focus:border-brand-gold outline-none transition-colors"
-                    />
-                  </div>
-                </div>
-              </div>
+export default function Checkout() {
+  const location = useLocation();
+  const { car, totalAmount } = location.state || {};
+  const [clientSecret, setClientSecret] = useState('');
 
-              <div className="space-y-4 pt-6 border-t border-white/10">
-                <div className="flex items-center gap-4 text-sm text-brand-grey font-light">
-                  <Shield className="w-5 h-5 text-brand-gold" />
-                  <span>Full comprehensive insurance included in weekly rate.</span>
-                </div>
-                <div className="flex items-center gap-4 text-sm text-brand-grey font-light">
-                  <CreditCard className="w-5 h-5 text-brand-gold" />
-                  <span>No payment required today. Pay bond and first week on collection.</span>
-                </div>
-              </div>
+  useEffect(() => {
+    if (totalAmount) {
+      api.post('/create-payment-intent', { amount: totalAmount })
+        .then(res => setClientSecret(res.data.clientSecret))
+        .catch(err => console.error('Stripe error:', err));
+    }
+  }, [totalAmount]);
 
-              <button 
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full bg-brand-gold text-brand-navy py-5 font-bold uppercase tracking-widest text-sm hover:bg-brand-gold-light transition-all shadow-lg flex items-center justify-center gap-3 disabled:opacity-50"
-              >
-                {isSubmitting ? 'Processing...' : 'Confirm Booking Request'}
-              </button>
-              {formError && (
-                <p className="text-center text-xs text-red-400 mt-4 uppercase tracking-[0.2em] font-bold">
-                  {formError}
-                </p>
-              )}
-            </form>
-          </motion.div>
+  if (!car) return <div className="min-h-screen bg-brand-navy pt-32 text-center text-white">No vehicle selected</div>;
 
-          {/* Right: Summary */}
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="space-y-8"
-          >
-            <div className="bg-brand-navy-light border border-white/10 overflow-hidden shadow-xl">
-              <div className="h-48 overflow-hidden">
-                <img src={car.image} alt={car.name} className="w-full h-full object-cover" />
-              </div>
-              <div className="p-8">
-                <h2 className="text-2xl font-serif font-bold mb-2">{car.name}</h2>
-                <p className="text-brand-grey text-sm font-light mb-6 uppercase tracking-widest">{car.modelYear} Toyota Camry Hybrid</p>
-                
-                <div className="space-y-4 border-t border-white/10 pt-6">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-brand-grey font-light">Weekly Rate</span>
-                    <span className="font-bold text-white">${car.weeklyPrice}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-brand-grey font-light">Security Bond (Refundable)</span>
-                    <span className="font-bold text-white">${car.bond}</span>
-                  </div>
-                  <div className="flex justify-between text-lg border-t border-white/10 pt-4 mt-4">
-                    <span className="font-serif font-bold text-brand-gold">Estimated Total</span>
-                    <span className="font-bold text-white">${calculateTotal() || car.weeklyPrice}</span>
-                  </div>
-                  <p className="text-[10px] text-gray-500 italic mt-4">
-                    * Total is estimated based on selected dates. Final amount confirmed upon document verification.
-                  </p>
-                </div>
-              </div>
+  return (
+    <div className="min-h-screen bg-brand-navy pt-32 pb-20 px-4">
+      <div className="max-w-3xl mx-auto">
+        <h1 className="text-3xl font-serif font-bold text-white mb-8 tracking-tight">Secure Checkout</h1>
+        <div className="bg-brand-navy-light p-8 md:p-12 border border-white/10 shadow-2xl overflow-hidden relative">
+          <div className="absolute top-0 left-0 w-full h-1 bg-brand-gold"></div>
+          
+          <div className="mb-10 pb-10 border-b border-white/10 flex justify-between items-end">
+            <div>
+              <p className="text-brand-grey text-[10px] font-bold uppercase tracking-widest mb-2">Vehicle</p>
+              <h2 className="text-2xl font-serif font-bold text-white">{car.name}</h2>
             </div>
-
-            <div className="bg-brand-gold/5 border border-brand-gold/20 p-6">
-              <h3 className="text-xs font-bold text-brand-gold uppercase tracking-widest mb-4">Required Documents</h3>
-              <ul className="text-xs text-brand-grey space-y-2 font-light">
-                <li>• Valid NSW Driver's Licence</li>
-                <li>• Proof of Identity (Passport or Birth Certificate)</li>
-                <li>• Proof of Address (Utility Bill or Bank Statement)</li>
-                <li>• Active Uber Driver Account Details</li>
-              </ul>
+            <div className="text-right">
+              <p className="text-brand-grey text-[10px] font-bold uppercase tracking-widest mb-2">Total Due</p>
+              <p className="text-3xl font-bold text-brand-gold">${totalAmount}</p>
             </div>
-          </motion.div>
+          </div>
+          
+          {clientSecret ? (
+            <Elements stripe={stripePromise} options={{ 
+              clientSecret,
+              appearance: {
+                theme: 'night',
+                variables: {
+                  colorPrimary: '#D4AF37',
+                  colorBackground: '#0F172A',
+                  colorText: '#ffffff',
+                  colorDanger: '#ef4444',
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                  spacingUnit: '4px',
+                  borderRadius: '8px',
+                }
+              }
+            }}>
+              <CheckoutForm amount={totalAmount} />
+            </Elements>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="w-10 h-10 border-2 border-brand-gold border-t-transparent rounded-full animate-spin mb-4"></div>
+              <p className="text-[10px] text-brand-grey uppercase tracking-widest font-bold">Initializing Secure Payment</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
