@@ -11,14 +11,11 @@ if (!fs.existsSync(dataDir)) {
 
 const db = new Database(path.join(dataDir, 'car-rental.db'));
 
-// Initialize tables
-db.exec(`
-  DROP TABLE IF EXISTS bookings;
-  DROP TABLE IF EXISTS cars;
-  DROP TABLE IF EXISTS admin;
-  DROP TABLE IF EXISTS applications;
-  DROP TABLE IF EXISTS rentals;
+// Enable foreign keys so relationships are enforced.
+db.pragma('foreign_keys = ON');
 
+// Initialize tables without dropping existing data.
+db.exec(`
   CREATE TABLE IF NOT EXISTS admin (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
@@ -64,12 +61,27 @@ db.exec(`
     FOREIGN KEY (applicationId) REFERENCES applications (id),
     FOREIGN KEY (carId) REFERENCES cars (id)
   );
+
+  CREATE TABLE IF NOT EXISTS bookings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    carId INTEGER NOT NULL,
+    applicationId INTEGER,
+    sessionId TEXT UNIQUE,
+    startDate TEXT NOT NULL,
+    endDate TEXT NOT NULL,
+    totalAmount REAL NOT NULL,
+    status TEXT DEFAULT 'pending',
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (carId) REFERENCES cars (id),
+    FOREIGN KEY (applicationId) REFERENCES applications (id)
+  );
 `);
 
 // Seed admin if not exists
 const adminCount = db.prepare('SELECT COUNT(*) as count FROM admin').get() as { count: number };
 if (adminCount.count === 0) {
-  const hashedPassword = bcrypt.hashSync('admin123', 10);
+  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  const hashedPassword = bcrypt.hashSync(adminPassword, 10);
   db.prepare('INSERT INTO admin (username, password) VALUES (?, ?)').run('admin', hashedPassword);
 }
 

@@ -1,3 +1,5 @@
+import 'dotenv/config';
+import crypto from 'crypto';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import cors from 'cors';
@@ -15,7 +17,16 @@ app.use(cors());
 app.use(cookieParser());
 app.use(express.json());
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('JWT_SECRET is required. Export JWT_SECRET before starting the server.');
+  process.exit(1);
+}
+
+if (process.env.NODE_ENV === 'production' && !process.env.ADMIN_PASSWORD) {
+  console.error('ADMIN_PASSWORD must be provided when NODE_ENV=production.');
+  process.exit(1);
+}
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_dummy', {
   apiVersion: '2025-02-24.acacia' as any,
 });
@@ -179,6 +190,41 @@ app.put('/api/rentals/:id/status', authenticateAdmin, (req, res) => {
   }
   
   res.json({ success: true });
+});
+
+app.post('/api/bookings', (req, res) => {
+  const { carId, applicationId, startDate, endDate, totalAmount } = req.body;
+  if (!carId || !startDate || !endDate || !totalAmount) {
+    return res.status(400).json({ error: 'carId, startDate, endDate, and totalAmount are required' });
+  }
+
+  try {
+    const sessionId = crypto.randomUUID();
+    const stmt = db.prepare(`
+      INSERT INTO bookings (carId, applicationId, sessionId, startDate, endDate, totalAmount, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(carId, applicationId || null, sessionId, startDate, endDate, totalAmount, 'pending');
+    res.status(201).json({ bookingId: result.lastInsertRowid, sessionId });
+  } catch (error: any) {
+    console.error('Booking creation error:', error);
+    res.status(500).json({ error: 'Failed to create booking' });
+  }
+});
+
+app.post('/api/bookings/verify-payment', (req, res) => {
+  const { sessionId } = req.body;
+  if (!sessionId) {
+    return res.status(400).json({ success: false, error: 'sessionId is required' });
+  }
+
+  const booking = db.prepare('SELECT * FROM bookings WHERE sessionId = ?').get(sessionId);
+  if (!booking) {
+    return res.status(404).json({ success: false, error: 'Booking not found' });
+  }
+
+  db.prepare('UPDATE bookings SET status = ? WHERE id = ?').run('confirmed', booking.id);
+  res.json({ success: true, bookingId: booking.id });
 });
 
 // Dashboard Stats

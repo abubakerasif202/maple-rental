@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchCars } from '../lib/api';
-import { Calendar, Shield, CreditCard, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Calendar, Shield, CreditCard, ArrowLeft } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export default function Checkout() {
@@ -12,7 +12,7 @@ export default function Checkout() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
     fetchCars().then(cars => {
@@ -32,14 +32,43 @@ export default function Checkout() {
     return Math.round(weeks * car.weeklyPrice);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!car) return;
+    setFormError('');
     setIsSubmitting(true);
-    // Simulate API call
-    setTimeout(() => {
+
+    if (!startDate || !endDate) {
+      setFormError('Select both start and end dates');
       setIsSubmitting(false);
-      setIsSuccess(true);
-    }, 2000);
+      return;
+    }
+
+    try {
+      const totalAmount = calculateTotal();
+      if (totalAmount <= 0) {
+        throw new Error('Choose valid rental dates');
+      }
+      const res = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          carId: car.id,
+          startDate,
+          endDate,
+          totalAmount,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Booking request failed');
+      navigate(`/success?session_id=${encodeURIComponent(data.sessionId)}`);
+    } catch (error) {
+      console.error('Booking submit error:', error);
+      setFormError((error as Error).message || 'Unable to create booking');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (loading) return (
@@ -54,28 +83,6 @@ export default function Checkout() {
       <button onClick={() => navigate('/cars')} className="text-brand-gold hover:underline">Back to Fleet</button>
     </div>
   );
-
-  if (isSuccess) {
-    return (
-      <div className="min-h-screen bg-brand-navy flex items-center justify-center p-6">
-        <motion.div 
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="bg-brand-navy-light p-12 border border-brand-gold/30 max-w-md w-full text-center shadow-2xl"
-        >
-          <CheckCircle2 className="w-20 h-20 text-brand-gold mx-auto mb-8" />
-          <h1 className="text-3xl font-serif font-bold text-white mb-4">Booking Confirmed</h1>
-          <p className="text-brand-grey mb-10 font-light">Your request for the {car.name} has been received. Our team will contact you within 24 hours to finalize the paperwork.</p>
-          <button 
-            onClick={() => navigate('/')}
-            className="w-full bg-brand-gold text-brand-navy py-4 font-bold uppercase tracking-widest text-sm hover:bg-brand-gold-light transition-all"
-          >
-            Return Home
-          </button>
-        </motion.div>
-      </div>
-    );
-  }
 
   return (
     <div className="bg-brand-navy min-h-screen py-24 text-white">
@@ -144,6 +151,11 @@ export default function Checkout() {
               >
                 {isSubmitting ? 'Processing...' : 'Confirm Booking Request'}
               </button>
+              {formError && (
+                <p className="text-center text-xs text-red-400 mt-4 uppercase tracking-[0.2em] font-bold">
+                  {formError}
+                </p>
+              )}
             </form>
           </motion.div>
 
