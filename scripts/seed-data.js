@@ -30,13 +30,13 @@ async function seedData() {
             modelYear: 2024,
             weeklyPrice: 400,
             bond: 500,
-            status: "Rented",
+            status: "Available",
             image: "https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=800"
         },
         {
-            name: "Toyota Corolla Hybrid",
+            name: "Toyota Camry Hybrid Ascent Sport",
             modelYear: 2023,
-            weeklyPrice: 320,
+            weeklyPrice: 380,
             bond: 500,
             status: "Available",
             image: "https://images.unsplash.com/photo-1590362891991-f776e747a588?auto=format&fit=crop&q=80&w=800"
