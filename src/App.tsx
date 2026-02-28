@@ -8,7 +8,6 @@ import Cars from './pages/Cars';
 import CarDetails from './pages/CarDetails';
 import Success from './pages/Success';
 import AdminLogin from './pages/AdminLogin';
-import SaaSPlatform from './pages/SaasPlatform';
 
 // Lazy load heavy pages
 const Apply = lazy(() => import('./pages/Apply'));
@@ -41,7 +40,6 @@ export default function App() {
                 <Route path="/success" element={<Success />} />
                 <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                <Route path="/platform" element={<SaaSPlatform />} />
               </Routes>
             </Suspense>
           </main>
