@@ -71,7 +71,7 @@ export default function Apply() {
   if (isSubmitted) {
     return (
       <div className="min-h-screen bg-brand-navy pt-32 pb-20 px-4 flex items-center justify-center">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-md w-full bg-brand-navy-light border border-brand-gold/30 p-12 text-center shadow-2xl relative overflow-hidden"
@@ -84,8 +84,8 @@ export default function Apply() {
           <p className="text-brand-grey font-light leading-relaxed mb-10">
             Thank you for applying to Maple Rentals. Our team will review your details and contact you within 24 hours.
           </p>
-          <Link 
-            to="/" 
+          <Link
+            to="/"
             className="inline-block bg-brand-gold text-brand-navy px-10 py-4 font-bold text-sm uppercase tracking-widest hover:bg-brand-gold-light transition-colors w-full"
           >
             Return Home
@@ -99,14 +99,14 @@ export default function Apply() {
     <div className="min-h-screen bg-brand-navy pt-32 pb-32 px-4 selection:bg-brand-gold selection:text-brand-navy">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-16">
-          <motion.h1 
+          <motion.h1
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-4xl md:text-6xl font-serif font-bold text-white mb-4 tracking-tight"
           >
             Driver Application
           </motion.h1>
-          <motion.p 
+          <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
@@ -114,7 +114,7 @@ export default function Apply() {
           >
             Apply to rent a Toyota Camry Hybrid and start driving with Maple Rentals.
           </motion.p>
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}
@@ -125,14 +125,14 @@ export default function Apply() {
           </motion.div>
         </div>
 
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
           className="bg-brand-navy-light border border-white/10 shadow-2xl overflow-hidden"
         >
           <form onSubmit={handleSubmit(onSubmit)} className="p-8 md:p-12 space-y-12">
-            
+
             <motion.section variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }}>
               <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/10">
                 <User className="w-5 h-5 text-brand-gold" />
@@ -190,6 +190,39 @@ export default function Apply() {
                   <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Years of Driving Experience</label>
                   <input {...register('experience')} placeholder="e.g. 5 years" className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light" />
                   {errors.experience && <p className="text-red-500 text-[10px]">{errors.experience.message}</p>}
+                </div>
+              </div>
+            </motion.section>
+
+            <motion.section variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }}>
+              <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/10 mt-8">
+                <ShieldCheck className="w-5 h-5 text-brand-gold" />
+                <h2 className="text-xl font-serif font-bold text-white tracking-tight">Required Documents</h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest block mb-2">Driver License Photo</label>
+                  <label className="flex items-center justify-center w-full h-32 px-4 transition border-2 border-white/10 border-dashed rounded-lg appearance-none cursor-pointer hover:border-brand-gold hover:bg-white/5 bg-brand-navy">
+                    <span className="flex items-center space-x-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-brand-grey" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      <span className="font-medium text-brand-grey text-sm">Upload Photo</span>
+                    </span>
+                    <input type="file" name="file_upload" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'licensePhoto')} />
+                  </label>
+                </div>
+                <div className="space-y-4">
+                  <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest block mb-2">Uber Profile Screenshot</label>
+                  <label className="flex items-center justify-center w-full h-32 px-4 transition border-2 border-white/10 border-dashed rounded-lg appearance-none cursor-pointer hover:border-brand-gold hover:bg-white/5 bg-brand-navy">
+                    <span className="flex items-center space-x-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-brand-grey" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      <span className="font-medium text-brand-grey text-sm">Upload Screenshot</span>
+                    </span>
+                    <input type="file" name="file_upload" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'uberScreenshot')} />
+                  </label>
                 </div>
               </div>
             </motion.section>

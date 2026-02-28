@@ -353,6 +353,38 @@ app.get('/api/applications', authenticateAdmin, async (_req, res) => {
 app.post('/api/applications', async (req, res) => {
   try {
     const data = applicationSchema.parse(req.body);
+    let licensePhotoUrl = null;
+    let uberScreenshotUrl = null;
+
+    const uploadImage = async (base64Str: string, filePrefix: string) => {
+      const match = base64Str.match(/^data:([a-zA-Z0-9-+/=.]+);base64,(.+)$/);
+      if (!match) return null;
+
+      const [, contentType, base64Data] = match;
+      const buffer = Buffer.from(base64Data, 'base64');
+      const filename = `${Date.now()}-${Math.floor(Math.random() * 10000)}-${filePrefix}`;
+
+      const { data: uploadData, error: uploadError } = await db.storage
+        .from('applications')
+        .upload(filename, buffer, { contentType });
+
+      if (uploadError) {
+        console.error(`Error uploading ${filePrefix}:`, uploadError);
+        return null;
+      }
+
+      const { data: publicUrlData } = db.storage.from('applications').getPublicUrl(filename);
+      return publicUrlData.publicUrl;
+    };
+
+    if (data.licensePhoto) {
+      licensePhotoUrl = await uploadImage(data.licensePhoto, 'license');
+    }
+
+    if (data.uberScreenshot) {
+      uberScreenshotUrl = await uploadImage(data.uberScreenshot, 'uber');
+    }
+
     const { data: inserted, error } = await db.from('applications').insert([
       {
         name: data.name,
@@ -365,8 +397,8 @@ app.post('/api/applications', async (req, res) => {
         address: data.address,
         weeklyBudget: data.weeklyBudget || null,
         intendedStartDate: data.intendedStartDate,
-        licensePhoto: data.licensePhoto || null,
-        uberScreenshot: data.uberScreenshot || null,
+        licensePhoto: licensePhotoUrl || data.licensePhoto || null,
+        uberScreenshot: uberScreenshotUrl || data.uberScreenshot || null,
       }
     ]).select('id').single();
 
