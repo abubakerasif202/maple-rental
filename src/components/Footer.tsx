@@ -4,13 +4,13 @@ import { Mail, Phone } from 'lucide-react';
 const LogoIcon = ({ className = "w-12 h-12" }) => (
   <div className={`relative ${className} rounded-full border-2 border-slate-400 bg-brand-navy shadow-lg flex items-center justify-center overflow-hidden`}>
     <svg viewBox="0 0 100 100" className="w-full h-full p-1" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path 
-        d="M50 45 L55 35 L65 38 L60 28 L70 25 L60 20 L65 10 L50 15 L35 10 L40 20 L30 25 L40 28 L35 38 L45 35 Z" 
-        fill="#D4AF37" 
+      <path
+        d="M50 45 L55 35 L65 38 L60 28 L70 25 L60 20 L65 10 L50 15 L35 10 L40 20 L30 25 L40 28 L35 38 L45 35 Z"
+        fill="#D4AF37"
       />
-      <path 
-        d="M20 55 C20 50 30 48 50 48 C70 48 80 50 80 55 L85 60 L15 60 Z" 
-        fill="#E2E8F0" 
+      <path
+        d="M20 55 C20 50 30 48 50 48 C70 48 80 50 80 55 L85 60 L15 60 Z"
+        fill="#E2E8F0"
       />
       <text x="50" y="75" textAnchor="middle" fill="#D4AF37" fontSize="8" fontWeight="bold" fontFamily="serif">MAPLE</text>
       <text x="50" y="85" textAnchor="middle" fill="#D4AF37" fontSize="6" fontWeight="bold" fontFamily="serif">RENTALS</text>
@@ -35,13 +35,12 @@ export default function Footer() {
               Sydney's professional fleet company supplying Toyota Camry Hybrid vehicles exclusively for Uber drivers.
             </p>
           </div>
-          
+
           <div>
             <h3 className="text-xs font-bold text-white uppercase tracking-widest mb-8">Quick Links</h3>
             <ul className="space-y-5">
               <li><Link to="/" className="text-sm hover:text-brand-gold transition-colors font-light">Home</Link></li>
               <li><Link to="/cars" className="text-sm hover:text-brand-gold transition-colors font-light">Our Fleet</Link></li>
-              <li><Link to="/rewards" className="text-sm hover:text-brand-gold transition-colors font-light">Driver Rewards</Link></li>
               <li><Link to="/admin/login" className="text-sm hover:text-brand-gold transition-colors font-light opacity-50">Admin Login</Link></li>
             </ul>
           </div>
@@ -66,7 +65,7 @@ export default function Footer() {
             </ul>
           </div>
         </div>
-        
+
         <div className="border-t border-white/10 mt-20 pt-8 text-center text-xs text-gray-600 uppercase tracking-widest font-light">
           &copy; {new Date().getFullYear()} Maple Rentals. All rights reserved.
         </div>

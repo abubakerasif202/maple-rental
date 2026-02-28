@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Car, Application, Rental, DashboardStats } from '../types';
+import { Car, Application, Rental, DashboardStats, SaasMerchant } from '../types';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -19,6 +19,11 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export const logoutAdmin = async (): Promise<{ message: string }> => {
+  const { data } = await api.post('/auth/logout');
+  return data;
+};
 
 export const fetchCars = async (): Promise<Car[]> => {
   const { data } = await api.get('/cars');
@@ -67,6 +72,43 @@ export const fetchRentals = async (): Promise<Rental[]> => {
 
 export const createCheckoutSession = async (bookingData: any): Promise<any> => {
   const { data } = await api.post('/bookings', bookingData);
+  return data;
+};
+
+export interface CreateSaasMerchantPayload {
+  businessName: string;
+  email: string;
+  country?: string;
+  payoutInterval?: 'daily' | 'weekly' | 'monthly';
+}
+
+export interface SaasMerchantResponse {
+  merchant: SaasMerchant;
+  onboardingLink: string | null;
+  onboardingExpiresAt: string | null;
+}
+
+export interface SaasAccountLinkResponse {
+  onboardingLink: string | null;
+  onboardingExpiresAt: string | null;
+}
+
+export const fetchSaasMerchants = async (): Promise<SaasMerchant[]> => {
+  const { data } = await api.get('/saas/merchants');
+  return data;
+};
+
+export const createSaasMerchant = async (
+  payload: CreateSaasMerchantPayload
+): Promise<SaasMerchantResponse> => {
+  const { data } = await api.post('/saas/merchants', payload);
+  return data;
+};
+
+export const refreshSaasAccountLink = async (
+  merchantId: number
+): Promise<SaasAccountLinkResponse> => {
+  const { data } = await api.post(`/saas/merchants/${merchantId}/link`);
   return data;
 };
 

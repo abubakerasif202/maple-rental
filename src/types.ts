@@ -43,3 +43,14 @@ export interface DashboardStats {
   activeRentals: number;
   totalWeeklyIncome: number;
 }
+
+export interface SaasMerchant {
+  id: number;
+  name: string;
+  email: string;
+  country: string;
+  stripeAccountId: string;
+  payoutInterval: 'daily' | 'weekly' | 'monthly';
+  onboardingStatus: string;
+  createdAt: string;
+}

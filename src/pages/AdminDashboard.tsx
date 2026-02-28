@@ -95,7 +95,12 @@ export default function AdminDashboard() {
     onError: () => showNotification('Failed to add vehicle', 'error'),
   });
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await api.logoutAdmin();
+    } catch (e) {
+      console.error('Logout error:', e);
+    }
     localStorage.removeItem('admin_token');
     navigate('/admin/login');
   };
@@ -150,7 +155,7 @@ export default function AdminDashboard() {
             { id: 'rentals', icon: Calendar, label: 'Rentals' },
             { id: 'cars', icon: Car, label: 'Fleet' },
           ].map((item) => (
-            <button 
+            <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
               className={`w-full flex items-center gap-4 px-5 py-4 text-sm font-bold uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-brand-gold text-brand-navy' : 'text-brand-grey hover:text-white hover:bg-white/5'}`}
@@ -160,7 +165,7 @@ export default function AdminDashboard() {
           ))}
         </nav>
         <div className="p-6 border-t border-white/10">
-          <button 
+          <button
             onClick={handleLogout}
             className="w-full flex items-center gap-4 px-5 py-4 text-sm font-bold uppercase tracking-widest text-red-500 hover:bg-red-500/10 transition-all"
           >
@@ -173,7 +178,7 @@ export default function AdminDashboard() {
       <div className="flex-1 p-12 overflow-y-auto">
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && (
-            <motion.div 
+            <motion.div
               key="dashboard"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -216,7 +221,7 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'applications' && (
-            <motion.div 
+            <motion.div
               key="applications"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -257,16 +262,15 @@ export default function AdminDashboard() {
                             <span className="text-xs text-brand-grey font-light">{app.weeklyBudget}</span>
                           </td>
                           <td className="px-8 py-6">
-                            <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full ${
-                              app.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500' :
+                            <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full ${app.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500' :
                               app.status === 'Rejected' ? 'bg-red-500/10 text-red-500' :
-                              'bg-brand-gold/10 text-brand-gold'
-                            }`}>
+                                'bg-brand-gold/10 text-brand-gold'
+                              }`}>
                               {app.status}
                             </span>
                           </td>
                           <td className="px-8 py-6 text-right">
-                            <select 
+                            <select
                               className="bg-brand-navy border border-white/10 text-[10px] font-bold uppercase tracking-widest px-3 py-2 outline-none focus:border-brand-gold"
                               value={app.status}
                               onChange={(e) => updateApplicationStatus(app.id, e.target.value)}
@@ -286,7 +290,7 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'cars' && (
-            <motion.div 
+            <motion.div
               key="cars"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -294,7 +298,7 @@ export default function AdminDashboard() {
             >
               <div className="flex justify-between items-center mb-12">
                 <h1 className="text-3xl font-serif font-bold tracking-tight">Fleet Management</h1>
-                <button 
+                <button
                   onClick={() => setIsAddModalOpen(true)}
                   className="bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg"
                 >
@@ -355,7 +359,7 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'rentals' && (
-            <motion.div 
+            <motion.div
               key="rentals"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -415,7 +419,7 @@ export default function AdminDashboard() {
         {/* Edit Car Modal */}
         {isEditModalOpen && editingCar && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               className="bg-brand-navy-light border border-brand-gold/30 p-10 max-w-2xl w-full shadow-2xl overflow-y-auto max-h-[90vh]"
@@ -425,59 +429,59 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Vehicle Name</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       required
                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                       value={editingCar.name}
-                      onChange={(e) => setEditingCar({...editingCar, name: e.target.value})}
+                      onChange={(e) => setEditingCar({ ...editingCar, name: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Weekly Rate ($)</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       required
                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                       value={editingCar.weeklyPrice}
-                      onChange={(e) => setEditingCar({...editingCar, weeklyPrice: Number(e.target.value)})}
+                      onChange={(e) => setEditingCar({ ...editingCar, weeklyPrice: Number(e.target.value) })}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Model Year</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       required
                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                       value={editingCar.modelYear}
-                      onChange={(e) => setEditingCar({...editingCar, modelYear: Number(e.target.value)})}
+                      onChange={(e) => setEditingCar({ ...editingCar, modelYear: Number(e.target.value) })}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Bond ($)</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       required
                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                       value={editingCar.bond}
-                      onChange={(e) => setEditingCar({...editingCar, bond: Number(e.target.value)})}
+                      onChange={(e) => setEditingCar({ ...editingCar, bond: Number(e.target.value) })}
                     />
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Image URL</label>
-                    <input 
-                      type="url" 
+                    <input
+                      type="url"
                       required
                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                       value={editingCar.image}
-                      onChange={(e) => setEditingCar({...editingCar, image: e.target.value})}
+                      onChange={(e) => setEditingCar({ ...editingCar, image: e.target.value })}
                     />
                     {editingCar.image && (
                       <div className="mt-4 border border-white/10 p-2 bg-brand-navy/50">
                         <p className="text-[8px] text-brand-gold uppercase tracking-widest mb-2">Image Preview</p>
-                        <img 
-                          src={editingCar.image} 
-                          alt="Preview" 
+                        <img
+                          src={editingCar.image}
+                          alt="Preview"
                           className="w-full h-48 object-cover rounded"
                           onError={(e) => (e.currentTarget.style.display = 'none')}
                           referrerPolicy="no-referrer"
@@ -486,12 +490,12 @@ export default function AdminDashboard() {
                     )}
                   </div>
                 </div>
-                
+
                 <div className="flex items-center gap-3 pt-4">
-                  <select 
+                  <select
                     className="bg-brand-navy border border-white/10 text-[10px] font-bold uppercase tracking-widest px-4 py-3 outline-none focus:border-brand-gold"
                     value={editingCar.status}
-                    onChange={(e) => setEditingCar({...editingCar, status: e.target.value})}
+                    onChange={(e) => setEditingCar({ ...editingCar, status: e.target.value as "Available" | "Rented" | "Maintenance" })}
                   >
                     <option value="Available">Available</option>
                     <option value="Rented">Rented</option>
@@ -500,7 +504,7 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="flex justify-end gap-5 mt-12 pt-8 border-t border-white/10">
-                  <button 
+                  <button
                     type="button"
                     onClick={() => {
                       setIsEditModalOpen(false);
@@ -510,7 +514,7 @@ export default function AdminDashboard() {
                   >
                     Cancel
                   </button>
-                  <button 
+                  <button
                     type="submit"
                     className="bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-10 py-3 text-xs font-bold uppercase tracking-widest transition-all shadow-lg"
                   >
@@ -525,7 +529,7 @@ export default function AdminDashboard() {
         {/* Add Car Modal */}
         {isAddModalOpen && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               className="bg-brand-navy-light border border-brand-gold/30 p-10 max-w-2xl w-full shadow-2xl overflow-y-auto max-h-[90vh]"
@@ -535,64 +539,64 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Vehicle Name</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       required
                       placeholder="e.g. Toyota Camry Hybrid"
                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                       value={newCar.name}
-                      onChange={(e) => setNewCar({...newCar, name: e.target.value})}
+                      onChange={(e) => setNewCar({ ...newCar, name: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Weekly Rate ($)</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       required
                       placeholder="0"
                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                       value={newCar.weeklyPrice}
-                      onChange={(e) => setNewCar({...newCar, weeklyPrice: Number(e.target.value)})}
+                      onChange={(e) => setNewCar({ ...newCar, weeklyPrice: Number(e.target.value) })}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Model Year</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       required
                       placeholder={new Date().getFullYear().toString()}
                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                       value={newCar.modelYear}
-                      onChange={(e) => setNewCar({...newCar, modelYear: Number(e.target.value)})}
+                      onChange={(e) => setNewCar({ ...newCar, modelYear: Number(e.target.value) })}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Bond ($)</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       required
                       placeholder="0"
                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                       value={newCar.bond}
-                      onChange={(e) => setNewCar({...newCar, bond: Number(e.target.value)})}
+                      onChange={(e) => setNewCar({ ...newCar, bond: Number(e.target.value) })}
                     />
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Image URL</label>
-                    <input 
-                      type="url" 
+                    <input
+                      type="url"
                       required
                       placeholder="https://..."
                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
                       value={newCar.image}
-                      onChange={(e) => setNewCar({...newCar, image: e.target.value})}
+                      onChange={(e) => setNewCar({ ...newCar, image: e.target.value })}
                     />
                     {newCar.image && (
                       <div className="mt-4 border border-white/10 p-2 bg-brand-navy/50">
                         <p className="text-[8px] text-brand-gold uppercase tracking-widest mb-2">Image Preview</p>
-                        <img 
-                          src={newCar.image} 
-                          alt="Preview" 
+                        <img
+                          src={newCar.image}
+                          alt="Preview"
                           className="w-full h-48 object-cover rounded"
                           onError={(e) => (e.currentTarget.style.display = 'none')}
                           referrerPolicy="no-referrer"
@@ -601,12 +605,12 @@ export default function AdminDashboard() {
                     )}
                   </div>
                 </div>
-                
+
                 <div className="flex items-center gap-3 pt-4">
-                  <select 
+                  <select
                     className="bg-brand-navy border border-white/10 text-[10px] font-bold uppercase tracking-widest px-4 py-3 outline-none focus:border-brand-gold"
                     value={newCar.status}
-                    onChange={(e) => setNewCar({...newCar, status: e.target.value})}
+                    onChange={(e) => setNewCar({ ...newCar, status: e.target.value as "Available" | "Rented" | "Maintenance" })}
                   >
                     <option value="Available">Available</option>
                     <option value="Maintenance">Maintenance</option>
@@ -614,14 +618,14 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="flex justify-end gap-5 mt-12 pt-8 border-t border-white/10">
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setIsAddModalOpen(false)}
                     className="px-8 py-3 text-xs font-bold uppercase tracking-widest text-brand-grey hover:text-white transition-colors"
                   >
                     Cancel
                   </button>
-                  <button 
+                  <button
                     type="submit"
                     className="bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-10 py-3 text-xs font-bold uppercase tracking-widest transition-all shadow-lg"
                   >
@@ -641,11 +645,10 @@ export default function AdminDashboard() {
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
-            className={`fixed bottom-8 right-8 px-6 py-4 shadow-2xl flex items-center gap-3 z-[100] border ${
-              notification.type === 'error' 
-                ? 'bg-red-500/10 border-red-500/50 text-red-500' 
-                : 'bg-emerald-500/10 border-emerald-500/50 text-emerald-500'
-            }`}
+            className={`fixed bottom-8 right-8 px-6 py-4 shadow-2xl flex items-center gap-3 z-[100] border ${notification.type === 'error'
+              ? 'bg-red-500/10 border-red-500/50 text-red-500'
+              : 'bg-emerald-500/10 border-emerald-500/50 text-emerald-500'
+              }`}
           >
             {notification.type === 'error' ? <XCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
             <span className="text-sm font-bold uppercase tracking-widest">{notification.message}</span>

@@ -2,8 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
 import Stripe from 'stripe';
 import { z } from 'zod';
 import { db, initializeDB } from '../src/db/index.js';
@@ -37,6 +35,25 @@ const applicationSchema = z.object({
   uberScreenshot: z.string().optional().nullable(),
 });
 
+const payoutIntervalEnum = z.enum(['daily', 'weekly', 'monthly']);
+const countrySchema = z
+  .string()
+  .length(2)
+  .default('US')
+  .transform((value) => value.toUpperCase());
+
+const merchantSchema = z.object({
+  businessName: z.string().min(2),
+  email: z.string().email(),
+  country: countrySchema,
+  payoutInterval: payoutIntervalEnum.default('weekly'),
+});
+
+const SAAS_FRONTEND_BASE =
+  process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
+const SAAS_ONBOARDING_REFRESH_URL = `${SAAS_FRONTEND_BASE}/platform/onboarding?status=refresh`;
+const SAAS_ONBOARDING_RETURN_URL = `${SAAS_FRONTEND_BASE}/platform/onboarding?status=complete`;
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16' as any,
 });
@@ -68,13 +85,16 @@ if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
   console.error('CRITICAL: JWT_SECRET environment variable is missing in production!');
 }
 
-const authenticateAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const authenticateAdmin = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const token = req.cookies.admin_token || req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    (req as any).admin = decoded;
+    const { data, error } = await db.auth.getUser(token);
+    if (error || !data.user) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    (req as any).admin = data.user;
     next();
   } catch (err) {
     console.error('Authentication error:', err);
@@ -84,7 +104,7 @@ const authenticateAdmin = (req: express.Request, res: express.Response, next: ex
 
 app.post('/api/create-subscription', async (req, res) => {
   const { amount, recurringAmount, carName, currency = 'aud' } = req.body;
-  
+
   if (!amount || !recurringAmount || Number(amount) <= 0 || Number(recurringAmount) <= 0) {
     return res.status(400).json({ error: 'Invalid amount parameters' });
   }
@@ -164,50 +184,53 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   try {
-    const result = await db.execute({
-      sql: 'SELECT * FROM admin WHERE username = ?',
-      args: [username],
+    const { data, error } = await db.auth.signInWithPassword({
+      email: username,
+      password: password,
     });
-    const admin = result.rows[0];
 
-    if (!admin || !(await bcrypt.compare(password, String(admin.password)))) {
+    if (error || !data.session) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({ id: admin.id, username: admin.username }, JWT_SECRET, { expiresIn: '1d' });
+    const token = data.session.access_token;
     res.cookie('admin_token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
     });
-    res.json({ token, username: admin.username });
+    res.json({ token, username: data.user?.email });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
-app.post('/api/auth/logout', (_req, res) => {
+app.post('/api/auth/logout', async (_req, res) => {
   res.clearCookie('admin_token');
   res.json({ message: 'Logged out' });
 });
 
 app.get('/api/auth/verify', authenticateAdmin, (req, res) => {
-  res.json({ user: (req as any).admin });
+  res.json({ user: { username: (req as any).admin.email } });
 });
 
 app.get('/api/stats', authenticateAdmin, async (_req, res) => {
   try {
-    const [applicationsCount, activeRentalsCount, activeIncome] = await Promise.all([
-      db.execute('SELECT COUNT(*) as count FROM applications'),
-      db.execute("SELECT COUNT(*) as count FROM rentals WHERE status = 'Active'"),
-      db.execute("SELECT COALESCE(SUM(weeklyPrice), 0) as total FROM rentals WHERE status = 'Active'"),
+    const [applications, rentalsActive, incomeRows] = await Promise.all([
+      db.from('applications').select('*', { count: 'exact', head: true }),
+      db.from('rentals').select('*', { count: 'exact', head: true }).eq('status', 'Active'),
+      db.from('rentals').select('weeklyPrice').eq('status', 'Active'),
     ]);
 
+    const applicationsCount = applications.count || 0;
+    const activeRentalsCount = rentalsActive.count || 0;
+    const totalWeeklyIncome = incomeRows.data?.reduce((sum, row) => sum + Number(row.weeklyPrice), 0) || 0;
+
     res.json({
-      totalApplications: Number(applicationsCount.rows[0]?.count || 0),
-      activeRentals: Number(activeRentalsCount.rows[0]?.count || 0),
-      totalWeeklyIncome: Number(activeIncome.rows[0]?.total || 0),
+      totalApplications: applicationsCount,
+      activeRentals: activeRentalsCount,
+      totalWeeklyIncome: totalWeeklyIncome,
     });
   } catch (err) {
     console.error('Stats fetch error:', err);
@@ -216,31 +239,42 @@ app.get('/api/stats', authenticateAdmin, async (_req, res) => {
 });
 
 app.get('/api/cars', async (_req, res) => {
-  const result = await db.execute('SELECT * FROM cars');
-  res.json(result.rows);
+  const { data, error } = await db.from('cars').select('*').order('created_at', { ascending: false });
+  if (error) {
+    console.error('Fetch cars error', error);
+    return res.status(500).json({ error: 'Failed to fetch cars' });
+  }
+  res.json(data || []);
 });
 
 app.get('/api/cars/:id', async (req, res) => {
-  const result = await db.execute({
-    sql: 'SELECT * FROM cars WHERE id = ?',
-    args: [req.params.id],
-  });
-  const car = result.rows[0];
-  if (!car) return res.status(404).json({ error: 'Car not found' });
-  res.json(car);
+  const { data, error } = await db.from('cars').select('*').eq('id', req.params.id).single();
+
+  if (error || !data) {
+    return res.status(404).json({ error: 'Car not found' });
+  }
+  res.json(data);
 });
 
 app.post('/api/cars', authenticateAdmin, async (req, res) => {
   try {
     const data = carSchema.parse(req.body);
-    const result = await db.execute({
-      sql: 'INSERT INTO cars (name, modelYear, weeklyPrice, bond, status, image) VALUES (?, ?, ?, ?, ?, ?)',
-      args: [data.name, data.modelYear, data.weeklyPrice, data.bond, data.status, data.image],
-    });
-    res.status(201).json({ id: String(result.lastInsertRowid) });
+    const { data: inserted, error } = await db.from('cars').insert([
+      {
+        name: data.name,
+        modelYear: data.modelYear,
+        weeklyPrice: data.weeklyPrice,
+        bond: data.bond,
+        status: data.status,
+        image: data.image
+      }
+    ]).select('id').single();
+
+    if (error) throw error;
+    res.status(201).json({ id: String(inserted.id) });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: err.errors });
+      return res.status(400).json({ error: 'Validation failed', details: err.issues });
     }
     console.error('Car creation error:', err);
     res.status(500).json({ error: 'Failed to create car' });
@@ -250,14 +284,20 @@ app.post('/api/cars', authenticateAdmin, async (req, res) => {
 app.put('/api/cars/:id', authenticateAdmin, async (req, res) => {
   try {
     const data = carSchema.parse(req.body);
-    await db.execute({
-      sql: `UPDATE cars SET name = ?, modelYear = ?, weeklyPrice = ?, bond = ?, status = ?, image = ? WHERE id = ?`,
-      args: [data.name, data.modelYear, data.weeklyPrice, data.bond, data.status, data.image, req.params.id],
-    });
+    const { error } = await db.from('cars').update({
+      name: data.name,
+      modelYear: data.modelYear,
+      weeklyPrice: data.weeklyPrice,
+      bond: data.bond,
+      status: data.status,
+      image: data.image
+    }).eq('id', req.params.id);
+
+    if (error) throw error;
     res.json({ success: true });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: err.errors });
+      return res.status(400).json({ error: 'Validation failed', details: err.issues });
     }
     console.error('Car update error:', err);
     res.status(500).json({ error: 'Failed to update car' });
@@ -266,64 +306,75 @@ app.put('/api/cars/:id', authenticateAdmin, async (req, res) => {
 
 app.delete('/api/cars/:id', authenticateAdmin, async (req, res) => {
   try {
-    await db.execute({
-      sql: 'DELETE FROM cars WHERE id = ?',
-      args: [req.params.id],
-    });
+    const { error } = await db.from('cars').delete().eq('id', req.params.id);
+    if (error) throw error;
     res.json({ success: true });
-  } catch {
+  } catch (error) {
+    console.error('Car deletion error:', error);
     res.status(500).json({ error: 'Failed to delete car' });
   }
 });
 
 app.get('/api/rentals', authenticateAdmin, async (_req, res) => {
   try {
-    const result = await db.execute(`
-      SELECT rentals.*, applications.name as applicantName, cars.name as carName
-      FROM rentals
-      LEFT JOIN applications ON applications.id = rentals.applicationId
-      LEFT JOIN cars ON cars.id = rentals.carId
-      ORDER BY rentals.createdAt DESC
-    `);
-    res.json(result.rows);
-  } catch {
+    const { data, error } = await db
+      .from('rentals')
+      .select(`
+        *,
+        applications:applicationId(name),
+        cars:carId(name)
+      `)
+      .order('createdAt', { ascending: false });
+
+    if (error) throw error;
+
+    // Map the relationships to match previous API response
+    const formattedRentals = data.map((rental: any) => ({
+      ...rental,
+      applicantName: rental.applications?.name,
+      carName: rental.cars?.name
+    }));
+
+    res.json(formattedRentals);
+  } catch (error) {
+    console.error('Fetch rentals error:', error);
     res.status(500).json({ error: 'Failed to fetch rentals' });
   }
 });
 
 app.get('/api/applications', authenticateAdmin, async (_req, res) => {
-  const result = await db.execute('SELECT * FROM applications ORDER BY createdAt DESC');
-  res.json(result.rows);
+  const { data, error } = await db.from('applications').select('*').order('createdAt', { ascending: false });
+  if (error) {
+    return res.status(500).json({ error: 'Failed to fetch applications' });
+  }
+  res.json(data || []);
 });
 
 app.post('/api/applications', async (req, res) => {
   try {
     const data = applicationSchema.parse(req.body);
-    const result = await db.execute({
-      sql: `INSERT INTO applications (
-        name, phone, email, licenseNumber, licenseExpiry,
-        uberStatus, experience, address, weeklyBudget,
-        intendedStartDate, licensePhoto, uberScreenshot
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        data.name,
-        data.phone,
-        data.email,
-        data.licenseNumber,
-        data.licenseExpiry,
-        data.uberStatus,
-        data.experience,
-        data.address,
-        data.weeklyBudget || null,
-        data.intendedStartDate,
-        data.licensePhoto || null,
-        data.uberScreenshot || null,
-      ],
-    });
-    res.json({ success: true, applicationId: String(result.lastInsertRowid) });
+    const { data: inserted, error } = await db.from('applications').insert([
+      {
+        name: data.name,
+        phone: data.phone,
+        email: data.email,
+        licenseNumber: data.licenseNumber,
+        licenseExpiry: data.licenseExpiry,
+        uberStatus: data.uberStatus,
+        experience: data.experience,
+        address: data.address,
+        weeklyBudget: data.weeklyBudget || null,
+        intendedStartDate: data.intendedStartDate,
+        licensePhoto: data.licensePhoto || null,
+        uberScreenshot: data.uberScreenshot || null,
+      }
+    ]).select('id').single();
+
+    if (error) throw error;
+    res.json({ success: true, applicationId: String(inserted.id) });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: err.errors });
+      return res.status(400).json({ error: 'Validation failed', details: err.issues });
     }
     console.error('Application submission error:', err);
     res.status(500).json({ error: 'Application submission failed' });
@@ -337,12 +388,11 @@ app.put('/api/applications/:id/status', authenticateAdmin, async (req, res) => {
   }
 
   try {
-    await db.execute({
-      sql: 'UPDATE applications SET status = ? WHERE id = ?',
-      args: [status, req.params.id],
-    });
+    const { error } = await db.from('applications').update({ status }).eq('id', req.params.id);
+    if (error) throw error;
     res.json({ success: true });
-  } catch {
+  } catch (error) {
+    console.error('Application update error:', error);
     res.status(500).json({ error: 'Failed to update application status' });
   }
 });
@@ -355,13 +405,20 @@ app.post('/api/bookings', async (req, res) => {
   }
 
   try {
-    const result = await db.execute({
-      sql: `INSERT INTO bookings (carId, applicationId, startDate, endDate, totalAmount, status)
-            VALUES (?, ?, ?, ?, ?, 'pending')`,
-      args: [carId, applicationId, startDate, endDate, totalAmount],
-    });
-    res.status(201).json({ success: true, bookingId: String(result.lastInsertRowid) });
-  } catch {
+    const { data, error } = await db.from('bookings').insert([
+      {
+        carId,
+        applicationId,
+        startDate,
+        endDate,
+        totalAmount,
+        status: 'pending'
+      }
+    ]).select('id').single();
+    if (error) throw error;
+    res.status(201).json({ success: true, bookingId: String(data.id) });
+  } catch (error) {
+    console.error('Create booking error:', error);
     res.status(500).json({ error: 'Failed to create booking' });
   }
 });
@@ -386,6 +443,110 @@ app.post('/api/bookings/verify-payment', async (req, res) => {
     return res.status(400).json({ error: 'sessionId or paymentIntentId is required', success: false });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+const createOnboardingLink = (accountId: string) =>
+  stripe.accountLinks.create({
+    account: accountId,
+    refresh_url: SAAS_ONBOARDING_REFRESH_URL,
+    return_url: SAAS_ONBOARDING_RETURN_URL,
+    type: 'account_onboarding',
+    collect: 'eventually_due',
+  });
+
+app.post('/api/saas/merchants', async (req, res) => {
+  try {
+    const data = merchantSchema.parse(req.body);
+
+    const account = await stripe.accounts.create({
+      type: 'express',
+      country: data.country,
+      email: data.email,
+      business_type: 'company',
+      business_profile: {
+        mcc: '7519',
+        product_description: `${data.businessName} on Maple SaaS`,
+        url: 'https://maple-rental.com',
+      },
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
+      },
+      settings: {
+        payouts: {
+          schedule: {
+            interval: data.payoutInterval,
+          },
+        },
+      },
+      metadata: {
+        platform: 'maple-rental-saas',
+      },
+    });
+
+    const accountLink = await createOnboardingLink(account.id);
+
+    const { data: inserted, error: insertError } = await db.from('merchants').insert([
+      {
+        name: data.businessName,
+        email: data.email,
+        country: data.country,
+        stripeAccountId: account.id,
+        payoutInterval: data.payoutInterval
+      }
+    ]).select().single();
+
+    if (insertError) throw insertError;
+
+    res.status(201).json({
+      merchant: inserted,
+      onboardingLink: accountLink.url,
+      onboardingExpiresAt: accountLink.expires_at ? new Date(accountLink.expires_at * 1000).toISOString() : null,
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
+    }
+    console.error('Create SaaS merchant error:', error);
+    res.status(500).json({ error: 'Failed to create merchant' });
+  }
+});
+
+app.get('/api/saas/merchants', async (_req, res) => {
+  try {
+    const { data, error } = await db.from('merchants').select('id, name, email, country, stripeAccountId, payoutInterval, onboardingStatus, createdAt').order('createdAt', { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    console.error('Fetch SaaS merchants error:', error);
+    res.status(500).json({ error: 'Failed to fetch merchants' });
+  }
+});
+
+app.post('/api/saas/merchants/:id/link', async (req, res) => {
+  try {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    const { data: merchant, error: fetchError } = await db.from('merchants').select('*').eq('id', id).single();
+    if (fetchError || !merchant) {
+      return res.status(404).json({ error: 'Merchant not found' });
+    }
+
+    const accountLink = await createOnboardingLink(merchant.stripeAccountId);
+
+    // In Supabase we typically don't explicitly set updatedAt if there's a trigger,
+    // but if we need to force it we can just update a field. We might just 
+    // leave it alone since updating the timestamp isn't functionally critical right here if no data changed.
+    // Or we could execute a dummy update:
+    await db.from('merchants').update({ updatedAt: new Date().toISOString() }).eq('id', merchant.id);
+
+    res.json({
+      onboardingLink: accountLink.url,
+      onboardingExpiresAt: accountLink.expires_at ? new Date(accountLink.expires_at * 1000).toISOString() : null,
+    });
+  } catch (error) {
+    console.error('Refresh onboarding link error:', error);
+    res.status(500).json({ error: 'Failed to refresh onboarding link' });
   }
 });
 

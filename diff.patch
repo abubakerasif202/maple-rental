@@ -1,0 +1,1206 @@
+diff --git a/package-lock.json b/package-lock.json
+index 93b8058..1048723 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -25,6 +25,7 @@
+         "express": "^4.21.2",
+         "lucide-react": "^0.546.0",
+         "motion": "^12.23.24",
++        "pg": "^8.19.0",
+         "react": "^19.0.0",
+         "react-dom": "^19.0.0",
+         "react-hook-form": "^7.71.2",
+@@ -38,11 +39,14 @@
+         "@types/cors": "^2.8.19",
+         "@types/express": "^4.17.21",
+         "@types/node": "^22.14.0",
++        "@types/react": "^19.2.14",
++        "@types/react-dom": "^19.2.3",
+         "autoprefixer": "^10.4.21",
+         "tailwindcss": "^4.1.14",
+         "tsx": "^4.21.0",
+         "typescript": "~5.8.2",
+-        "vite": "^7.3.1"
++        "vite": "^7.3.1",
++        "vite-node": "^5.1.0"
+       },
+       "engines": {
+         "node": "20.x"
+@@ -1778,6 +1782,26 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/@types/react": {
++      "version": "19.2.14",
++      "resolved": "https://registry.npmjs.org/@types/react/-/react-19.2.14.tgz",
++      "integrity": "sha512-ilcTH/UniCkMdtexkoCN0bI7pMcJDvmQFPvuPvmEaYA/NSfFTAgdUSLAoVjaRJm7+6PvcM+q1zYOwS4wTYMF9w==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "csstype": "^3.2.2"
++      }
++    },
++    "node_modules/@types/react-dom": {
++      "version": "19.2.3",
++      "resolved": "https://registry.npmjs.org/@types/react-dom/-/react-dom-19.2.3.tgz",
++      "integrity": "sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==",
++      "dev": true,
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "^19.2.0"
++      }
++    },
+     "node_modules/@types/retry": {
+       "version": "0.12.0",
+       "resolved": "https://registry.npmjs.org/@types/retry/-/retry-0.12.0.tgz",
+@@ -2095,6 +2119,16 @@
+         "node": ">= 0.8"
+       }
+     },
++    "node_modules/cac": {
++      "version": "6.7.14",
++      "resolved": "https://registry.npmjs.org/cac/-/cac-6.7.14.tgz",
++      "integrity": "sha512-b6Ilus+c3RrdDk+JhLKUAQfzzgLEPy6wcXqS7f/xe1EETvsDP6GORG7SFuOs6cID5YkqchW/LXZbX5bc8j7ZcQ==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=8"
++      }
++    },
+     "node_modules/call-bind-apply-helpers": {
+       "version": "1.0.2",
+       "resolved": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz",
+@@ -2275,6 +2309,13 @@
+         "node": ">= 8"
+       }
+     },
++    "node_modules/csstype": {
++      "version": "3.2.3",
++      "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
++      "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/data-uri-to-buffer": {
+       "version": "4.0.1",
+       "resolved": "https://registry.npmjs.org/data-uri-to-buffer/-/data-uri-to-buffer-4.0.1.tgz",
+@@ -2447,6 +2488,13 @@
+         "node": ">= 0.4"
+       }
+     },
++    "node_modules/es-module-lexer": {
++      "version": "1.7.0",
++      "resolved": "https://registry.npmjs.org/es-module-lexer/-/es-module-lexer-1.7.0.tgz",
++      "integrity": "sha512-jEQoCwk8hyb2AZziIOLhDqpm5+2ww5uIE6lkO/6jcOCusfk6LhMHpXXfBLXTZ7Ydyt0j4VoUQv6uGNYbdW+kBA==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/es-object-atoms": {
+       "version": "1.1.1",
+       "resolved": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.1.tgz",
+@@ -3802,6 +3850,102 @@
+       "integrity": "sha512-RA1GjUVMnvYFxuqovrEqZoxxW5NUZqbwKtYz/Tt7nXerk0LbLblQmrsgdeOxV5SFHf0UDggjS/bSeOZwt1pmEQ==",
+       "license": "MIT"
+     },
++    "node_modules/pathe": {
++      "version": "2.0.3",
++      "resolved": "https://registry.npmjs.org/pathe/-/pathe-2.0.3.tgz",
++      "integrity": "sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/pg": {
++      "version": "8.19.0",
++      "resolved": "https://registry.npmjs.org/pg/-/pg-8.19.0.tgz",
++      "integrity": "sha512-QIcLGi508BAHkQ3pJNptsFz5WQMlpGbuBGBaIaXsWK8mel2kQ/rThYI+DbgjUvZrIr7MiuEuc9LcChJoEZK1xQ==",
++      "license": "MIT",
++      "dependencies": {
++        "pg-connection-string": "^2.11.0",
++        "pg-pool": "^3.12.0",
++        "pg-protocol": "^1.12.0",
++        "pg-types": "2.2.0",
++        "pgpass": "1.0.5"
++      },
++      "engines": {
++        "node": ">= 16.0.0"
++      },
++      "optionalDependencies": {
++        "pg-cloudflare": "^1.3.0"
++      },
++      "peerDependencies": {
++        "pg-native": ">=3.0.1"
++      },
++      "peerDependenciesMeta": {
++        "pg-native": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/pg-cloudflare": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/pg-cloudflare/-/pg-cloudflare-1.3.0.tgz",
++      "integrity": "sha512-6lswVVSztmHiRtD6I8hw4qP/nDm1EJbKMRhf3HCYaqud7frGysPv7FYJ5noZQdhQtN2xJnimfMtvQq21pdbzyQ==",
++      "license": "MIT",
++      "optional": true
++    },
++    "node_modules/pg-connection-string": {
++      "version": "2.11.0",
++      "resolved": "https://registry.npmjs.org/pg-connection-string/-/pg-connection-string-2.11.0.tgz",
++      "integrity": "sha512-kecgoJwhOpxYU21rZjULrmrBJ698U2RxXofKVzOn5UDj61BPj/qMb7diYUR1nLScCDbrztQFl1TaQZT0t1EtzQ==",
++      "license": "MIT"
++    },
++    "node_modules/pg-int8": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/pg-int8/-/pg-int8-1.0.1.tgz",
++      "integrity": "sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==",
++      "license": "ISC",
++      "engines": {
++        "node": ">=4.0.0"
++      }
++    },
++    "node_modules/pg-pool": {
++      "version": "3.12.0",
++      "resolved": "https://registry.npmjs.org/pg-pool/-/pg-pool-3.12.0.tgz",
++      "integrity": "sha512-eIJ0DES8BLaziFHW7VgJEBPi5hg3Nyng5iKpYtj3wbcAUV9A1wLgWiY7ajf/f/oO1wfxt83phXPY8Emztg7ITg==",
++      "license": "MIT",
++      "peerDependencies": {
++        "pg": ">=8.0"
++      }
++    },
++    "node_modules/pg-protocol": {
++      "version": "1.12.0",
++      "resolved": "https://registry.npmjs.org/pg-protocol/-/pg-protocol-1.12.0.tgz",
++      "integrity": "sha512-uOANXNRACNdElMXJ0tPz6RBM0XQ61nONGAwlt8da5zs/iUOOCLBQOHSXnrC6fMsvtjxbOJrZZl5IScGv+7mpbg==",
++      "license": "MIT"
++    },
++    "node_modules/pg-types": {
++      "version": "2.2.0",
++      "resolved": "https://registry.npmjs.org/pg-types/-/pg-types-2.2.0.tgz",
++      "integrity": "sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==",
++      "license": "MIT",
++      "dependencies": {
++        "pg-int8": "1.0.1",
++        "postgres-array": "~2.0.0",
++        "postgres-bytea": "~1.0.0",
++        "postgres-date": "~1.0.4",
++        "postgres-interval": "^1.1.0"
++      },
++      "engines": {
++        "node": ">=4"
++      }
++    },
++    "node_modules/pgpass": {
++      "version": "1.0.5",
++      "resolved": "https://registry.npmjs.org/pgpass/-/pgpass-1.0.5.tgz",
++      "integrity": "sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==",
++      "license": "MIT",
++      "dependencies": {
++        "split2": "^4.1.0"
++      }
++    },
+     "node_modules/picocolors": {
+       "version": "1.1.1",
+       "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+@@ -3855,6 +3999,45 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/postgres-array": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/postgres-array/-/postgres-array-2.0.0.tgz",
++      "integrity": "sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=4"
++      }
++    },
++    "node_modules/postgres-bytea": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/postgres-bytea/-/postgres-bytea-1.0.1.tgz",
++      "integrity": "sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/postgres-date": {
++      "version": "1.0.7",
++      "resolved": "https://registry.npmjs.org/postgres-date/-/postgres-date-1.0.7.tgz",
++      "integrity": "sha512-suDmjLVQg78nMK2UZ454hAG+OAW+HQPZ6n++TNDUX+L0+uUlLywnoxJKDou51Zm+zTCjrCl0Nq6J9C5hP9vK/Q==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/postgres-interval": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/postgres-interval/-/postgres-interval-1.2.0.tgz",
++      "integrity": "sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==",
++      "license": "MIT",
++      "dependencies": {
++        "xtend": "^4.0.0"
++      },
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
+     "node_modules/prop-types": {
+       "version": "15.8.1",
+       "resolved": "https://registry.npmjs.org/prop-types/-/prop-types-15.8.1.tgz",
+@@ -4350,6 +4533,15 @@
+         "node": ">=0.10.0"
+       }
+     },
++    "node_modules/split2": {
++      "version": "4.2.0",
++      "resolved": "https://registry.npmjs.org/split2/-/split2-4.2.0.tgz",
++      "integrity": "sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==",
++      "license": "ISC",
++      "engines": {
++        "node": ">= 10.x"
++      }
++    },
+     "node_modules/statuses": {
+       "version": "2.0.2",
+       "resolved": "https://registry.npmjs.org/statuses/-/statuses-2.0.2.tgz",
+@@ -4716,6 +4908,29 @@
+         }
+       }
+     },
++    "node_modules/vite-node": {
++      "version": "5.1.0",
++      "resolved": "https://registry.npmjs.org/vite-node/-/vite-node-5.1.0.tgz",
++      "integrity": "sha512-ci+CXFFrQfRgdO0WDSKNQ28OOglURJUw2hVlfir4IA+Q2nHKmU/qIbmiYO7oB8CZvvSoyCmHycXz5MiX03BrsQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "cac": "^6.7.14",
++        "debug": "^4.4.3",
++        "es-module-lexer": "^1.7.0",
++        "pathe": "^2.0.3",
++        "vite": "^7.2.0"
++      },
++      "bin": {
++        "vite-node": "vite-node.js"
++      },
++      "engines": {
++        "node": "^18.0.0 || ^20.0.0 || >=22.0.0"
++      },
++      "funding": {
++        "url": "https://opencollective.com/antfu"
++      }
++    },
+     "node_modules/web-streams-polyfill": {
+       "version": "3.3.3",
+       "resolved": "https://registry.npmjs.org/web-streams-polyfill/-/web-streams-polyfill-3.3.3.tgz",
+@@ -4852,6 +5067,15 @@
+         }
+       }
+     },
++    "node_modules/xtend": {
++      "version": "4.0.2",
++      "resolved": "https://registry.npmjs.org/xtend/-/xtend-4.0.2.tgz",
++      "integrity": "sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.4"
++      }
++    },
+     "node_modules/yallist": {
+       "version": "3.1.1",
+       "resolved": "https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz",
+diff --git a/package.json b/package.json
+index 897ebb9..4740344 100644
+--- a/package.json
++++ b/package.json
+@@ -4,8 +4,8 @@
+   "version": "0.0.0",
+   "type": "module",
+   "scripts": {
+-    "dev": "tsx api/index.ts",
+-    "start": "tsx api/index.ts",
++    "dev": "vite-node api/index.ts",
++    "start": "vite-node api/index.ts",
+     "build": "node scripts/run-vite.js build",
+     "preview": "node scripts/run-vite.js preview",
+     "clean": "rm -rf dist",
+@@ -29,6 +29,7 @@
+     "express": "^4.21.2",
+     "lucide-react": "^0.546.0",
+     "motion": "^12.23.24",
++    "pg": "^8.19.0",
+     "react": "^19.0.0",
+     "react-dom": "^19.0.0",
+     "react-hook-form": "^7.71.2",
+@@ -42,11 +43,14 @@
+     "@types/cors": "^2.8.19",
+     "@types/express": "^4.17.21",
+     "@types/node": "^22.14.0",
++    "@types/react": "^19.2.14",
++    "@types/react-dom": "^19.2.3",
+     "autoprefixer": "^10.4.21",
+     "tailwindcss": "^4.1.14",
+     "tsx": "^4.21.0",
+     "typescript": "~5.8.2",
+-    "vite": "^7.3.1"
++    "vite": "^7.3.1",
++    "vite-node": "^5.1.0"
+   },
+   "engines": {
+     "node": "20.x"
+diff --git a/src/lib/api.ts b/src/lib/api.ts
+index 557aaf9..2dd16fe 100644
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -20,6 +20,11 @@ api.interceptors.response.use(
+   }
+ );
+ 
++export const logoutAdmin = async (): Promise<{ message: string }> => {
++  const { data } = await api.post('/auth/logout');
++  return data;
++};
++
+ export const fetchCars = async (): Promise<Car[]> => {
+   const { data } = await api.get('/cars');
+   return data;
+diff --git a/src/pages/AdminDashboard.tsx b/src/pages/AdminDashboard.tsx
+index a120405..ee93c81 100644
+--- a/src/pages/AdminDashboard.tsx
++++ b/src/pages/AdminDashboard.tsx
+@@ -95,7 +95,12 @@ export default function AdminDashboard() {
+     onError: () => showNotification('Failed to add vehicle', 'error'),
+   });
+ 
+-  const handleLogout = () => {
++  const handleLogout = async () => {
++    try {
++      await api.logoutAdmin();
++    } catch (e) {
++      console.error('Logout error:', e);
++    }
+     localStorage.removeItem('admin_token');
+     navigate('/admin/login');
+   };
+@@ -150,7 +155,7 @@ export default function AdminDashboard() {
+             { id: 'rentals', icon: Calendar, label: 'Rentals' },
+             { id: 'cars', icon: Car, label: 'Fleet' },
+           ].map((item) => (
+-            <button 
++            <button
+               key={item.id}
+               onClick={() => setActiveTab(item.id)}
+               className={`w-full flex items-center gap-4 px-5 py-4 text-sm font-bold uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-brand-gold text-brand-navy' : 'text-brand-grey hover:text-white hover:bg-white/5'}`}
+@@ -160,7 +165,7 @@ export default function AdminDashboard() {
+           ))}
+         </nav>
+         <div className="p-6 border-t border-white/10">
+-          <button 
++          <button
+             onClick={handleLogout}
+             className="w-full flex items-center gap-4 px-5 py-4 text-sm font-bold uppercase tracking-widest text-red-500 hover:bg-red-500/10 transition-all"
+           >
+@@ -173,7 +178,7 @@ export default function AdminDashboard() {
+       <div className="flex-1 p-12 overflow-y-auto">
+         <AnimatePresence mode="wait">
+           {activeTab === 'dashboard' && (
+-            <motion.div 
++            <motion.div
+               key="dashboard"
+               initial={{ opacity: 0, y: 20 }}
+               animate={{ opacity: 1, y: 0 }}
+@@ -216,7 +221,7 @@ export default function AdminDashboard() {
+           )}
+ 
+           {activeTab === 'applications' && (
+-            <motion.div 
++            <motion.div
+               key="applications"
+               initial={{ opacity: 0, y: 20 }}
+               animate={{ opacity: 1, y: 0 }}
+@@ -257,16 +262,15 @@ export default function AdminDashboard() {
+                             <span className="text-xs text-brand-grey font-light">{app.weeklyBudget}</span>
+                           </td>
+                           <td className="px-8 py-6">
+-                            <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full ${
+-                              app.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500' :
++                            <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full ${app.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500' :
+                               app.status === 'Rejected' ? 'bg-red-500/10 text-red-500' :
+-                              'bg-brand-gold/10 text-brand-gold'
+-                            }`}>
++                                'bg-brand-gold/10 text-brand-gold'
++                              }`}>
+                               {app.status}
+                             </span>
+                           </td>
+                           <td className="px-8 py-6 text-right">
+-                            <select 
++                            <select
+                               className="bg-brand-navy border border-white/10 text-[10px] font-bold uppercase tracking-widest px-3 py-2 outline-none focus:border-brand-gold"
+                               value={app.status}
+                               onChange={(e) => updateApplicationStatus(app.id, e.target.value)}
+@@ -286,7 +290,7 @@ export default function AdminDashboard() {
+           )}
+ 
+           {activeTab === 'cars' && (
+-            <motion.div 
++            <motion.div
+               key="cars"
+               initial={{ opacity: 0, y: 20 }}
+               animate={{ opacity: 1, y: 0 }}
+@@ -294,7 +298,7 @@ export default function AdminDashboard() {
+             >
+               <div className="flex justify-between items-center mb-12">
+                 <h1 className="text-3xl font-serif font-bold tracking-tight">Fleet Management</h1>
+-                <button 
++                <button
+                   onClick={() => setIsAddModalOpen(true)}
+                   className="bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg"
+                 >
+@@ -355,7 +359,7 @@ export default function AdminDashboard() {
+           )}
+ 
+           {activeTab === 'rentals' && (
+-            <motion.div 
++            <motion.div
+               key="rentals"
+               initial={{ opacity: 0, y: 20 }}
+               animate={{ opacity: 1, y: 0 }}
+@@ -415,7 +419,7 @@ export default function AdminDashboard() {
+         {/* Edit Car Modal */}
+         {isEditModalOpen && editingCar && (
+           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+-            <motion.div 
++            <motion.div
+               initial={{ opacity: 0, scale: 0.95 }}
+               animate={{ opacity: 1, scale: 1 }}
+               className="bg-brand-navy-light border border-brand-gold/30 p-10 max-w-2xl w-full shadow-2xl overflow-y-auto max-h-[90vh]"
+@@ -425,59 +429,59 @@ export default function AdminDashboard() {
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Vehicle Name</label>
+-                    <input 
+-                      type="text" 
++                    <input
++                      type="text"
+                       required
+                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
+                       value={editingCar.name}
+-                      onChange={(e) => setEditingCar({...editingCar, name: e.target.value})}
++                      onChange={(e) => setEditingCar({ ...editingCar, name: e.target.value })}
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Weekly Rate ($)</label>
+-                    <input 
+-                      type="number" 
++                    <input
++                      type="number"
+                       required
+                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
+                       value={editingCar.weeklyPrice}
+-                      onChange={(e) => setEditingCar({...editingCar, weeklyPrice: Number(e.target.value)})}
++                      onChange={(e) => setEditingCar({ ...editingCar, weeklyPrice: Number(e.target.value) })}
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Model Year</label>
+-                    <input 
+-                      type="number" 
++                    <input
++                      type="number"
+                       required
+                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
+                       value={editingCar.modelYear}
+-                      onChange={(e) => setEditingCar({...editingCar, modelYear: Number(e.target.value)})}
++                      onChange={(e) => setEditingCar({ ...editingCar, modelYear: Number(e.target.value) })}
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Bond ($)</label>
+-                    <input 
+-                      type="number" 
++                    <input
++                      type="number"
+                       required
+                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
+                       value={editingCar.bond}
+-                      onChange={(e) => setEditingCar({...editingCar, bond: Number(e.target.value)})}
++                      onChange={(e) => setEditingCar({ ...editingCar, bond: Number(e.target.value) })}
+                     />
+                   </div>
+                   <div className="space-y-2 md:col-span-2">
+                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Image URL</label>
+-                    <input 
+-                      type="url" 
++                    <input
++                      type="url"
+                       required
+                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
+                       value={editingCar.image}
+-                      onChange={(e) => setEditingCar({...editingCar, image: e.target.value})}
++                      onChange={(e) => setEditingCar({ ...editingCar, image: e.target.value })}
+                     />
+                     {editingCar.image && (
+                       <div className="mt-4 border border-white/10 p-2 bg-brand-navy/50">
+                         <p className="text-[8px] text-brand-gold uppercase tracking-widest mb-2">Image Preview</p>
+-                        <img 
+-                          src={editingCar.image} 
+-                          alt="Preview" 
++                        <img
++                          src={editingCar.image}
++                          alt="Preview"
+                           className="w-full h-48 object-cover rounded"
+                           onError={(e) => (e.currentTarget.style.display = 'none')}
+                           referrerPolicy="no-referrer"
+@@ -486,12 +490,12 @@ export default function AdminDashboard() {
+                     )}
+                   </div>
+                 </div>
+-                
++
+                 <div className="flex items-center gap-3 pt-4">
+-                  <select 
++                  <select
+                     className="bg-brand-navy border border-white/10 text-[10px] font-bold uppercase tracking-widest px-4 py-3 outline-none focus:border-brand-gold"
+                     value={editingCar.status}
+-                    onChange={(e) => setEditingCar({...editingCar, status: e.target.value})}
++                    onChange={(e) => setEditingCar({ ...editingCar, status: e.target.value as "Available" | "Rented" | "Maintenance" })}
+                   >
+                     <option value="Available">Available</option>
+                     <option value="Rented">Rented</option>
+@@ -500,7 +504,7 @@ export default function AdminDashboard() {
+                 </div>
+ 
+                 <div className="flex justify-end gap-5 mt-12 pt-8 border-t border-white/10">
+-                  <button 
++                  <button
+                     type="button"
+                     onClick={() => {
+                       setIsEditModalOpen(false);
+@@ -510,7 +514,7 @@ export default function AdminDashboard() {
+                   >
+                     Cancel
+                   </button>
+-                  <button 
++                  <button
+                     type="submit"
+                     className="bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-10 py-3 text-xs font-bold uppercase tracking-widest transition-all shadow-lg"
+                   >
+@@ -525,7 +529,7 @@ export default function AdminDashboard() {
+         {/* Add Car Modal */}
+         {isAddModalOpen && (
+           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+-            <motion.div 
++            <motion.div
+               initial={{ opacity: 0, scale: 0.95 }}
+               animate={{ opacity: 1, scale: 1 }}
+               className="bg-brand-navy-light border border-brand-gold/30 p-10 max-w-2xl w-full shadow-2xl overflow-y-auto max-h-[90vh]"
+@@ -535,64 +539,64 @@ export default function AdminDashboard() {
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Vehicle Name</label>
+-                    <input 
+-                      type="text" 
++                    <input
++                      type="text"
+                       required
+                       placeholder="e.g. Toyota Camry Hybrid"
+                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
+                       value={newCar.name}
+-                      onChange={(e) => setNewCar({...newCar, name: e.target.value})}
++                      onChange={(e) => setNewCar({ ...newCar, name: e.target.value })}
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Weekly Rate ($)</label>
+-                    <input 
+-                      type="number" 
++                    <input
++                      type="number"
+                       required
+                       placeholder="0"
+                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
+                       value={newCar.weeklyPrice}
+-                      onChange={(e) => setNewCar({...newCar, weeklyPrice: Number(e.target.value)})}
++                      onChange={(e) => setNewCar({ ...newCar, weeklyPrice: Number(e.target.value) })}
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Model Year</label>
+-                    <input 
+-                      type="number" 
++                    <input
++                      type="number"
+                       required
+                       placeholder={new Date().getFullYear().toString()}
+                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
+                       value={newCar.modelYear}
+-                      onChange={(e) => setNewCar({...newCar, modelYear: Number(e.target.value)})}
++                      onChange={(e) => setNewCar({ ...newCar, modelYear: Number(e.target.value) })}
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Bond ($)</label>
+-                    <input 
+-                      type="number" 
++                    <input
++                      type="number"
+                       required
+                       placeholder="0"
+                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
+                       value={newCar.bond}
+-                      onChange={(e) => setNewCar({...newCar, bond: Number(e.target.value)})}
++                      onChange={(e) => setNewCar({ ...newCar, bond: Number(e.target.value) })}
+                     />
+                   </div>
+                   <div className="space-y-2 md:col-span-2">
+                     <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Image URL</label>
+-                    <input 
+-                      type="url" 
++                    <input
++                      type="url"
+                       required
+                       placeholder="https://..."
+                       className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white focus:border-brand-gold outline-none transition-colors font-light"
+                       value={newCar.image}
+-                      onChange={(e) => setNewCar({...newCar, image: e.target.value})}
++                      onChange={(e) => setNewCar({ ...newCar, image: e.target.value })}
+                     />
+                     {newCar.image && (
+                       <div className="mt-4 border border-white/10 p-2 bg-brand-navy/50">
+                         <p className="text-[8px] text-brand-gold uppercase tracking-widest mb-2">Image Preview</p>
+-                        <img 
+-                          src={newCar.image} 
+-                          alt="Preview" 
++                        <img
++                          src={newCar.image}
++                          alt="Preview"
+                           className="w-full h-48 object-cover rounded"
+                           onError={(e) => (e.currentTarget.style.display = 'none')}
+                           referrerPolicy="no-referrer"
+@@ -601,12 +605,12 @@ export default function AdminDashboard() {
+                     )}
+                   </div>
+                 </div>
+-                
++
+                 <div className="flex items-center gap-3 pt-4">
+-                  <select 
++                  <select
+                     className="bg-brand-navy border border-white/10 text-[10px] font-bold uppercase tracking-widest px-4 py-3 outline-none focus:border-brand-gold"
+                     value={newCar.status}
+-                    onChange={(e) => setNewCar({...newCar, status: e.target.value})}
++                    onChange={(e) => setNewCar({ ...newCar, status: e.target.value as "Available" | "Rented" | "Maintenance" })}
+                   >
+                     <option value="Available">Available</option>
+                     <option value="Maintenance">Maintenance</option>
+@@ -614,14 +618,14 @@ export default function AdminDashboard() {
+                 </div>
+ 
+                 <div className="flex justify-end gap-5 mt-12 pt-8 border-t border-white/10">
+-                  <button 
++                  <button
+                     type="button"
+                     onClick={() => setIsAddModalOpen(false)}
+                     className="px-8 py-3 text-xs font-bold uppercase tracking-widest text-brand-grey hover:text-white transition-colors"
+                   >
+                     Cancel
+                   </button>
+-                  <button 
++                  <button
+                     type="submit"
+                     className="bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-10 py-3 text-xs font-bold uppercase tracking-widest transition-all shadow-lg"
+                   >
+@@ -641,11 +645,10 @@ export default function AdminDashboard() {
+             initial={{ opacity: 0, y: 50 }}
+             animate={{ opacity: 1, y: 0 }}
+             exit={{ opacity: 0, y: 50 }}
+-            className={`fixed bottom-8 right-8 px-6 py-4 shadow-2xl flex items-center gap-3 z-[100] border ${
+-              notification.type === 'error' 
+-                ? 'bg-red-500/10 border-red-500/50 text-red-500' 
+-                : 'bg-emerald-500/10 border-emerald-500/50 text-emerald-500'
+-            }`}
++            className={`fixed bottom-8 right-8 px-6 py-4 shadow-2xl flex items-center gap-3 z-[100] border ${notification.type === 'error'
++              ? 'bg-red-500/10 border-red-500/50 text-red-500'
++              : 'bg-emerald-500/10 border-emerald-500/50 text-emerald-500'
++              }`}
+           >
+             {notification.type === 'error' ? <XCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+             <span className="text-sm font-bold uppercase tracking-widest">{notification.message}</span>
+diff --git a/src/pages/Home.tsx b/src/pages/Home.tsx
+index 69ac32b..2525e94 100644
+--- a/src/pages/Home.tsx
++++ b/src/pages/Home.tsx
+@@ -1,24 +1,24 @@
+ import { Link } from 'react-router-dom';
+ import { ShieldCheck, ArrowRight, CarFront, Droplets, Check, Wrench } from 'lucide-react';
+-import { motion } from 'motion/react';
++import { motion, Variants } from 'motion/react';
+ import InquiryForm from '../components/InquiryForm';
+ 
+-const fadeIn = {
++const fadeIn: Variants = {
+   hidden: { opacity: 0, y: 30 },
+   visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: "easeOut" } }
+ };
+ 
+-const slideInLeft = {
++const slideInLeft: Variants = {
+   hidden: { opacity: 0, x: -50 },
+   visible: { opacity: 1, x: 0, transition: { duration: 0.8, ease: "easeOut" } }
+ };
+ 
+-const slideInRight = {
++const slideInRight: Variants = {
+   hidden: { opacity: 0, x: 50 },
+   visible: { opacity: 1, x: 0, transition: { duration: 0.8, ease: "easeOut" } }
+ };
+ 
+-const staggerContainer = {
++const staggerContainer: Variants = {
+   hidden: { opacity: 0 },
+   visible: {
+     opacity: 1,
+@@ -35,7 +35,7 @@ export default function Home() {
+       <section className="relative pt-32 pb-20 lg:pt-40 lg:pb-32 overflow-hidden bg-[#F8F9FA]">
+         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+-            <motion.div 
++            <motion.div
+               initial="hidden"
+               whileInView="visible"
+               viewport={{ once: true }}
+@@ -48,33 +48,33 @@ export default function Home() {
+               <motion.p variants={fadeIn} className="text-lg text-slate-600 mb-10 max-w-lg font-light leading-relaxed">
+                 Drive with confidence in our meticulously maintained Toyota Camry Hybrids. Reliable, efficient, and Uber-compliant, designed to maximize your earnings.
+               </motion.p>
+-              
++
+               <motion.div variants={fadeIn} className="flex flex-col sm:flex-row gap-4 mb-12">
+-                <Link 
+-                  to="/apply" 
++                <Link
++                  to="/apply"
+                   className="bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-10 py-4 font-bold text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-2 group"
+                 >
+                   Apply Now <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                 </Link>
+-                <Link 
+-                  to="/cars" 
++                <Link
++                  to="/cars"
+                   className="bg-white border border-brand-gold text-brand-navy px-10 py-4 font-bold text-sm uppercase tracking-widest transition-all flex items-center justify-center hover:bg-brand-gold/5"
+                 >
+                   View Fleet
+                 </Link>
+               </motion.div>
+             </motion.div>
+-            
+-            <motion.div 
++
++            <motion.div
+               initial={{ opacity: 0, x: 50 }}
+               whileInView={{ opacity: 1, x: 0 }}
+               viewport={{ once: true }}
+               transition={{ duration: 0.8 }}
+               className="relative"
+             >
+-              <img 
+-                src="https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=1600" 
+-                alt="Toyota Camry Hybrid" 
++              <img
++                src="https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=1600"
++                alt="Toyota Camry Hybrid"
+                 className="w-full h-auto object-cover relative z-10"
+                 referrerPolicy="no-referrer"
+               />
+@@ -91,7 +91,7 @@ export default function Home() {
+       </section>
+ 
+       {/* CREDIBILITY STRIP */}
+-      <motion.div 
++      <motion.div
+         initial={{ opacity: 0 }}
+         whileInView={{ opacity: 1 }}
+         viewport={{ once: true }}
+@@ -109,17 +109,17 @@ export default function Home() {
+       <section className="py-32 bg-brand-navy relative overflow-hidden">
+         {/* Subtle grid pattern overlay */}
+         <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#D4AF37 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
+-        
++
+         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+           <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+-            <motion.div 
++            <motion.div
+               initial="hidden"
+               whileInView="visible"
+               viewport={{ once: true }}
+               variants={slideInLeft}
+             >
+               <h2 className="text-4xl md:text-6xl font-serif font-bold mb-10 tracking-tight leading-tight text-white">
+-                Not Just a Rental.<br/>A Business Tool.
++                Not Just a Rental.<br />A Business Tool.
+               </h2>
+               <div className="space-y-6 text-slate-400 text-lg font-light leading-relaxed max-w-xl">
+                 <p>
+@@ -130,8 +130,8 @@ export default function Home() {
+                 </p>
+               </div>
+             </motion.div>
+-            
+-            <motion.div 
++
++            <motion.div
+               initial="hidden"
+               whileInView="visible"
+               viewport={{ once: true }}
+@@ -147,7 +147,7 @@ export default function Home() {
+                   <p className="text-slate-400 text-sm font-light leading-relaxed">Every vehicle is meticulously maintained to ensure zero downtime for your business.</p>
+                 </div>
+               </motion.div>
+-              
++
+               <motion.div variants={fadeIn} className="bg-brand-navy-light p-8 border border-brand-gold/30 flex items-start gap-6 group hover:bg-brand-navy transition-colors">
+                 <div className="bg-brand-gold/10 p-4 rounded-lg">
+                   <Droplets className="w-8 h-8 text-brand-gold" />
+@@ -165,7 +165,7 @@ export default function Home() {
+       {/* PROCESS SECTION */}
+       <section className="py-32 bg-white">
+         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+-          <motion.div 
++          <motion.div
+             initial="hidden"
+             whileInView="visible"
+             viewport={{ once: true }}
+@@ -175,8 +175,8 @@ export default function Home() {
+             <h2 className="text-4xl md:text-6xl font-serif font-bold tracking-tight text-brand-navy mb-6">Start Driving in 3 Steps</h2>
+             <p className="text-slate-600 text-lg font-light">Drive your weekly returns and conclusive a catching fleet.</p>
+           </motion.div>
+-          
+-          <motion.div 
++
++          <motion.div
+             initial="hidden"
+             whileInView="visible"
+             viewport={{ once: true }}
+@@ -215,21 +215,21 @@ export default function Home() {
+               <h2 className="text-4xl md:text-6xl font-serif font-bold mb-8 leading-tight text-white">Ready to Drive with Sydney's Most Reliable Fleet?</h2>
+               <p className="text-xl text-slate-400 mb-12 font-light">Join hundreds of successful Uber drivers who trust Maple Rentals for their business.</p>
+               <div className="flex flex-col sm:flex-row items-center justify-start gap-6">
+-                <Link 
+-                  to="/apply" 
++                <Link
++                  to="/apply"
+                   className="w-full sm:w-auto px-12 py-5 bg-brand-gold text-brand-navy font-bold tracking-widest uppercase text-sm hover:bg-brand-gold-light transition-all duration-300 shadow-xl"
+                 >
+                   Apply Now
+                 </Link>
+-                <Link 
+-                  to="/cars" 
++                <Link
++                  to="/cars"
+                   className="w-full sm:w-auto px-12 py-5 border border-white/20 text-white font-bold tracking-widest uppercase text-sm hover:bg-white/5 transition-all duration-300"
+                 >
+                   View Fleet
+                 </Link>
+               </div>
+             </motion.div>
+-            
++
+             <motion.div
+               initial={{ opacity: 0, scale: 0.9 }}
+               whileInView={{ opacity: 1, scale: 1 }}
+@@ -237,9 +237,9 @@ export default function Home() {
+               transition={{ duration: 1 }}
+               className="relative hidden lg:block"
+             >
+-              <img 
+-                src="https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=1600" 
+-                alt="Toyota Camry Rear" 
++              <img
++                src="https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=1600"
++                alt="Toyota Camry Rear"
+                 className="w-full h-auto shadow-2xl rounded-lg"
+                 referrerPolicy="no-referrer"
+               />
+diff --git a/src/pages/Rewards.tsx b/src/pages/Rewards.tsx
+index 942d460..c0e8f44 100644
+--- a/src/pages/Rewards.tsx
++++ b/src/pages/Rewards.tsx
+@@ -1,28 +1,28 @@
+-import { motion } from 'motion/react';
+-import { 
+-  Leaf, 
+-  CheckCircle, 
+-  Fuel, 
+-  Wrench, 
+-  DollarSign, 
+-  Headphones, 
+-  History, 
+-  CreditCard, 
+-  Car, 
+-  Star, 
+-  ShoppingBag, 
+-  Gift, 
+-  HelpCircle, 
++import { motion, Variants } from 'motion/react';
++import {
++  Leaf,
++  CheckCircle,
++  Fuel,
++  Wrench,
++  DollarSign,
++  Headphones,
++  History,
++  CreditCard,
++  Car,
++  Star,
++  ShoppingBag,
++  Gift,
++  HelpCircle,
+   Mail,
+   TrendingUp
+ } from 'lucide-react';
+ 
+-const fadeIn = {
++const fadeIn: Variants = {
+   hidden: { opacity: 0, y: 20 },
+   visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+ };
+ 
+-const staggerContainer = {
++const staggerContainer: Variants = {
+   hidden: { opacity: 0 },
+   visible: {
+     opacity: 1,
+@@ -37,7 +37,7 @@ export default function Rewards() {
+     <div className="bg-brand-navy min-h-screen py-24 text-white selection:bg-brand-gold selection:text-brand-navy">
+       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+         {/* Header */}
+-        <motion.header 
++        <motion.header
+           initial="hidden"
+           animate="visible"
+           variants={fadeIn}
+@@ -56,7 +56,7 @@ export default function Rewards() {
+           {/* Main Content */}
+           <div className="lg:col-span-2 space-y-12">
+             {/* Status Card */}
+-            <motion.div 
++            <motion.div
+               initial={{ opacity: 0, scale: 0.95 }}
+               animate={{ opacity: 1, scale: 1 }}
+               transition={{ duration: 0.8 }}
+@@ -67,7 +67,7 @@ export default function Rewards() {
+                 <div className="absolute -right-20 -top-20 opacity-5">
+                   <Leaf className="w-80 h-80 text-brand-gold" />
+                 </div>
+-                
++
+                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 relative z-10">
+                   <div>
+                     <p className="text-brand-gold text-[10px] uppercase tracking-[0.3em] font-bold mb-2">Current Status</p>
+@@ -87,7 +87,7 @@ export default function Rewards() {
+                     <span className="text-xs text-brand-gold font-bold tracking-widest">2,550 pts to go</span>
+                   </div>
+                   <div className="h-2 w-full bg-brand-navy rounded-full overflow-hidden border border-white/5">
+-                    <motion.div 
++                    <motion.div
+                       initial={{ width: 0 }}
+                       animate={{ width: "75%" }}
+                       transition={{ duration: 1.5, ease: "easeOut" }}
+@@ -122,7 +122,7 @@ export default function Rewards() {
+                   { icon: DollarSign, title: "Weekly Discounts", desc: "Current Gold status grants a 5% discount on your weekly rental base rate." },
+                   { icon: Headphones, title: "24/7 Concierge", desc: "Direct line to a dedicated support manager for all your administrative needs." }
+                 ].map((benefit, idx) => (
+-                  <motion.div 
++                  <motion.div
+                     key={idx}
+                     variants={fadeIn}
+                     className="bg-brand-navy-light p-8 border border-white/10 hover:border-brand-gold/30 transition-all group shadow-xl"
+@@ -140,7 +140,7 @@ export default function Rewards() {
+ 
+           {/* Sidebar */}
+           <aside className="space-y-8">
+-            <motion.div 
++            <motion.div
+               initial={{ opacity: 0, x: 20 }}
+               animate={{ opacity: 1, x: 0 }}
+               transition={{ delay: 0.4 }}
+@@ -180,7 +180,7 @@ export default function Rewards() {
+               </div>
+             </motion.div>
+ 
+-            <motion.div 
++            <motion.div
+               initial={{ opacity: 0, y: 20 }}
+               animate={{ opacity: 1, y: 0 }}
+               transition={{ delay: 0.6 }}
+@@ -199,7 +199,7 @@ export default function Rewards() {
+         </div>
+ 
+         {/* Footer */}
+-        <motion.footer 
++        <motion.footer
+           initial={{ opacity: 0 }}
+           whileInView={{ opacity: 1 }}
+           viewport={{ once: true }}
+diff --git a/supabase-schema.sql b/supabase-schema.sql
+index 0942a8d..a9f3d07 100644
+--- a/supabase-schema.sql
++++ b/supabase-schema.sql
+@@ -1,71 +1,75 @@
+ -- Supabase Schema Migration for Maple Rental
+--- Admin table (managed via Supabase Auth)
+--- We no longer need an admin table for passwords, but if you want custom data:
+--- CREATE TABLE admin ( ... )
+ 
+ -- UUID Extension
+ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+ 
++-- Drop existing tables just in case of partial runs (Optional, but safe for clean slate)
++DROP TABLE IF EXISTS merchants CASCADE;
++DROP TABLE IF EXISTS bookings CASCADE;
++DROP TABLE IF EXISTS rentals CASCADE;
++DROP TABLE IF EXISTS applications CASCADE;
++DROP TABLE IF EXISTS cars CASCADE;
++
+ CREATE TABLE cars (
+-  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+-  name TEXT NOT NULL,
+-  modelYear INTEGER NOT NULL,
+-  weeklyPrice NUMERIC NOT NULL,
+-  bond NUMERIC NOT NULL,
+-  status TEXT NOT NULL,
+-  image TEXT NOT NULL,
+-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
++  "id" BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
++  "name" TEXT NOT NULL,
++  "modelYear" INTEGER NOT NULL,
++  "weeklyPrice" NUMERIC NOT NULL,
++  "bond" NUMERIC NOT NULL,
++  "status" TEXT NOT NULL,
++  "image" TEXT NOT NULL,
++  "created_at" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+ );
+ 
+ CREATE TABLE applications (
+-  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+-  name TEXT NOT NULL,
+-  phone TEXT NOT NULL,
+-  email TEXT NOT NULL,
+-  licenseNumber TEXT NOT NULL,
+-  licenseExpiry TEXT NOT NULL,
+-  uberStatus TEXT NOT NULL,
+-  experience TEXT NOT NULL,
+-  address TEXT NOT NULL,
+-  weeklyBudget TEXT,
+-  intendedStartDate TEXT NOT NULL,
+-  licensePhoto TEXT,
+-  uberScreenshot TEXT,
+-  status TEXT DEFAULT 'Pending' NOT NULL,
+-  createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
++  "id" BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
++  "name" TEXT NOT NULL,
++  "phone" TEXT NOT NULL,
++  "email" TEXT NOT NULL,
++  "licenseNumber" TEXT NOT NULL,
++  "licenseExpiry" TEXT NOT NULL,
++  "uberStatus" TEXT NOT NULL,
++  "experience" TEXT NOT NULL,
++  "address" TEXT NOT NULL,
++  "weeklyBudget" TEXT,
++  "intendedStartDate" TEXT NOT NULL,
++  "licensePhoto" TEXT,
++  "uberScreenshot" TEXT,
++  "status" TEXT DEFAULT 'Pending' NOT NULL,
++  "createdAt" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+ );
+ 
+ CREATE TABLE rentals (
+-  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+-  carId BIGINT NOT NULL REFERENCES cars(id) ON DELETE CASCADE,
+-  applicationId BIGINT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+-  startDate TEXT NOT NULL,
+-  endDate TEXT,
+-  weeklyPrice NUMERIC NOT NULL,
+-  bondPaid NUMERIC DEFAULT 0 NOT NULL,
+-  status TEXT DEFAULT 'Active' NOT NULL,
+-  createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
++  "id" BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
++  "carId" BIGINT NOT NULL REFERENCES cars("id") ON DELETE CASCADE,
++  "applicationId" BIGINT NOT NULL REFERENCES applications("id") ON DELETE CASCADE,
++  "startDate" TEXT NOT NULL,
++  "endDate" TEXT,
++  "weeklyPrice" NUMERIC NOT NULL,
++  "bondPaid" NUMERIC DEFAULT 0 NOT NULL,
++  "status" TEXT DEFAULT 'Active' NOT NULL,
++  "createdAt" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+ );
+ 
+ CREATE TABLE bookings (
+-  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+-  carId BIGINT NOT NULL REFERENCES cars(id) ON DELETE CASCADE,
+-  applicationId BIGINT REFERENCES applications(id) ON DELETE CASCADE,
+-  startDate TEXT NOT NULL,
+-  endDate TEXT NOT NULL,
+-  totalAmount NUMERIC NOT NULL,
+-  status TEXT DEFAULT 'pending' NOT NULL,
+-  createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
++  "id" BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
++  "carId" BIGINT NOT NULL REFERENCES cars("id") ON DELETE CASCADE,
++  "applicationId" BIGINT REFERENCES applications("id") ON DELETE CASCADE,
++  "startDate" TEXT NOT NULL,
++  "endDate" TEXT NOT NULL,
++  "totalAmount" NUMERIC NOT NULL,
++  "status" TEXT DEFAULT 'pending' NOT NULL,
++  "createdAt" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+ );
+ 
+ CREATE TABLE merchants (
+-  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+-  name TEXT NOT NULL,
+-  email TEXT NOT NULL,
+-  country TEXT NOT NULL,
+-  stripeAccountId TEXT NOT NULL UNIQUE,
+-  payoutInterval TEXT NOT NULL,
+-  onboardingStatus TEXT DEFAULT 'pending' NOT NULL,
+-  createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+-  updatedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
++  "id" BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
++  "name" TEXT NOT NULL,
++  "email" TEXT NOT NULL,
++  "country" TEXT NOT NULL,
++  "stripeAccountId" TEXT NOT NULL UNIQUE,
++  "payoutInterval" TEXT NOT NULL,
++  "onboardingStatus" TEXT DEFAULT 'pending' NOT NULL,
++  "createdAt" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
++  "updatedAt" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+ );
+diff --git a/tsconfig.json b/tsconfig.json
+index 393b84a..c3eb63b 100644
+--- a/tsconfig.json
++++ b/tsconfig.json
+@@ -10,11 +10,12 @@
+       "DOM.Iterable"
+     ],
+     "skipLibCheck": true,
+-    "moduleResolution": "bundler",
+     "isolatedModules": true,
+     "moduleDetection": "force",
++    "moduleResolution": "bundler",
+     "allowJs": true,
+     "jsx": "react-jsx",
++    "baseUrl": ".",
+     "paths": {
+       "@/*": [
+         "./*"
+@@ -26,4 +27,4 @@
+       "vite/client"
+     ]
+   }
+-}
++}
+\ No newline at end of file
