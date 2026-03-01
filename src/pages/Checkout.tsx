@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import api from '../lib/api';
@@ -51,8 +51,12 @@ function CheckoutForm({ amount }: { amount: number }) {
 }
 
 export default function Checkout() {
+  const { id: carId } = useParams();
+  const [searchParams] = useSearchParams();
+  const applicationId = searchParams.get('applicationId');
   const location = useLocation();
-  const { car, totalAmount } = location.state || {};
+  const [car, setCar] = useState(location.state?.car || null);
+  const [totalAmount, setTotalAmount] = useState(location.state?.totalAmount || 0);
   const [clientSecret, setClientSecret] = useState('');
   const [billingBreakdown, setBillingBreakdown] = useState<{
     currency: string;
@@ -62,9 +66,19 @@ export default function Checkout() {
   } | null>(null);
 
   useEffect(() => {
-    if (car && totalAmount) {
+    if (!car && carId) {
+      api.get(`/cars/${carId}`).then(res => {
+        setCar(res.data);
+        setTotalAmount(Number(res.data.bond) + Number(res.data.weeklyPrice) + 12.2); // Default estimate
+      }).catch(err => console.error('Error fetching car:', err));
+    }
+  }, [car, carId]);
+
+  useEffect(() => {
+    if (car) {
       api.post('/create-subscription', {
         carId: car.id,
+        applicationId: applicationId ? Number(applicationId) : undefined,
       })
         .then(res => {
           setClientSecret(res.data.clientSecret);
@@ -72,7 +86,7 @@ export default function Checkout() {
         })
         .catch(err => console.error('Stripe error:', err));
     }
-  }, [car, totalAmount]);
+  }, [car, applicationId]);
 
   if (!car) return <div className="min-h-screen bg-brand-navy pt-32 text-center text-white">No vehicle selected</div>;
 

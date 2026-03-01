@@ -580,7 +580,22 @@ export default function AdminDashboard() {
                               {app.status}
                             </span>
                           </td>
-                          <td className="px-8 py-6 text-right">
+                          <td className="px-8 py-6 text-right flex items-center justify-end gap-3">
+                            {app.status === 'Approved' && (
+                              <button
+                                onClick={() => {
+                                  // Find first available car or default to 1
+                                  const firstCarId = cars.find(c => c.status === 'Available')?.id || 1;
+                                  const link = `${window.location.origin}/checkout/${firstCarId}?applicationId=${app.id}`;
+                                  navigator.clipboard.writeText(link);
+                                  showNotification('Checkout link copied');
+                                }}
+                                className="text-brand-gold hover:text-white transition-colors flex items-center gap-1 text-[8px] font-bold uppercase tracking-widest"
+                                title="Copy Checkout Link"
+                              >
+                                <Copy className="w-3 h-3" /> Link
+                              </button>
+                            )}
                             <select
                               className="bg-brand-navy border border-white/10 text-[10px] font-bold uppercase tracking-widest px-3 py-2 outline-none focus:border-brand-gold"
                               value={app.status}

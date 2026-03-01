@@ -131,19 +131,149 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (reque
   // Handle the event
   try {
     switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        console.log(`✅ Webhook: Checkout session completed ${session.id}`);
+        // Here you could link one-time payments to bookings
+        break;
+      }
+      case 'account.updated': {
+        const account = event.data.object as Stripe.Account;
+        console.log(`ℹ️ Webhook: Connected account updated ${account.id}`);
+
+        if (account.details_submitted) {
+          await db.from('merchants')
+            .update({ onboardingStatus: 'active' })
+            .eq('stripeAccountId', account.id);
+        }
+        break;
+      }
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as any;
-        console.log(`✅ Webhook: Payment succeeded for invoice ${invoice.id} (Customer: ${invoice.customer})`);
+        const subscriptionId = invoice.subscription as string;
+        const customerId = invoice.customer as string;
+
+        if (!subscriptionId) break;
+
+        // Retrieve subscription to get metadata
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        const { car_id, application_id } = subscription.metadata;
+
+        if (car_id && application_id) {
+          console.log(`✅ Webhook: Payment succeeded for car ${car_id} and application ${application_id}`);
+
+          // 1. Check if rental already exists
+          const { data: existingRental } = await db
+            .from('rentals')
+            .select('id')
+            .eq('stripeSubscriptionId', subscriptionId)
+            .single();
+
+          if (!existingRental) {
+            // 2. Fetch car details for the rental record
+            const { data: car } = await db.from('cars').select('weeklyPrice').eq('id', car_id).single();
+
+            // 3. Create Rental record
+            await db.from('rentals').insert([{
+              carId: Number(car_id),
+              applicationId: Number(application_id),
+              startDate: new Date().toISOString().split('T')[0],
+              weeklyPrice: car?.weeklyPrice || 0,
+              status: 'Active',
+              stripeSubscriptionId: subscriptionId,
+              stripeCustomerId: customerId
+            }]);
+
+            // 4. Update Car status
+            await db.from('cars').update({ status: 'Rented' }).eq('id', car_id);
+            
+            console.log(`📊 Database: Created rental for subscription ${subscriptionId}`);
+
+            // 5. Send Confirmation Email to Driver
+            if (process.env.RESEND_API_KEY) {
+              const { data: appData } = await db.from('applications').select('name, email').eq('id', application_id).single();
+              const { data: carData } = await db.from('cars').select('name').eq('id', car_id).single();
+
+              if (appData && carData) {
+                const { Resend } = await import('resend');
+                const resend = new Resend(process.env.RESEND_API_KEY);
+                
+                try {
+                  await resend.emails.send({
+                    from: 'Maple Rentals <noreply@maplerentals.com.au>',
+                    to: appData.email,
+                    subject: 'Rental Confirmed - Maple Rentals',
+                    html: `
+                      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a202c;">
+                        <h2 style="color: #D4AF37;">Lease Confirmed</h2>
+                        <p>Hi ${appData.name},</p>
+                        <p>Great news! Your payment for the <strong>${carData.name}</strong> has been successfully processed.</p>
+                        <p>Your rental is now <strong>Active</strong>. You can now arrange for vehicle collection as discussed.</p>
+                        <p><strong>Subscription ID:</strong> ${subscriptionId}</p>
+                        <br>
+                        <p>Best regards,</p>
+                        <p><strong>The Maple Rentals Team</strong></p>
+                      </div>
+                    `
+                  });
+                  console.log(`📧 Webhook: Confirmation email sent to ${appData.email}`);
+                } catch (emailErr) {
+                  console.error('Failed to send rental confirmation email:', emailErr);
+                }
+              }
+            }
+          }
+        }
         break;
       }
       case 'invoice.payment_failed': {
         const invoice = event.data.object as any;
-        console.log(`❌ Webhook: Payment failed for invoice ${invoice.id} (Customer: ${invoice.customer})`);
+        const subscriptionId = invoice.subscription as string;
+        
+        console.log(`❌ Webhook: Payment failed for invoice ${invoice.id} (Subscription: ${subscriptionId})`);
+
+        if (subscriptionId) {
+          await db.from('rentals')
+            .update({ status: 'Overdue' })
+            .eq('stripeSubscriptionId', subscriptionId);
+        }
         break;
       }
       case 'customer.subscription.deleted': {
-        const subscription = event.data.object as any;
-        console.log(`⚠️ Webhook: Subscription deleted ${subscription.id}`);
+        const subscription = event.data.object as Stripe.Subscription;
+        const subscriptionId = subscription.id;
+        const { car_id } = subscription.metadata;
+
+        console.log(`⚠️ Webhook: Subscription deleted ${subscriptionId}`);
+
+        // 1. Update Rental status to 'Completed' or 'Cancelled'
+        await db.from('rentals')
+          .update({ status: 'Completed', endDate: new Date().toISOString().split('T')[0] })
+          .eq('stripeSubscriptionId', subscriptionId);
+
+        // 2. Update Car status back to 'Available'
+        if (car_id) {
+          await db.from('cars').update({ status: 'Available' }).eq('id', car_id);
+        }
+        
+        break;
+      }
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object as Stripe.Subscription;
+        const subscriptionId = subscription.id;
+        const status = subscription.status;
+
+        console.log(`ℹ️ Webhook: Subscription updated ${subscriptionId} (Status: ${status})`);
+
+        if (status === 'past_due' || status === 'unpaid') {
+          await db.from('rentals')
+            .update({ status: 'Overdue' })
+            .eq('stripeSubscriptionId', subscriptionId);
+        } else if (status === 'active') {
+          await db.from('rentals')
+            .update({ status: 'Active' })
+            .eq('stripeSubscriptionId', subscriptionId);
+        }
         break;
       }
       default:
@@ -214,10 +344,11 @@ const authenticateAdmin = async (req: express.Request, res: express.Response, ne
 app.post('/api/create-subscription', async (req, res) => {
   const payload = z.object({
     carId: z.coerce.number().int().positive(),
+    applicationId: z.coerce.number().int().positive().optional(),
   });
 
   try {
-    const { carId } = payload.parse(req.body);
+    const { carId, applicationId } = payload.parse(req.body);
     const { data: car, error: carError } = await db
       .from('cars')
       .select('id, name, weeklyPrice, bond')
@@ -264,6 +395,8 @@ app.post('/api/create-subscription', async (req, res) => {
     const customer = await stripe.customers.create({
       description: 'Maple Rental Subscription Customer',
       metadata: {
+        car_id: String(carId),
+        application_id: applicationId ? String(applicationId) : '',
         lease_minimum_weeks: String(LEASE_STRIPE_SETTINGS.minimumRentalWeeks),
         insurance_coverage_region: LEASE_STRIPE_SETTINGS.insuranceCoverageRegion,
       },
@@ -295,6 +428,8 @@ app.post('/api/create-subscription', async (req, res) => {
       payment_behavior: 'default_incomplete',
       payment_settings: { save_default_payment_method: 'on_subscription' },
       metadata: {
+        car_id: String(carId),
+        application_id: applicationId ? String(applicationId) : '',
         lease_minimum_weeks: String(LEASE_STRIPE_SETTINGS.minimumRentalWeeks),
         insurance_coverage_region: LEASE_STRIPE_SETTINGS.insuranceCoverageRegion,
       },
