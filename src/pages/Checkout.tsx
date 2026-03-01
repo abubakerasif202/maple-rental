@@ -58,9 +58,7 @@ export default function Checkout() {
   useEffect(() => {
     if (car && totalAmount) {
       api.post('/create-subscription', {
-        amount: totalAmount,
-        recurringAmount: car.weeklyPrice,
-        carName: car.name
+        carId: car.id,
       })
         .then(res => setClientSecret(res.data.clientSecret))
         .catch(err => console.error('Stripe error:', err));

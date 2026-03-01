@@ -54,11 +54,48 @@ const SAAS_FRONTEND_BASE =
 const SAAS_ONBOARDING_REFRESH_URL = `${SAAS_FRONTEND_BASE}/platform/onboarding?status=refresh`;
 const SAAS_ONBOARDING_RETURN_URL = `${SAAS_FRONTEND_BASE}/platform/onboarding?status=complete`;
 
+const toOrigin = (value?: string) => {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
+
+const corsOrigins = [
+  toOrigin(process.env.APP_URL),
+  toOrigin(process.env.FRONTEND_URL),
+  process.env.CORS_ORIGIN || null,
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+].filter((origin): origin is string => Boolean(origin));
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16' as any,
 });
 
-app.use(cors());
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && !corsOrigins.includes(origin)) {
+    return res.status(403).json({ error: 'CORS origin denied' });
+  }
+  next();
+});
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow server-to-server calls (no Origin header) and same-origin requests.
+      if (!origin || corsOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(null, false);
+    },
+    credentials: true,
+  })
+);
 app.use(cookieParser());
 
 // Stripe Webhook Endpoint (Must be before express.json() to get raw body)
@@ -150,35 +187,49 @@ const authenticateAdmin = async (req: express.Request, res: express.Response, ne
 };
 
 app.post('/api/create-subscription', async (req, res) => {
-  const { amount, recurringAmount, carName, currency = 'aud' } = req.body;
-
-  if (!amount || !recurringAmount || Number(amount) <= 0 || Number(recurringAmount) <= 0) {
-    return res.status(400).json({ error: 'Invalid amount parameters' });
-  }
+  const payload = z.object({
+    carId: z.coerce.number().int().positive(),
+    currency: z.string().length(3).default('aud'),
+  });
 
   try {
+    const { carId, currency } = payload.parse(req.body);
+    const { data: car, error: carError } = await db
+      .from('cars')
+      .select('id, name, weeklyPrice, bond')
+      .eq('id', carId)
+      .single();
+
+    if (carError || !car) {
+      return res.status(404).json({ error: 'Car not found' });
+    }
+
+    const recurringAmount = Number(car.weeklyPrice);
+    const upfrontExtra = Math.round((Number(car.bond) + Number(car.weeklyPrice)) * 100);
+    if (!Number.isFinite(recurringAmount) || recurringAmount <= 0) {
+      return res.status(400).json({ error: 'Invalid pricing configuration for selected car' });
+    }
+
     const customer = await stripe.customers.create({
       description: 'Maple Rental Subscription Customer',
     });
 
     const product = await stripe.products.create({
-      name: carName || 'Car Rental',
+      name: car.name || 'Car Rental',
     });
 
     const price = await stripe.prices.create({
       product: product.id,
       unit_amount: Math.round(Number(recurringAmount) * 100),
-      currency: currency,
+      currency: currency.toLowerCase(),
       recurring: { interval: 'week' },
     });
-
-    const upfrontExtra = Math.round((Number(amount) - Number(recurringAmount)) * 100);
 
     if (upfrontExtra > 0) {
       await stripe.invoiceItems.create({
         customer: customer.id,
         amount: upfrontExtra,
-        currency: currency,
+        currency: currency.toLowerCase(),
         description: 'Upfront bond and initial payment',
       });
     }
@@ -206,15 +257,31 @@ app.post('/api/create-subscription', async (req, res) => {
 });
 
 app.post('/api/create-payment-intent', async (req, res) => {
-  const { amount, currency = 'aud' } = req.body;
-  if (!amount || Number(amount) <= 0) {
-    return res.status(400).json({ error: 'Invalid amount' });
-  }
+  const payload = z.object({
+    bookingId: z.coerce.number().int().positive(),
+    currency: z.string().length(3).default('aud'),
+  });
 
   try {
+    const { bookingId, currency } = payload.parse(req.body);
+    const { data: booking, error: bookingError } = await db
+      .from('bookings')
+      .select('id, totalAmount')
+      .eq('id', bookingId)
+      .single();
+
+    if (bookingError || !booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const amount = Number(booking.totalAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'Invalid booking amount' });
+    }
+
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(Number(amount) * 100),
-      currency,
+      currency: currency.toLowerCase(),
       automatic_payment_methods: { enabled: true },
     });
     res.json({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id });
@@ -246,7 +313,7 @@ app.post('/api/auth/login', async (req, res) => {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
     });
-    res.json({ token, username: data.user?.email });
+    res.json({ username: data.user?.email });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -588,7 +655,7 @@ const createOnboardingLink = (accountId: string) =>
     collect: 'eventually_due',
   });
 
-app.post('/api/saas/merchants', async (req, res) => {
+app.post('/api/saas/merchants', authenticateAdmin, async (req, res) => {
   try {
     const data = merchantSchema.parse(req.body);
 
@@ -646,7 +713,7 @@ app.post('/api/saas/merchants', async (req, res) => {
   }
 });
 
-app.get('/api/saas/merchants', async (_req, res) => {
+app.get('/api/saas/merchants', authenticateAdmin, async (_req, res) => {
   try {
     const { data, error } = await db.from('merchants').select('id, name, email, country, stripeAccountId, payoutInterval, onboardingStatus, createdAt').order('createdAt', { ascending: false });
     if (error) throw error;
@@ -657,7 +724,7 @@ app.get('/api/saas/merchants', async (_req, res) => {
   }
 });
 
-app.post('/api/saas/merchants/:id/link', async (req, res) => {
+app.post('/api/saas/merchants/:id/link', authenticateAdmin, async (req, res) => {
   try {
     const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
     const { data: merchant, error: fetchError } = await db.from('merchants').select('*').eq('id', id).single();
