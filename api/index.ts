@@ -60,6 +60,53 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 
 app.use(cors());
 app.use(cookieParser());
+
+// Stripe Webhook Endpoint (Must be before express.json() to get raw body)
+app.post('/api/webhook', express.raw({ type: 'application/json' }), async (request, response) => {
+  const sig = request.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      request.body,
+      sig as string,
+      process.env.STRIPE_WEBHOOK_SECRET || ''
+    );
+  } catch (err: any) {
+    console.error(`Stripe Webhook Error: ${err.message}`);
+    response.status(400).send(`Webhook Error: ${err.message}`);
+    return;
+  }
+
+  // Handle the event
+  try {
+    switch (event.type) {
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object as any;
+        console.log(`✅ Webhook: Payment succeeded for invoice ${invoice.id} (Customer: ${invoice.customer})`);
+        break;
+      }
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as any;
+        console.log(`❌ Webhook: Payment failed for invoice ${invoice.id} (Customer: ${invoice.customer})`);
+        break;
+      }
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object as any;
+        console.log(`⚠️ Webhook: Subscription deleted ${subscription.id}`);
+        break;
+      }
+      default:
+        console.log(`ℹ️ Webhook: Unhandled event type ${event.type}`);
+    }
+  } catch (err) {
+    console.error(`Error processing webhook event ${event.type}:`, err);
+  }
+
+  // Return a 200 response to acknowledge receipt of the event
+  response.send();
+});
+
 app.use(express.json());
 
 let dbInitialized: Promise<void> | null = null;
