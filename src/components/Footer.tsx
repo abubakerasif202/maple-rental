@@ -1,22 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Mail, Phone } from 'lucide-react';
 
-const LogoIcon = ({ className = "w-12 h-12" }) => (
-  <div className={`relative ${className} rounded-full border-2 border-slate-400 bg-brand-navy shadow-lg flex items-center justify-center overflow-hidden`}>
-    <svg viewBox="0 0 100 100" className="w-full h-full p-1" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d="M50 45 L55 35 L65 38 L60 28 L70 25 L60 20 L65 10 L50 15 L35 10 L40 20 L30 25 L40 28 L35 38 L45 35 Z"
-        fill="#D4AF37"
-      />
-      <path
-        d="M20 55 C20 50 30 48 50 48 C70 48 80 50 80 55 L85 60 L15 60 Z"
-        fill="#E2E8F0"
-      />
-      <text x="50" y="75" textAnchor="middle" fill="#D4AF37" fontSize="8" fontWeight="bold" fontFamily="serif">MAPLE</text>
-      <text x="50" y="85" textAnchor="middle" fill="#D4AF37" fontSize="6" fontWeight="bold" fontFamily="serif">RENTALS</text>
-    </svg>
-  </div>
-);
+
 
 export default function Footer() {
   return (
@@ -24,12 +9,12 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-16">
           <div>
-            <Link to="/" className="flex items-center gap-6 mb-8 group">
-              <LogoIcon className="w-12 h-12" />
-              <div className="flex flex-col">
-                <span className="font-serif font-bold text-xl text-white tracking-[0.1em] uppercase leading-none">MAPLE</span>
-                <span className="font-serif text-xs text-brand-gold tracking-[0.2em] uppercase">RENTALS</span>
-              </div>
+            <Link to="/" className="flex items-center mb-8 group">
+              <img
+                src="/logo.png"
+                alt="Maple Rentals Logo"
+                className="h-20 md:h-24 object-contain bg-white rounded-lg px-3 py-2"
+              />
             </Link>
             <p className="text-sm text-gray-500 max-w-xs leading-relaxed font-light">
               Sydney's professional fleet company supplying Toyota Camry Hybrid vehicles exclusively for Uber drivers.
