@@ -17,7 +17,7 @@ export default function Cars() {
     return true;
   });
 
-  const PLACEHOLDER_IMAGE = "https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=1600";
+  const PLACEHOLDER_IMAGE = "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?q=80&w=1600&auto=format&fit=crop";
 
   if (error) return <div className="bg-brand-navy min-h-screen flex items-center justify-center text-white">Error loading vehicles</div>;
 

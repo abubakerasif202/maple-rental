@@ -23,7 +23,7 @@ async function seedData() {
             weeklyPrice: 350,
             bond: 500,
             status: "Available",
-            image: "https://images.unsplash.com/photo-1629897048514-3dd7414df7fd?auto=format&fit=crop&q=80&w=800"
+            image: "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?q=80&w=1600&auto=format&fit=crop"
         },
         {
             name: "Toyota Camry Hybrid SL",
@@ -31,7 +31,7 @@ async function seedData() {
             weeklyPrice: 400,
             bond: 500,
             status: "Available",
-            image: "https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&q=80&w=800"
+            image: "https://images.unsplash.com/photo-1657872737697-737a2d123ef2?q=80&w=1600&auto=format&fit=crop"
         },
         {
             name: "Toyota Camry Hybrid Ascent Sport",
@@ -39,7 +39,7 @@ async function seedData() {
             weeklyPrice: 380,
             bond: 500,
             status: "Available",
-            image: "https://images.unsplash.com/photo-1590362891991-f776e747a588?auto=format&fit=crop&q=80&w=800"
+            image: "https://images.unsplash.com/photo-1624578571415-09e9b1991929?q=80&w=1600&auto=format&fit=crop"
         }
     ];
 
