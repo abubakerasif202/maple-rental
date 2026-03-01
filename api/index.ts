@@ -6,6 +6,7 @@ import Stripe from 'stripe';
 import { z } from 'zod';
 import { db, initializeDB } from '../src/db/index.js';
 import { ensureEsbuildBinaryPath } from '../scripts/ensureEsbuildBinaryPath.js';
+import { renderCarLeaseAgreement } from './templates/carLeaseAgreement.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -74,6 +75,18 @@ const corsOrigins = [
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16' as any,
 });
+
+const LEASE_STRIPE_SETTINGS = {
+  currency: 'aud',
+  recurringInterval: 'week' as const,
+  minimumRentalWeeks: 6,
+  insuranceCoverageRegion: 'NSW',
+  fees: {
+    accountManagementWeekly: 1.0,
+    newAccountSetup: 10.0,
+    directDebitAccountSetup: 2.2,
+  },
+};
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -189,11 +202,10 @@ const authenticateAdmin = async (req: express.Request, res: express.Response, ne
 app.post('/api/create-subscription', async (req, res) => {
   const payload = z.object({
     carId: z.coerce.number().int().positive(),
-    currency: z.string().length(3).default('aud'),
   });
 
   try {
-    const { carId, currency } = payload.parse(req.body);
+    const { carId } = payload.parse(req.body);
     const { data: car, error: carError } = await db
       .from('cars')
       .select('id, name, weeklyPrice, bond')
@@ -204,33 +216,64 @@ app.post('/api/create-subscription', async (req, res) => {
       return res.status(404).json({ error: 'Car not found' });
     }
 
-    const recurringAmount = Number(car.weeklyPrice);
-    const upfrontExtra = Math.round((Number(car.bond) + Number(car.weeklyPrice)) * 100);
-    if (!Number.isFinite(recurringAmount) || recurringAmount <= 0) {
+    const weeklyRent = Number(car.weeklyPrice);
+    const bond = Number(car.bond);
+    if (!Number.isFinite(weeklyRent) || weeklyRent <= 0) {
       return res.status(400).json({ error: 'Invalid pricing configuration for selected car' });
     }
+    if (!Number.isFinite(bond) || bond < 0) {
+      return res.status(400).json({ error: 'Invalid bond configuration for selected car' });
+    }
+
+    const recurringAmount = weeklyRent + LEASE_STRIPE_SETTINGS.fees.accountManagementWeekly;
+    const recurringAmountCents = Math.round(recurringAmount * 100);
+
+    const upfrontItems = [
+      {
+        amountCents: Math.round(bond * 100),
+        description: 'Security Bond',
+      },
+      {
+        amountCents: Math.round(weeklyRent * 100),
+        description: 'Initial Weekly Rent',
+      },
+      {
+        amountCents: Math.round(LEASE_STRIPE_SETTINGS.fees.newAccountSetup * 100),
+        description: 'New Account Setup Fee',
+      },
+      {
+        amountCents: Math.round(LEASE_STRIPE_SETTINGS.fees.directDebitAccountSetup * 100),
+        description: 'Direct Debit Account Setup Fee',
+      },
+    ].filter((item) => item.amountCents > 0);
+
+    const upfrontDueCents = upfrontItems.reduce((sum, item) => sum + item.amountCents, 0);
 
     const customer = await stripe.customers.create({
       description: 'Maple Rental Subscription Customer',
+      metadata: {
+        lease_minimum_weeks: String(LEASE_STRIPE_SETTINGS.minimumRentalWeeks),
+        insurance_coverage_region: LEASE_STRIPE_SETTINGS.insuranceCoverageRegion,
+      },
     });
 
     const product = await stripe.products.create({
-      name: car.name || 'Car Rental',
+      name: `${car.name || 'Car Rental'} Lease`,
     });
 
     const price = await stripe.prices.create({
       product: product.id,
-      unit_amount: Math.round(Number(recurringAmount) * 100),
-      currency: currency.toLowerCase(),
-      recurring: { interval: 'week' },
+      unit_amount: recurringAmountCents,
+      currency: LEASE_STRIPE_SETTINGS.currency,
+      recurring: { interval: LEASE_STRIPE_SETTINGS.recurringInterval },
     });
 
-    if (upfrontExtra > 0) {
+    for (const item of upfrontItems) {
       await stripe.invoiceItems.create({
         customer: customer.id,
-        amount: upfrontExtra,
-        currency: currency.toLowerCase(),
-        description: 'Upfront bond and initial payment',
+        amount: item.amountCents,
+        currency: LEASE_STRIPE_SETTINGS.currency,
+        description: item.description,
       });
     }
 
@@ -239,6 +282,10 @@ app.post('/api/create-subscription', async (req, res) => {
       items: [{ price: price.id }],
       payment_behavior: 'default_incomplete',
       payment_settings: { save_default_payment_method: 'on_subscription' },
+      metadata: {
+        lease_minimum_weeks: String(LEASE_STRIPE_SETTINGS.minimumRentalWeeks),
+        insurance_coverage_region: LEASE_STRIPE_SETTINGS.insuranceCoverageRegion,
+      },
       expand: ['latest_invoice.payment_intent'],
     });
 
@@ -248,12 +295,28 @@ app.post('/api/create-subscription', async (req, res) => {
     res.json({
       clientSecret: paymentIntent.client_secret,
       subscriptionId: subscription.id,
-      paymentIntentId: paymentIntent.id
+      paymentIntentId: paymentIntent.id,
+      billingBreakdown: {
+        currency: LEASE_STRIPE_SETTINGS.currency.toUpperCase(),
+        upfrontDue: Number((upfrontDueCents / 100).toFixed(2)),
+        recurringWeekly: Number((recurringAmountCents / 100).toFixed(2)),
+        minimumRentalWeeks: LEASE_STRIPE_SETTINGS.minimumRentalWeeks,
+      },
     });
   } catch (error: any) {
     console.error('Subscription intent error:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+app.get('/api/stripe/lease-settings', (_req, res) => {
+  res.json({
+    currency: LEASE_STRIPE_SETTINGS.currency.toUpperCase(),
+    recurringInterval: LEASE_STRIPE_SETTINGS.recurringInterval,
+    minimumRentalWeeks: LEASE_STRIPE_SETTINGS.minimumRentalWeeks,
+    insuranceCoverageRegion: LEASE_STRIPE_SETTINGS.insuranceCoverageRegion,
+    fees: LEASE_STRIPE_SETTINGS.fees,
+  });
 });
 
 app.post('/api/create-payment-intent', async (req, res) => {
@@ -643,6 +706,59 @@ app.post('/api/bookings/verify-payment', async (req, res) => {
     return res.status(400).json({ error: 'sessionId or paymentIntentId is required', success: false });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+const leaseFeeSchema = z.object({
+  code: z.string().min(1),
+  title: z.string().min(1),
+  amount: z.string().min(1),
+});
+
+const leaseAgreementSchema = z.object({
+  agreementDate: z.string().optional(),
+  registeredOwnerName: z.string().optional(),
+  registeredOwnerAddress: z.string().optional(),
+  registeredOwnerContact: z.string().optional(),
+  registeredOwnerEmail: z.string().optional(),
+  renteeName: z.string().optional(),
+  renteeDob: z.string().optional(),
+  renteeLicenseNumber: z.string().optional(),
+  renteeLicenseState: z.string().optional(),
+  renteeAddress: z.string().optional(),
+  renteeContact: z.string().optional(),
+  renteeEmail: z.string().optional(),
+  vehicleMake: z.string().optional(),
+  vehicleModel: z.string().optional(),
+  vehicleYear: z.string().optional(),
+  vehicleVin: z.string().optional(),
+  kmAllowance: z.string().optional(),
+  weeklyRent: z.string().optional(),
+  fuelPolicy: z.string().optional(),
+  insuranceCoverage: z.string().optional(),
+  rentalStartDate: z.string().optional(),
+  rentalEndDate: z.string().optional(),
+  minimumRentalPeriod: z.string().optional(),
+  returnPolicy: z.string().optional(),
+  fees: z.array(leaseFeeSchema).optional(),
+});
+
+app.get('/api/agreements/car-lease/template', (_req, res) => {
+  const template = renderCarLeaseAgreement();
+  res.type('text/markdown').send(template);
+});
+
+app.post('/api/agreements/car-lease/render', async (req, res) => {
+  try {
+    const payload = leaseAgreementSchema.parse(req.body ?? {});
+    const rendered = renderCarLeaseAgreement(payload);
+    res.json({ agreement: rendered });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
+    }
+    console.error('Render agreement error:', error);
+    res.status(500).json({ error: 'Failed to render agreement' });
   }
 });
 

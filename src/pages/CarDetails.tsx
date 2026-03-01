@@ -61,7 +61,7 @@ export default function CarDetails() {
                 </div>
               </div>
 
-              <Link to={`/checkout/${car.id}`} state={{ car, totalAmount: car.bond + (car.weeklyPrice * 2) }} className={`flex items-center justify-center gap-3 w-full py-5 font-bold text-sm transition-all uppercase tracking-widest shadow-lg ${car.status === 'Available' ? 'bg-brand-gold hover:bg-brand-gold-light text-brand-navy' : 'bg-white/5 text-brand-grey/40 cursor-not-allowed border border-white/10'}`} onClick={(e) => car.status !== 'Available' && e.preventDefault()}>
+              <Link to={`/checkout/${car.id}`} state={{ car, totalAmount: car.bond + car.weeklyPrice + 10 + 2.2 }} className={`flex items-center justify-center gap-3 w-full py-5 font-bold text-sm transition-all uppercase tracking-widest shadow-lg ${car.status === 'Available' ? 'bg-brand-gold hover:bg-brand-gold-light text-brand-navy' : 'bg-white/5 text-brand-grey/40 cursor-not-allowed border border-white/10'}`} onClick={(e) => car.status !== 'Available' && e.preventDefault()}>
                 {car.status === 'Available' ? <>Book Now <ChevronRight className="w-4 h-4" /></> : 'Currently Rented'}
               </Link>
             </motion.div>

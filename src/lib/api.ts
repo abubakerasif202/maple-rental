@@ -93,6 +93,52 @@ export interface SaasAccountLinkResponse {
   onboardingExpiresAt: string | null;
 }
 
+export interface StripeLeaseSettings {
+  currency: string;
+  recurringInterval: 'week';
+  minimumRentalWeeks: number;
+  insuranceCoverageRegion: string;
+  fees: {
+    accountManagementWeekly: number;
+    newAccountSetup: number;
+    directDebitAccountSetup: number;
+  };
+}
+
+export interface LeaseFeePayload {
+  code: string;
+  title: string;
+  amount: string;
+}
+
+export interface LeaseAgreementPayload {
+  agreementDate?: string;
+  registeredOwnerName?: string;
+  registeredOwnerAddress?: string;
+  registeredOwnerContact?: string;
+  registeredOwnerEmail?: string;
+  renteeName?: string;
+  renteeDob?: string;
+  renteeLicenseNumber?: string;
+  renteeLicenseState?: string;
+  renteeAddress?: string;
+  renteeContact?: string;
+  renteeEmail?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleYear?: string;
+  vehicleVin?: string;
+  kmAllowance?: string;
+  weeklyRent?: string;
+  fuelPolicy?: string;
+  insuranceCoverage?: string;
+  rentalStartDate?: string;
+  rentalEndDate?: string;
+  minimumRentalPeriod?: string;
+  returnPolicy?: string;
+  fees?: LeaseFeePayload[];
+}
+
 export const fetchSaasMerchants = async (): Promise<SaasMerchant[]> => {
   const { data } = await api.get('/saas/merchants');
   return data;
@@ -109,6 +155,25 @@ export const refreshSaasAccountLink = async (
   merchantId: number
 ): Promise<SaasAccountLinkResponse> => {
   const { data } = await api.post(`/saas/merchants/${merchantId}/link`);
+  return data;
+};
+
+export const fetchCarLeaseTemplate = async (): Promise<string> => {
+  const { data } = await api.get('/agreements/car-lease/template', {
+    responseType: 'text',
+  });
+  return data;
+};
+
+export const renderCarLeaseAgreement = async (
+  payload: LeaseAgreementPayload
+): Promise<{ agreement: string }> => {
+  const { data } = await api.post('/agreements/car-lease/render', payload);
+  return data;
+};
+
+export const fetchStripeLeaseSettings = async (): Promise<StripeLeaseSettings> => {
+  const { data } = await api.get('/stripe/lease-settings');
   return data;
 };
 

@@ -54,13 +54,22 @@ export default function Checkout() {
   const location = useLocation();
   const { car, totalAmount } = location.state || {};
   const [clientSecret, setClientSecret] = useState('');
+  const [billingBreakdown, setBillingBreakdown] = useState<{
+    currency: string;
+    upfrontDue: number;
+    recurringWeekly: number;
+    minimumRentalWeeks: number;
+  } | null>(null);
 
   useEffect(() => {
     if (car && totalAmount) {
       api.post('/create-subscription', {
         carId: car.id,
       })
-        .then(res => setClientSecret(res.data.clientSecret))
+        .then(res => {
+          setClientSecret(res.data.clientSecret);
+          setBillingBreakdown(res.data.billingBreakdown ?? null);
+        })
         .catch(err => console.error('Stripe error:', err));
     }
   }, [car, totalAmount]);
@@ -78,10 +87,15 @@ export default function Checkout() {
             <div>
               <p className="text-brand-grey text-[10px] font-bold uppercase tracking-widest mb-2">Vehicle</p>
               <h2 className="text-2xl font-serif font-bold text-white">{car.name}</h2>
+              {billingBreakdown && (
+                <p className="text-xs text-brand-grey mt-2">
+                  {billingBreakdown.currency} • Weekly recurring: ${billingBreakdown.recurringWeekly} • Minimum {billingBreakdown.minimumRentalWeeks} weeks
+                </p>
+              )}
             </div>
             <div className="text-right">
-              <p className="text-brand-grey text-[10px] font-bold uppercase tracking-widest mb-2">Total Due</p>
-              <p className="text-3xl font-bold text-brand-gold">${totalAmount}</p>
+              <p className="text-brand-grey text-[10px] font-bold uppercase tracking-widest mb-2">Due Today</p>
+              <p className="text-3xl font-bold text-brand-gold">${billingBreakdown?.upfrontDue ?? totalAmount}</p>
             </div>
           </div>
 
@@ -101,7 +115,7 @@ export default function Checkout() {
                 }
               }
             }}>
-              <CheckoutForm amount={totalAmount} />
+              <CheckoutForm amount={billingBreakdown?.upfrontDue ?? totalAmount} />
             </Elements>
           ) : (
             <div className="flex flex-col items-center justify-center py-20">

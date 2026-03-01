@@ -1,10 +1,37 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Car, Calendar, DollarSign, Plus, Edit, Trash2, Users, FileText, CheckCircle, XCircle } from 'lucide-react';
+import { LogOut, Car, Calendar, DollarSign, Plus, Edit, Trash2, Users, FileText, CheckCircle, XCircle, Download, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '../lib/api';
 import { Car as CarType, Application, Rental, DashboardStats } from '../types';
+
+type LeaseAgreementForm = {
+  agreementDate: string;
+  registeredOwnerName: string;
+  registeredOwnerAddress: string;
+  registeredOwnerContact: string;
+  registeredOwnerEmail: string;
+  renteeName: string;
+  renteeDob: string;
+  renteeLicenseNumber: string;
+  renteeLicenseState: string;
+  renteeAddress: string;
+  renteeContact: string;
+  renteeEmail: string;
+  vehicleMake: string;
+  vehicleModel: string;
+  vehicleYear: string;
+  vehicleVin: string;
+  kmAllowance: string;
+  weeklyRent: string;
+  fuelPolicy: string;
+  insuranceCoverage: string;
+  rentalStartDate: string;
+  rentalEndDate: string;
+  minimumRentalPeriod: string;
+  returnPolicy: string;
+};
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -20,6 +47,35 @@ export default function AdminDashboard() {
     status: 'Available',
     image: ''
   });
+  const [agreementForm, setAgreementForm] = useState<LeaseAgreementForm>({
+    agreementDate: '04/04/2024',
+    registeredOwnerName: 'MAPLE RENT',
+    registeredOwnerAddress: 'Unit 13, Merrylands NSW 2160, AU',
+    registeredOwnerContact: '+61 420 550 556',
+    registeredOwnerEmail: 'sarfarazrajabi5@yahoo.com',
+    renteeName: 'Mohammad Ali Alizadah',
+    renteeDob: '21/12/1990',
+    renteeLicenseNumber: '21357495',
+    renteeLicenseState: 'NSW',
+    renteeAddress: '29 Baker Street, Merrylands NSW 2160, Australia',
+    renteeContact: '0412230293',
+    renteeEmail: 'jalil_alizadah@yahoo.com',
+    vehicleMake: 'Toyota',
+    vehicleModel: 'Camry Hybrid',
+    vehicleYear: '2014',
+    vehicleVin: 'TBD',
+    kmAllowance: 'As agreed in booking',
+    weeklyRent: '$249.00 per week (plus GST)',
+    fuelPolicy: 'Rentee must pay fuel usage. Extra amount may be added to excess according to age.',
+    insuranceCoverage: 'Insurance coverage applies only in New South Wales.',
+    rentalStartDate: '2024-04-22',
+    rentalEndDate: 'Open-ended',
+    minimumRentalPeriod: 'Minimum 6 weeks',
+    returnPolicy: 'Car must be full of fuel on return. Failure incurs $20 + fuel cost per liter. Two weeks notice is required before return.',
+  });
+  const [generatedAgreement, setGeneratedAgreement] = useState('');
+  const [selectedAgreementApplicationId, setSelectedAgreementApplicationId] = useState<string>('');
+  const [selectedAgreementCarId, setSelectedAgreementCarId] = useState<string>('');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -32,19 +88,25 @@ export default function AdminDashboard() {
   const { data: cars = [] as CarType[], isLoading: isLoadingCars } = useQuery({
     queryKey: ['cars'],
     queryFn: api.fetchCars,
-    enabled: activeTab === 'cars' || activeTab === 'dashboard',
+    enabled: activeTab === 'cars' || activeTab === 'dashboard' || activeTab === 'agreements',
   });
 
   const { data: applications = [] as Application[], isLoading: isLoadingApplications } = useQuery({
     queryKey: ['applications'],
     queryFn: api.fetchApplications,
-    enabled: activeTab === 'applications' || activeTab === 'dashboard',
+    enabled: activeTab === 'applications' || activeTab === 'dashboard' || activeTab === 'agreements',
   });
 
   const { data: rentals = [] as Rental[], isLoading: isLoadingRentals } = useQuery({
     queryKey: ['rentals'],
     queryFn: api.fetchRentals,
     enabled: activeTab === 'rentals' || activeTab === 'dashboard',
+  });
+
+  const { data: stripeLeaseSettings, isLoading: isLoadingStripeLeaseSettings } = useQuery({
+    queryKey: ['stripe-lease-settings'],
+    queryFn: api.fetchStripeLeaseSettings,
+    enabled: activeTab === 'agreements',
   });
 
   // Mutations
@@ -95,6 +157,15 @@ export default function AdminDashboard() {
     onError: () => showNotification('Failed to add vehicle', 'error'),
   });
 
+  const renderAgreementMutation = useMutation({
+    mutationFn: (payload: api.LeaseAgreementPayload) => api.renderCarLeaseAgreement(payload),
+    onSuccess: (data) => {
+      setGeneratedAgreement(data.agreement);
+      showNotification('Agreement generated');
+    },
+    onError: () => showNotification('Failed to generate agreement', 'error'),
+  });
+
   const handleLogout = async () => {
     try {
       await api.logoutAdmin();
@@ -135,6 +206,102 @@ export default function AdminDashboard() {
     addCarMutation.mutate(newCar);
   };
 
+  const handleAgreementFieldChange = (field: keyof LeaseAgreementForm, value: string) => {
+    setAgreementForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const generateAgreement = async () => {
+    renderAgreementMutation.mutate(agreementForm);
+  };
+
+  const loadDefaultAgreement = async () => {
+    try {
+      const text = await api.fetchCarLeaseTemplate();
+      setGeneratedAgreement(text);
+      showNotification('Default template loaded');
+    } catch {
+      showNotification('Failed to load template', 'error');
+    }
+  };
+
+  const copyAgreement = async () => {
+    if (!generatedAgreement.trim()) {
+      showNotification('No agreement to copy', 'error');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(generatedAgreement);
+      showNotification('Agreement copied');
+    } catch {
+      showNotification('Clipboard copy failed', 'error');
+    }
+  };
+
+  const downloadAgreement = () => {
+    if (!generatedAgreement.trim()) {
+      showNotification('No agreement to download', 'error');
+      return;
+    }
+    const blob = new Blob([generatedAgreement], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `car-lease-agreement-${new Date().toISOString().slice(0, 10)}.md`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const approvedApplications = useMemo(
+    () => applications.filter((app) => app.status === 'Approved'),
+    [applications]
+  );
+
+  const applySelectionToAgreement = () => {
+    const applicationId = Number(selectedAgreementApplicationId);
+    const carId = Number(selectedAgreementCarId);
+    const selectedApplication = approvedApplications.find((app) => app.id === applicationId);
+    const selectedCar = cars.find((car) => car.id === carId);
+
+    if (!selectedApplication && !selectedCar) {
+      showNotification('Select an application or car to auto fill', 'error');
+      return;
+    }
+
+    const intendedStartDate = selectedApplication?.intendedStartDate
+      ? String(selectedApplication.intendedStartDate).slice(0, 10)
+      : agreementForm.rentalStartDate;
+
+    const nameParts = selectedCar?.name?.trim().split(/\s+/) || [];
+    const vehicleMake = nameParts.length > 0 ? nameParts[0] : agreementForm.vehicleMake;
+    const vehicleModel =
+      nameParts.length > 1 ? nameParts.slice(1).join(' ') : agreementForm.vehicleModel;
+
+    const nextForm: LeaseAgreementForm = {
+      ...agreementForm,
+      renteeName: selectedApplication?.name || agreementForm.renteeName,
+      renteeLicenseNumber: selectedApplication?.licenseNumber || agreementForm.renteeLicenseNumber,
+      renteeAddress: selectedApplication?.address || agreementForm.renteeAddress,
+      renteeContact: selectedApplication?.phone || agreementForm.renteeContact,
+      renteeEmail: selectedApplication?.email || agreementForm.renteeEmail,
+      rentalStartDate: intendedStartDate,
+      vehicleMake,
+      vehicleModel,
+      vehicleYear: selectedCar?.modelYear ? String(selectedCar.modelYear) : agreementForm.vehicleYear,
+      weeklyRent: selectedCar ? `$${Number(selectedCar.weeklyPrice).toFixed(2)} per week (plus GST)` : agreementForm.weeklyRent,
+    };
+
+    setAgreementForm((prev) => ({
+      ...prev,
+      ...nextForm,
+    }));
+
+    renderAgreementMutation.mutate(nextForm);
+    showNotification('Agreement fields auto-filled');
+  };
+
   return (
     <div className="min-h-screen bg-brand-navy text-white flex font-sans selection:bg-brand-gold selection:text-brand-navy">
       {/* Sidebar */}
@@ -154,6 +321,7 @@ export default function AdminDashboard() {
             { id: 'applications', icon: FileText, label: 'Applications' },
             { id: 'rentals', icon: Calendar, label: 'Rentals' },
             { id: 'cars', icon: Car, label: 'Fleet' },
+            { id: 'agreements', icon: FileText, label: 'Lease Agreement' },
           ].map((item) => (
             <button
               key={item.id}
@@ -411,6 +579,244 @@ export default function AdminDashboard() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'agreements' && (
+            <motion.div
+              key="agreements"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+                <h1 className="text-3xl font-serif font-bold tracking-tight">Lease Agreement Builder</h1>
+                <div className="flex gap-3">
+                  <button
+                    onClick={loadDefaultAgreement}
+                    className="px-5 py-3 text-xs font-bold uppercase tracking-widest border border-white/20 text-brand-grey hover:text-white hover:border-white/40 transition-colors"
+                  >
+                    Load Template
+                  </button>
+                  <button
+                    onClick={generateAgreement}
+                    className="bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all shadow-lg"
+                  >
+                    Generate Agreement
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-brand-navy-light border border-white/10 p-6 shadow-2xl mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Approved Application</label>
+                    <select
+                      value={selectedAgreementApplicationId}
+                      onChange={(e) => setSelectedAgreementApplicationId(e.target.value)}
+                      className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold"
+                    >
+                      <option value="">Select approved application</option>
+                      {approvedApplications.map((app) => (
+                        <option key={app.id} value={app.id}>
+                          {app.name} ({app.email})
+                        </option>
+                      ))}
+                    </select>
+                    {isLoadingApplications && <p className="text-[10px] text-brand-grey">Loading applications...</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Vehicle</label>
+                    <select
+                      value={selectedAgreementCarId}
+                      onChange={(e) => setSelectedAgreementCarId(e.target.value)}
+                      className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold"
+                    >
+                      <option value="">Select vehicle</option>
+                      {cars.map((car) => (
+                        <option key={car.id} value={car.id}>
+                          {car.name} ({car.modelYear})
+                        </option>
+                      ))}
+                    </select>
+                    {isLoadingCars && <p className="text-[10px] text-brand-grey">Loading cars...</p>}
+                  </div>
+                  <button
+                    onClick={applySelectionToAgreement}
+                    className="bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all shadow-lg h-[46px]"
+                  >
+                    Auto Fill
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-brand-navy-light border border-white/10 p-6 shadow-2xl mb-8">
+                <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-brand-gold mb-4">Stripe Lease Billing Settings</h2>
+                {isLoadingStripeLeaseSettings ? (
+                  <p className="text-sm text-brand-grey">Loading Stripe settings...</p>
+                ) : stripeLeaseSettings ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 text-sm">
+                    <div className="bg-brand-navy border border-white/10 p-4">
+                      <p className="text-[10px] text-brand-grey uppercase tracking-widest mb-1">Currency</p>
+                      <p className="font-bold text-white">{stripeLeaseSettings.currency}</p>
+                    </div>
+                    <div className="bg-brand-navy border border-white/10 p-4">
+                      <p className="text-[10px] text-brand-grey uppercase tracking-widest mb-1">Recurring Interval</p>
+                      <p className="font-bold text-white">{stripeLeaseSettings.recurringInterval}</p>
+                    </div>
+                    <div className="bg-brand-navy border border-white/10 p-4">
+                      <p className="text-[10px] text-brand-grey uppercase tracking-widest mb-1">Minimum Rental</p>
+                      <p className="font-bold text-white">{stripeLeaseSettings.minimumRentalWeeks} weeks</p>
+                    </div>
+                    <div className="bg-brand-navy border border-white/10 p-4">
+                      <p className="text-[10px] text-brand-grey uppercase tracking-widest mb-1">Coverage Region</p>
+                      <p className="font-bold text-white">{stripeLeaseSettings.insuranceCoverageRegion}</p>
+                    </div>
+                    <div className="bg-brand-navy border border-white/10 p-4">
+                      <p className="text-[10px] text-brand-grey uppercase tracking-widest mb-1">Account Mgmt / Week</p>
+                      <p className="font-bold text-white">${stripeLeaseSettings.fees.accountManagementWeekly.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-brand-navy border border-white/10 p-4">
+                      <p className="text-[10px] text-brand-grey uppercase tracking-widest mb-1">New Account Setup</p>
+                      <p className="font-bold text-white">${stripeLeaseSettings.fees.newAccountSetup.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-brand-navy border border-white/10 p-4">
+                      <p className="text-[10px] text-brand-grey uppercase tracking-widest mb-1">Direct Debit Setup</p>
+                      <p className="font-bold text-white">${stripeLeaseSettings.fees.directDebitAccountSetup.toFixed(2)}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-red-400">Stripe settings unavailable.</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <div className="bg-brand-navy-light border border-white/10 p-8 shadow-2xl space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Agreement Date</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.agreementDate} onChange={(e) => handleAgreementFieldChange('agreementDate', e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Owner Name</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.registeredOwnerName} onChange={(e) => handleAgreementFieldChange('registeredOwnerName', e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Owner Contact</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.registeredOwnerContact} onChange={(e) => handleAgreementFieldChange('registeredOwnerContact', e.target.value)} />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Owner Address</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.registeredOwnerAddress} onChange={(e) => handleAgreementFieldChange('registeredOwnerAddress', e.target.value)} />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Owner Email</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.registeredOwnerEmail} onChange={(e) => handleAgreementFieldChange('registeredOwnerEmail', e.target.value)} />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Rentee Name</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.renteeName} onChange={(e) => handleAgreementFieldChange('renteeName', e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Rentee DOB</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.renteeDob} onChange={(e) => handleAgreementFieldChange('renteeDob', e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">License Number</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.renteeLicenseNumber} onChange={(e) => handleAgreementFieldChange('renteeLicenseNumber', e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">License State</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.renteeLicenseState} onChange={(e) => handleAgreementFieldChange('renteeLicenseState', e.target.value)} />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Rentee Address</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.renteeAddress} onChange={(e) => handleAgreementFieldChange('renteeAddress', e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Rentee Contact</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.renteeContact} onChange={(e) => handleAgreementFieldChange('renteeContact', e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Rentee Email</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.renteeEmail} onChange={(e) => handleAgreementFieldChange('renteeEmail', e.target.value)} />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Vehicle Make</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.vehicleMake} onChange={(e) => handleAgreementFieldChange('vehicleMake', e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Vehicle Model</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.vehicleModel} onChange={(e) => handleAgreementFieldChange('vehicleModel', e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Vehicle Year</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.vehicleYear} onChange={(e) => handleAgreementFieldChange('vehicleYear', e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Vehicle VIN</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.vehicleVin} onChange={(e) => handleAgreementFieldChange('vehicleVin', e.target.value)} />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">KM Allowance</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.kmAllowance} onChange={(e) => handleAgreementFieldChange('kmAllowance', e.target.value)} />
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Weekly Rent</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.weeklyRent} onChange={(e) => handleAgreementFieldChange('weeklyRent', e.target.value)} />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Fuel Policy</label>
+                      <textarea rows={3} className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold resize-y" value={agreementForm.fuelPolicy} onChange={(e) => handleAgreementFieldChange('fuelPolicy', e.target.value)} />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Insurance Coverage</label>
+                      <textarea rows={2} className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold resize-y" value={agreementForm.insuranceCoverage} onChange={(e) => handleAgreementFieldChange('insuranceCoverage', e.target.value)} />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Rental Start Date</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.rentalStartDate} onChange={(e) => handleAgreementFieldChange('rentalStartDate', e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Rental End Date</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.rentalEndDate} onChange={(e) => handleAgreementFieldChange('rentalEndDate', e.target.value)} />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Minimum Rental Period</label>
+                      <input className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold" value={agreementForm.minimumRentalPeriod} onChange={(e) => handleAgreementFieldChange('minimumRentalPeriod', e.target.value)} />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Return Policy</label>
+                      <textarea rows={4} className="w-full bg-brand-navy border border-white/10 px-4 py-3 text-white outline-none focus:border-brand-gold resize-y" value={agreementForm.returnPolicy} onChange={(e) => handleAgreementFieldChange('returnPolicy', e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-brand-navy-light border border-white/10 p-8 shadow-2xl flex flex-col min-h-[600px]">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-serif font-bold">Generated Agreement</h2>
+                    <div className="flex items-center gap-2">
+                      <button onClick={copyAgreement} className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest border border-white/20 text-brand-grey hover:text-white hover:border-white/40 transition-colors flex items-center gap-2">
+                        <Copy className="w-3 h-3" /> Copy
+                      </button>
+                      <button onClick={downloadAgreement} className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest border border-white/20 text-brand-grey hover:text-white hover:border-white/40 transition-colors flex items-center gap-2">
+                        <Download className="w-3 h-3" /> Download
+                      </button>
+                    </div>
+                  </div>
+
+                  <textarea
+                    readOnly
+                    value={generatedAgreement || (renderAgreementMutation.isPending ? 'Generating agreement...' : '')}
+                    className="flex-1 min-h-[520px] bg-brand-navy border border-white/10 p-4 text-sm text-white font-mono leading-relaxed outline-none resize-none"
+                    placeholder="Generate an agreement to preview it here."
+                  />
+                </div>
               </div>
             </motion.div>
           )}
