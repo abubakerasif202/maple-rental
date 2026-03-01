@@ -403,6 +403,60 @@ app.post('/api/applications', async (req, res) => {
     ]).select('id').single();
 
     if (error) throw error;
+
+    // Send Confirmation Emails via Resend
+    if (process.env.RESEND_API_KEY) {
+      const { Resend } = await import('resend');
+      const resend = new Resend(process.env.RESEND_API_KEY);
+
+      try {
+        // Email to the Applicant
+        await resend.emails.send({
+          from: 'Maple Rentals <noreply@maplerentals.com.au>',
+          to: data.email,
+          subject: 'Application Received - Maple Rentals',
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a202c;">
+              <h2 style="color: #D4AF37;">Application Received</h2>
+              <p>Hi ${data.name},</p>
+              <p>Thank you for applying to rent a Toyota Camry Hybrid with Maple Rentals.</p>
+              <p>We have successfully received your application, including your license and Uber details. Our team will review your application and try to get back to you within 24 hours.</p>
+              <p>If you have any urgent questions, please contact us directly.</p>
+              <br>
+              <p>Best regards,</p>
+              <p><strong>The Maple Rentals Team</strong></p>
+            </div>
+          `
+        });
+
+        // Email to the Admin
+        await resend.emails.send({
+          from: 'Maple Rentals Notifications <noreply@maplerentals.com.au>',
+          to: 'admin@maplerentals.com.au',
+          subject: `New Driver Application: ${data.name}`,
+          html: `
+            <div style="font-family: sans-serif; color: #1a202c;">
+              <h2>New Driver Application</h2>
+              <p>A new driver application has been submitted:</p>
+              <ul>
+                <li><strong>Name:</strong> ${data.name}</li>
+                <li><strong>Phone:</strong> ${data.phone}</li>
+                <li><strong>Email:</strong> ${data.email}</li>
+                <li><strong>Address:</strong> ${data.address}</li>
+                <li><strong>Uber Status:</strong> ${data.uberStatus}</li>
+                <li><strong>Experience:</strong> ${data.experience}</li>
+                <li><strong>Intended Start:</strong> ${data.intendedStartDate}</li>
+              </ul>
+              <p>Please log in to the admin dashboard to review their documents and approve/deny the application.</p>
+            </div>
+          `
+        });
+        console.log(`Confirmation emails sent successfully for applicant: ${data.email}`);
+      } catch (emailError) {
+        console.error("Failed to send Resend emails:", emailError);
+      }
+    }
+
     res.json({ success: true, applicationId: String(inserted.id) });
   } catch (err) {
     if (err instanceof z.ZodError) {
