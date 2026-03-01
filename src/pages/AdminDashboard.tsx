@@ -76,6 +76,8 @@ export default function AdminDashboard() {
   const [generatedAgreement, setGeneratedAgreement] = useState('');
   const [selectedAgreementApplicationId, setSelectedAgreementApplicationId] = useState<string>('');
   const [selectedAgreementCarId, setSelectedAgreementCarId] = useState<string>('');
+  const [viewingAgreement, setViewingAgreement] = useState<api.SavedLeaseAgreement | null>(null);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -101,6 +103,18 @@ export default function AdminDashboard() {
     queryKey: ['rentals'],
     queryFn: api.fetchRentals,
     enabled: activeTab === 'rentals' || activeTab === 'dashboard',
+  });
+
+  const { data: weeklyFinancials, isLoading: isLoadingFinancials } = useQuery({
+    queryKey: ['weekly-financials'],
+    queryFn: api.fetchWeeklyFinancials,
+    enabled: activeTab === 'dashboard',
+  });
+
+  const { data: savedAgreements = [] as api.SavedLeaseAgreement[], isLoading: isLoadingSavedAgreements } = useQuery({
+    queryKey: ['saved-agreements'],
+    queryFn: api.fetchSavedLeaseAgreements,
+    enabled: activeTab === 'agreements',
   });
 
   const { data: stripeLeaseSettings, isLoading: isLoadingStripeLeaseSettings } = useQuery({
@@ -166,6 +180,24 @@ export default function AdminDashboard() {
     onError: () => showNotification('Failed to generate agreement', 'error'),
   });
 
+  const saveAgreementMutation = useMutation({
+    mutationFn: (payload: { applicationId: number; carId: number; content: string }) => api.saveLeaseAgreement(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-agreements'] });
+      showNotification('Agreement saved to database');
+    },
+    onError: () => showNotification('Failed to save agreement', 'error'),
+  });
+
+  const deleteAgreementMutation = useMutation({
+    mutationFn: (id: number) => api.deleteSavedLeaseAgreement(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-agreements'] });
+      showNotification('Agreement deleted');
+    },
+    onError: () => showNotification('Failed to delete agreement', 'error'),
+  });
+
   const handleLogout = async () => {
     try {
       await api.logoutAdmin();
@@ -212,6 +244,32 @@ export default function AdminDashboard() {
 
   const generateAgreement = async () => {
     renderAgreementMutation.mutate(agreementForm);
+  };
+
+  const handleSaveAgreement = () => {
+    if (!generatedAgreement.trim()) {
+      showNotification('No agreement to save', 'error');
+      return;
+    }
+    const applicationId = Number(selectedAgreementApplicationId);
+    const carId = Number(selectedAgreementCarId);
+
+    if (!applicationId || !carId) {
+      showNotification('Select an application and car before saving', 'error');
+      return;
+    }
+
+    saveAgreementMutation.mutate({
+      applicationId,
+      carId,
+      content: generatedAgreement
+    });
+  };
+
+  const deleteAgreement = (id: number) => {
+    if (confirm('Are you sure you want to delete this saved agreement?')) {
+      deleteAgreementMutation.mutate(id);
+    }
   };
 
   const loadDefaultAgreement = async () => {
@@ -383,6 +441,91 @@ export default function AdminDashboard() {
                   <p className="text-4xl font-bold text-white">
                     {isLoadingStats ? '...' : stats.activeRentals}
                   </p>
+                </div>
+              </div>
+
+              {/* Weekly Financial Overview */}
+              <div className="mb-12">
+                <h2 className="text-xl font-serif font-bold mb-8 tracking-tight">Weekly Financial Overview (Last 7 Days)</h2>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                  {/* Projected vs Actual Card */}
+                  <div className="bg-brand-navy-light border border-white/10 p-10 shadow-2xl relative overflow-hidden">
+                    <div className="flex justify-between items-start mb-10">
+                      <div>
+                        <h3 className="text-[10px] font-bold text-brand-gold uppercase tracking-[0.2em] mb-2">Projected vs. Actual</h3>
+                        <p className="text-sm text-brand-grey font-light">Comparison of database rental expectations vs. Stripe bank payouts.</p>
+                      </div>
+                      <DollarSign className="w-8 h-8 text-brand-gold/20" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-10">
+                      <div>
+                        <p className="text-[10px] font-bold text-brand-grey uppercase tracking-widest mb-3">Projected Gross</p>
+                        <p className="text-3xl font-bold text-white">
+                          {isLoadingFinancials ? '...' : `$${weeklyFinancials?.projectedGrossWeekly.toLocaleString()}`}
+                        </p>
+                        <p className="text-[10px] text-brand-grey mt-2 italic font-light">Est. Net: ${weeklyFinancials?.projectedNetWeekly.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-3">Actual Payouts</p>
+                        <p className="text-3xl font-bold text-emerald-500">
+                          {isLoadingFinancials ? '...' : `$${weeklyFinancials?.actualPayoutsWeekly.toLocaleString()}`}
+                        </p>
+                        <p className="text-[10px] text-brand-grey mt-2 italic font-light">Received in bank</p>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="mt-10 h-1 bg-white/5 relative">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: weeklyFinancials ? `${Math.min((weeklyFinancials.actualPayoutsWeekly / weeklyFinancials.projectedNetWeekly) * 100, 100)}%` : 0 }}
+                        className="absolute top-0 left-0 h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Recent Payouts Table */}
+                  <div className="bg-brand-navy-light border border-white/10 shadow-2xl overflow-hidden">
+                    <div className="p-8 border-b border-white/10 flex items-center justify-between">
+                      <h3 className="text-[10px] font-bold text-brand-gold uppercase tracking-[0.2em]">Recent Stripe Payouts</h3>
+                      <span className="text-[10px] text-brand-grey font-light uppercase tracking-widest">Live from Stripe</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-white/5">
+                        <thead className="bg-white/2">
+                          <tr>
+                            <th className="px-8 py-4 text-left text-[8px] font-bold text-brand-grey uppercase tracking-widest">Date</th>
+                            <th className="px-8 py-4 text-left text-[8px] font-bold text-brand-grey uppercase tracking-widest">Amount</th>
+                            <th className="px-8 py-4 text-right text-[8px] font-bold text-brand-grey uppercase tracking-widest">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {isLoadingFinancials ? (
+                            <tr><td colSpan={3} className="px-8 py-6 text-center text-[10px] text-brand-grey uppercase tracking-widest italic">Syncing Stripe data...</td></tr>
+                          ) : weeklyFinancials?.recentPayouts.length === 0 ? (
+                            <tr><td colSpan={3} className="px-8 py-6 text-center text-[10px] text-brand-grey uppercase tracking-widest italic">No recent payouts found</td></tr>
+                          ) : (
+                            weeklyFinancials?.recentPayouts.map((payout) => (
+                              <tr key={payout.id} className="hover:bg-white/2 transition-colors">
+                                <td className="px-8 py-4 text-[10px] font-medium text-white">{payout.arrivalDate}</td>
+                                <td className="px-8 py-4 text-[10px] font-bold text-white">${payout.amount.toLocaleString()}</td>
+                                <td className="px-8 py-4 text-right">
+                                  <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-1 rounded-full ${
+                                    payout.status === 'paid' ? 'bg-emerald-500/10 text-emerald-500' : 
+                                    payout.status === 'pending' ? 'bg-brand-gold/10 text-brand-gold' : 
+                                    'bg-brand-grey/10 text-brand-grey'
+                                  }`}>
+                                    {payout.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -598,6 +741,13 @@ export default function AdminDashboard() {
                     className="px-5 py-3 text-xs font-bold uppercase tracking-widest border border-white/20 text-brand-grey hover:text-white hover:border-white/40 transition-colors"
                   >
                     Load Template
+                  </button>
+                  <button
+                    onClick={handleSaveAgreement}
+                    disabled={saveAgreementMutation.isPending}
+                    className="px-5 py-3 text-xs font-bold uppercase tracking-widest border border-brand-gold/30 text-brand-gold hover:bg-brand-gold/5 transition-colors flex items-center gap-2"
+                  >
+                    {saveAgreementMutation.isPending ? 'Saving...' : 'Save to Database'}
                   </button>
                   <button
                     onClick={generateAgreement}
@@ -816,6 +966,55 @@ export default function AdminDashboard() {
                     className="flex-1 min-h-[520px] bg-brand-navy border border-white/10 p-4 text-sm text-white font-mono leading-relaxed outline-none resize-none"
                     placeholder="Generate an agreement to preview it here."
                   />
+                </div>
+              </div>
+
+              <div className="mt-12">
+                <h2 className="text-xl font-serif font-bold mb-6 tracking-tight">Saved Agreements History</h2>
+                <div className="bg-brand-navy-light border border-white/10 overflow-hidden shadow-2xl">
+                  <table className="min-w-full divide-y divide-white/10">
+                    <thead className="bg-brand-navy/50">
+                      <tr>
+                        <th className="px-8 py-6 text-left text-[10px] font-bold text-brand-gold uppercase tracking-[0.2em]">Applicant</th>
+                        <th className="px-8 py-6 text-left text-[10px] font-bold text-brand-gold uppercase tracking-[0.2em]">Vehicle</th>
+                        <th className="px-8 py-6 text-left text-[10px] font-bold text-brand-gold uppercase tracking-[0.2em]">Saved On</th>
+                        <th className="px-8 py-6 text-right text-[10px] font-bold text-brand-gold uppercase tracking-[0.2em]">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10">
+                      {isLoadingSavedAgreements ? (
+                        <tr>
+                          <td colSpan={4} className="px-8 py-12 text-center text-brand-grey text-sm">Loading history...</td>
+                        </tr>
+                      ) : savedAgreements.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-8 py-12 text-center text-brand-grey text-sm">No saved agreements found</td>
+                        </tr>
+                      ) : (
+                        savedAgreements.map((agreement) => (
+                          <tr key={agreement.id} className="hover:bg-white/5 transition-colors">
+                            <td className="px-8 py-6 text-sm font-bold text-white">{agreement.applicantName}</td>
+                            <td className="px-8 py-6 text-sm text-brand-grey font-light">{agreement.carName}</td>
+                            <td className="px-8 py-6 text-sm text-brand-grey font-light">{new Date(agreement.createdAt).toLocaleDateString()}</td>
+                            <td className="px-8 py-6 text-right">
+                              <button
+                                onClick={() => {
+                                  setViewingAgreement(agreement);
+                                  setIsViewModalOpen(true);
+                                }}
+                                className="text-brand-gold hover:text-brand-gold-light text-[10px] font-bold uppercase tracking-widest mr-6"
+                              >
+                                View
+                              </button>
+                              <button onClick={() => deleteAgreement(agreement.id)} className="text-brand-grey hover:text-red-500 transition-colors">
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </motion.div>
@@ -1039,6 +1238,58 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* View Agreement Modal */}
+        {isViewModalOpen && viewingAgreement && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-brand-navy-light border border-brand-gold/30 p-10 max-w-4xl w-full shadow-2xl overflow-y-auto max-h-[90vh]"
+            >
+              <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/10">
+                <div>
+                  <h2 className="text-2xl font-serif font-bold text-white tracking-tight">Lease Agreement Record</h2>
+                  <p className="text-[10px] text-brand-gold font-bold uppercase tracking-widest mt-1">
+                    {viewingAgreement.applicantName} • {viewingAgreement.carName} • {new Date(viewingAgreement.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsViewModalOpen(false);
+                    setViewingAgreement(null);
+                  }}
+                  className="text-brand-grey hover:text-white transition-colors"
+                >
+                  <XCircle className="w-8 h-8" />
+                </button>
+              </div>
+
+              <div className="bg-brand-navy border border-white/10 p-8 text-sm text-white font-mono leading-relaxed whitespace-pre-wrap">
+                {viewingAgreement.content}
+              </div>
+
+              <div className="flex justify-end gap-5 mt-12 pt-8 border-t border-white/10">
+                <button
+                  onClick={() => {
+                    const blob = new Blob([viewingAgreement.content], { type: 'text/markdown;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `car-lease-${viewingAgreement.applicantName}-${new Date(viewingAgreement.createdAt).toISOString().slice(0, 10)}.md`;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-10 py-3 text-xs font-bold uppercase tracking-widest transition-all shadow-lg flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" /> Download Markdown
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

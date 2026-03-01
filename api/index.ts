@@ -182,6 +182,12 @@ if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
   console.error('CRITICAL: JWT_SECRET environment variable is missing in production!');
 }
 
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || (process.env.NODE_ENV === 'production' ? '' : 'admin@maplerentals.com.au');
+if (!ADMIN_EMAIL && process.env.NODE_ENV === 'production') {
+  console.error('CRITICAL: ADMIN_EMAIL environment variable is missing in production! Exiting.');
+  process.exit(1);
+}
+
 const authenticateAdmin = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const token = req.cookies.admin_token || req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
@@ -191,6 +197,12 @@ const authenticateAdmin = async (req: express.Request, res: express.Response, ne
     if (error || !data.user) {
       return res.status(401).json({ error: 'Invalid token' });
     }
+
+    // Single-Admin Email Whitelist Check
+    if (data.user.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+      return res.status(403).json({ error: 'Access denied: Unauthorized email' });
+    }
+
     (req as any).admin = data.user;
     next();
   } catch (err) {
@@ -356,14 +368,22 @@ app.post('/api/create-payment-intent', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) {
+  const email = typeof username === 'string' ? username.trim().toLowerCase() : '';
+  const pass = typeof password === 'string' ? password : '';
+
+  if (!email || !pass) {
     return res.status(400).json({ error: 'Username and password are required' });
+  }
+
+  // Single-Admin Email Whitelist Check
+  if (email !== ADMIN_EMAIL.toLowerCase()) {
+    return res.status(403).json({ error: 'Unauthorized: Access restricted to primary admin' });
   }
 
   try {
     const { data, error } = await db.auth.signInWithPassword({
-      email: username,
-      password: password,
+      email,
+      password: pass,
     });
 
     if (error || !data.session) {
@@ -390,6 +410,52 @@ app.post('/api/auth/logout', async (_req, res) => {
 
 app.get('/api/auth/verify', authenticateAdmin, (req, res) => {
   res.json({ user: { username: (req as any).admin.email } });
+});
+
+app.get('/api/financials/weekly', authenticateAdmin, async (_req, res) => {
+  try {
+    // 1. Calculate Projected Weekly Gross (Database)
+    const { data: activeRentals, error: rentalsError } = await db
+      .from('rentals')
+      .select('weeklyPrice')
+      .eq('status', 'Active');
+
+    if (rentalsError) throw rentalsError;
+
+    const projectedGrossWeekly = activeRentals?.reduce((sum, rental) => sum + Number(rental.weeklyPrice), 0) || 0;
+    
+    // 2. Estimate Net (Subtract Platform Fees)
+    // Assuming $1.00/wk account management fee per active rental
+    const estimatedPlatformFees = activeRentals?.length || 0;
+    const projectedNetWeekly = projectedGrossWeekly - estimatedPlatformFees;
+
+    // 3. Fetch Actual Payouts (Stripe) for last 7 days
+    const sevenDaysAgo = Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60);
+    const payouts = await stripe.payouts.list({
+      created: { gte: sevenDaysAgo },
+      limit: 10,
+    });
+
+    const actualPayoutsWeekly = payouts.data
+      .filter(p => p.status === 'paid' || p.status === 'in_transit')
+      .reduce((sum, p) => sum + (p.amount / 100), 0);
+
+    res.json({
+      projectedGrossWeekly,
+      projectedNetWeekly,
+      estimatedPlatformFees,
+      actualPayoutsWeekly,
+      recentPayouts: payouts.data.map(p => ({
+        id: p.id,
+        amount: p.amount / 100,
+        arrivalDate: new Date(p.arrival_date * 1000).toISOString().slice(0, 10),
+        status: p.status,
+      })),
+    });
+  } catch (err) {
+    console.error('Financials fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch weekly financials' });
+  }
 });
 
 app.get('/api/stats', authenticateAdmin, async (_req, res) => {
@@ -743,6 +809,13 @@ const leaseAgreementSchema = z.object({
   fees: z.array(leaseFeeSchema).optional(),
 });
 
+const createLeaseAgreementSchema = z.object({
+  applicationId: z.coerce.number().int().positive(),
+  carId: z.coerce.number().int().positive(),
+  content: z.string().min(1),
+  status: z.string().optional().default('generated'),
+});
+
 app.get('/api/agreements/car-lease/template', (_req, res) => {
   const template = renderCarLeaseAgreement();
   res.type('text/markdown').send(template);
@@ -759,6 +832,93 @@ app.post('/api/agreements/car-lease/render', async (req, res) => {
     }
     console.error('Render agreement error:', error);
     res.status(500).json({ error: 'Failed to render agreement' });
+  }
+});
+
+app.post('/api/agreements', authenticateAdmin, async (req, res) => {
+  try {
+    const data = createLeaseAgreementSchema.parse(req.body);
+    const { data: inserted, error } = await db.from('lease_agreements').insert([
+      {
+        applicationId: data.applicationId,
+        carId: data.carId,
+        content: data.content,
+        status: data.status
+      }
+    ]).select('id').single();
+
+    if (error) throw error;
+    res.status(201).json({ id: String(inserted.id) });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: err.issues });
+    }
+    console.error('Lease agreement creation error:', err);
+    res.status(500).json({ error: 'Failed to save lease agreement' });
+  }
+});
+
+app.get('/api/agreements', authenticateAdmin, async (_req, res) => {
+  try {
+    const { data, error } = await db
+      .from('lease_agreements')
+      .select(`
+        *,
+        applications:applicationId(name),
+        cars:carId(name)
+      `)
+      .order('createdAt', { ascending: false });
+
+    if (error) throw error;
+
+    const formattedAgreements = data.map((item: any) => ({
+      ...item,
+      applicantName: item.applications?.name,
+      carName: item.cars?.name
+    }));
+
+    res.json(formattedAgreements);
+  } catch (error) {
+    console.error('Fetch lease agreements error:', error);
+    res.status(500).json({ error: 'Failed to fetch lease agreements' });
+  }
+});
+
+app.get('/api/agreements/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { data, error } = await db
+      .from('lease_agreements')
+      .select(`
+        *,
+        applications:applicationId(name),
+        cars:carId(name)
+      `)
+      .eq('id', req.params.id)
+      .single();
+
+    if (error || !data) {
+      return res.status(404).json({ error: 'Lease agreement not found' });
+    }
+
+    res.json({
+      ...data,
+      applicantName: data.applications?.name,
+      carName: data.cars?.name
+    });
+  } catch (error) {
+    console.error('Fetch lease agreement error:', error);
+    res.status(500).json({ error: 'Failed to fetch lease agreement' });
+  }
+});
+
+app.delete('/api/agreements/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { error } = await db.from('lease_agreements').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Lease agreement deletion error:', error);
+    res.status(500).json({ error: 'Failed to delete lease agreement' });
   }
 });
 

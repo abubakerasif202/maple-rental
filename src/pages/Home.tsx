@@ -173,7 +173,7 @@ export default function Home() {
             className="mb-20"
           >
             <h2 className="text-4xl md:text-6xl font-serif font-bold tracking-tight text-brand-navy mb-6">Start Driving in 3 Steps</h2>
-            <p className="text-slate-600 text-lg font-light">Drive your weekly returns and conclusive a catching fleet.</p>
+            <p className="text-slate-600 text-lg font-light">Maximize your weekly returns with our exclusive and reliable fleet.</p>
           </motion.div>
 
           <motion.div

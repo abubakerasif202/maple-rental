@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { ShieldCheck, CheckCircle2, User, CreditCard, ChevronRight } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, User, CreditCard, ChevronRight, X, AlertCircle, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,16 +14,24 @@ const fadeIn = {
 
 const applySchema = z.object({
   name: z.string().min(2, 'Full name is required'),
-  phone: z.string().min(10, 'Valid phone number is required'),
-  email: z.string().email('Invalid email address'),
+  phone: z.string().regex(/^(?:\+61|0)4\d{8}$/, 'Valid Australian mobile number required (04XX XXX XXX)'),
+  email: z.string().email('Invalid email address').trim().toLowerCase(),
   address: z.string().min(5, 'Residential address is required'),
   licenseNumber: z.string().min(5, 'License number is required'),
-  licenseExpiry: z.string().min(1, 'License expiry date is required'),
+  licenseExpiry: z.string().min(1, 'License expiry date is required').refine((date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return new Date(date) > today;
+  }, 'License must not be expired'),
   uberStatus: z.enum(['Active', 'Applying', 'Not Yet Registered']),
   experience: z.string().min(1, 'Experience is required'),
   weeklyBudget: z.string().optional(),
-  intendedStartDate: z.string().min(1, 'Start date is required'),
-  licensePhoto: z.string().optional().nullable(),
+  intendedStartDate: z.string().min(1, 'Start date is required').refine((date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return new Date(date) >= today;
+  }, 'Start date must be today or in the future'),
+  licensePhoto: z.string().min(1, 'License photo is required'),
   uberScreenshot: z.string().optional().nullable(),
 });
 
@@ -31,11 +39,15 @@ type ApplyValues = z.infer<typeof applySchema>;
 
 export default function Apply() {
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [licensePreview, setLicensePreview] = useState<string | null>(null);
+  const [uberPreview, setUberPreview] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<ApplyValues>({
     resolver: zodResolver(applySchema),
@@ -48,23 +60,38 @@ export default function Apply() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, field: 'licensePhoto' | 'uberScreenshot') => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert('File size exceeds 5MB limit');
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64 = reader.result as string;
-        setValue(field, base64);
+        setValue(field, base64, { shouldValidate: true });
+        if (field === 'licensePhoto') setLicensePreview(base64);
+        if (field === 'uberScreenshot') setUberPreview(base64);
       };
       reader.readAsDataURL(file);
     }
   };
 
+  const removeFile = (field: 'licensePhoto' | 'uberScreenshot') => {
+    setValue(field, field === 'licensePhoto' ? '' : null, { shouldValidate: true });
+    if (field === 'licensePhoto') setLicensePreview(null);
+    if (field === 'uberScreenshot') setUberPreview(null);
+  };
+
   const onSubmit = async (data: ApplyValues) => {
+    setSubmissionError(null);
     try {
       await api.post('/applications', data);
       setIsSubmitted(true);
       window.scrollTo(0, 0);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting application:', error);
-      alert('Failed to submit application. Please check your connection.');
+      setSubmissionError(error.response?.data?.error || 'Failed to submit application. Please check your connection and try again.');
+      window.scrollTo(0, 0);
     }
   };
 
@@ -131,6 +158,23 @@ export default function Apply() {
           transition={{ delay: 0.4 }}
           className="bg-brand-navy-light border border-white/10 shadow-2xl overflow-hidden"
         >
+          {submissionError && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="bg-red-500/10 border-b border-red-500/50 p-6 flex items-start gap-4"
+            >
+              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+              <div className="flex-grow">
+                <h3 className="text-sm font-bold text-red-500 uppercase tracking-widest mb-1">Submission Error</h3>
+                <p className="text-sm text-red-400/80 font-light">{submissionError}</p>
+              </div>
+              <button onClick={() => setSubmissionError(null)} className="text-red-500/50 hover:text-red-500">
+                <X className="w-5 h-5" />
+              </button>
+            </motion.div>
+          )}
+
           <form onSubmit={handleSubmit(onSubmit)} className="p-8 md:p-12 space-y-12">
 
             <motion.section variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }}>
@@ -202,35 +246,72 @@ export default function Apply() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest block mb-2">Driver License Photo</label>
-                  <label className="flex items-center justify-center w-full h-32 px-4 transition border-2 border-white/10 border-dashed rounded-lg appearance-none cursor-pointer hover:border-brand-gold hover:bg-white/5 bg-brand-navy">
-                    <span className="flex items-center space-x-2">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-brand-grey" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                      <span className="font-medium text-brand-grey text-sm">Upload Photo</span>
-                    </span>
-                    <input type="file" name="file_upload" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'licensePhoto')} />
-                  </label>
+                  {!licensePreview ? (
+                    <label className="flex items-center justify-center w-full h-32 px-4 transition border-2 border-white/10 border-dashed rounded-lg appearance-none cursor-pointer hover:border-brand-gold hover:bg-white/5 bg-brand-navy">
+                      <span className="flex items-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-brand-grey" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <span className="font-medium text-brand-grey text-sm">Upload Photo</span>
+                      </span>
+                      <input type="file" name="file_upload" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'licensePhoto')} />
+                    </label>
+                  ) : (
+                    <div className="relative group">
+                      <img src={licensePreview} alt="License Preview" className="w-full h-32 object-cover rounded-lg border border-brand-gold/30 shadow-lg" />
+                      <button
+                        type="button"
+                        onClick={() => removeFile('licensePhoto')}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                  {errors.licensePhoto && <p className="text-red-500 text-[10px]">{errors.licensePhoto.message}</p>}
                 </div>
                 <div className="space-y-4">
                   <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest block mb-2">Uber Profile Screenshot</label>
-                  <label className="flex items-center justify-center w-full h-32 px-4 transition border-2 border-white/10 border-dashed rounded-lg appearance-none cursor-pointer hover:border-brand-gold hover:bg-white/5 bg-brand-navy">
-                    <span className="flex items-center space-x-2">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-brand-grey" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                      <span className="font-medium text-brand-grey text-sm">Upload Screenshot</span>
-                    </span>
-                    <input type="file" name="file_upload" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'uberScreenshot')} />
-                  </label>
+                  {!uberPreview ? (
+                    <label className="flex items-center justify-center w-full h-32 px-4 transition border-2 border-white/10 border-dashed rounded-lg appearance-none cursor-pointer hover:border-brand-gold hover:bg-white/5 bg-brand-navy">
+                      <span className="flex items-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-brand-grey" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <span className="font-medium text-brand-grey text-sm">Upload Screenshot</span>
+                      </span>
+                      <input type="file" name="file_upload" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'uberScreenshot')} />
+                    </label>
+                  ) : (
+                    <div className="relative group">
+                      <img src={uberPreview} alt="Uber Preview" className="w-full h-32 object-cover rounded-lg border border-brand-gold/30 shadow-lg" />
+                      <button
+                        type="button"
+                        onClick={() => removeFile('uberScreenshot')}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                  {errors.uberScreenshot && <p className="text-red-500 text-[10px]">{errors.uberScreenshot.message}</p>}
                 </div>
               </div>
             </motion.section>
 
             <div className="pt-8">
               <button disabled={isSubmitting} type="submit" className="w-full bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-12 py-5 font-bold text-sm uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-3 disabled:opacity-50">
-                {isSubmitting ? 'Processing...' : 'Submit Application'}
-                {!isSubmitting && <ChevronRight className="w-4 h-4" />}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Processing Application...
+                  </>
+                ) : (
+                  <>
+                    Submit Application
+                    <ChevronRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </div>
           </form>

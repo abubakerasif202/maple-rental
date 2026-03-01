@@ -177,4 +177,53 @@ export const fetchStripeLeaseSettings = async (): Promise<StripeLeaseSettings> =
   return data;
 };
 
+export interface SavedLeaseAgreement {
+  id: number;
+  applicationId: number;
+  carId: number;
+  content: string;
+  status: string;
+  createdAt: string;
+  applicantName?: string;
+  carName?: string;
+}
+
+export const saveLeaseAgreement = async (payload: {
+  applicationId: number;
+  carId: number;
+  content: string;
+  status?: string;
+}): Promise<{ id: string }> => {
+  const { data } = await api.post('/agreements', payload);
+  return data;
+};
+
+export const fetchSavedLeaseAgreements = async (): Promise<SavedLeaseAgreement[]> => {
+  const { data } = await api.get('/agreements');
+  return data;
+};
+
+export const deleteSavedLeaseAgreement = async (id: number): Promise<{ success: boolean }> => {
+  const { data } = await api.delete(`/agreements/${id}`);
+  return data;
+};
+
+export interface WeeklyFinancials {
+  projectedGrossWeekly: number;
+  projectedNetWeekly: number;
+  estimatedPlatformFees: number;
+  actualPayoutsWeekly: number;
+  recentPayouts: Array<{
+    id: string;
+    amount: number;
+    arrivalDate: string;
+    status: string;
+  }>;
+}
+
+export const fetchWeeklyFinancials = async (): Promise<WeeklyFinancials> => {
+  const { data } = await api.get('/financials/weekly');
+  return data;
+};
+
 export default api;

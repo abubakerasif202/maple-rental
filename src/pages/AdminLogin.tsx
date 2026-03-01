@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import api from '../lib/api';
 
 export default function AdminLogin() {
@@ -10,12 +11,17 @@ export default function AdminLogin() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     try {
       // The server sets the 'admin_token' as an HTTP-only cookie
-      await api.post('/auth/login', { username, password });
+      await api.post('/auth/login', { username: username.trim(), password });
       navigate('/admin/dashboard');
     } catch (err) {
-      setError('Invalid credentials');
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.error || 'Login failed');
+      } else {
+        setError('Login failed');
+      }
     }
   };
 
@@ -27,10 +33,10 @@ export default function AdminLogin() {
           {error && <p className="text-red-500 text-sm text-center font-bold uppercase tracking-widest">{error}</p>}
           <div className="space-y-4">
             <input
-              type="text"
+              type="email"
               required
               className="appearance-none rounded-md relative block w-full px-4 py-3 border border-white/10 bg-brand-navy text-white placeholder-brand-grey/50 focus:outline-none focus:border-brand-gold focus:z-10 sm:text-sm font-light transition-colors"
-              placeholder="Username"
+              placeholder="Admin Email"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
