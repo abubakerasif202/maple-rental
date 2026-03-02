@@ -22,7 +22,7 @@ export interface Application {
   intendedStartDate: string;
   licensePhoto?: string;
   uberScreenshot?: string;
-  status: 'Pending' | 'Approved' | 'Rejected';
+  status: 'Pending' | 'Paid' | 'Approved' | 'Rejected';
   createdAt: string;
 }
 

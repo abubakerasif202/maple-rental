@@ -573,7 +573,9 @@ export default function AdminDashboard() {
                             <span className="text-xs text-brand-grey font-light">{app.weeklyBudget}</span>
                           </td>
                           <td className="px-8 py-6">
-                            <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full ${app.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500' :
+                            <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full ${
+                              app.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500' :
+                              app.status === 'Paid' ? 'bg-blue-500/10 text-blue-500' :
                               app.status === 'Rejected' ? 'bg-red-500/10 text-red-500' :
                                 'bg-brand-gold/10 text-brand-gold'
                               }`}>
@@ -602,6 +604,7 @@ export default function AdminDashboard() {
                               onChange={(e) => updateApplicationStatus(app.id, e.target.value)}
                             >
                               <option value="Pending">Pending</option>
+                              <option value="Paid">Paid</option>
                               <option value="Approved">Approved</option>
                               <option value="Rejected">Rejected</option>
                             </select>

@@ -62,15 +62,15 @@ export default function Success() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </div>
-              <h2 className="text-3xl font-serif font-bold text-white mb-4 tracking-tight">Payment Failed</h2>
+              <h2 className="text-3xl font-serif font-bold text-white mb-4 tracking-tight">Payment Issue</h2>
               <p className="text-brand-grey font-light leading-relaxed mb-10">
-                We couldn't verify your payment. Please try again or contact support.
+                We couldn't verify your payment. Please try again or contact support if the amount has been deducted.
               </p>
               <Link
-                to="/cars"
+                to="/apply"
                 className="w-full flex justify-center items-center py-4 px-4 bg-brand-gold text-brand-charcoal font-bold text-sm uppercase tracking-widest hover:bg-white transition-colors shadow-[0_0_20px_rgba(198,169,79,0.1)]"
               >
-                Browse Fleet
+                Return to Application
               </Link>
             </>
           )}

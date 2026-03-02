@@ -35,7 +35,7 @@ const applicationSchema = z.object({
   licensePhoto: z.string().optional().nullable(),
   uberScreenshot: z.string().optional().nullable(),
 });
-const applicationStatusEnum = z.enum(['Pending', 'Approved', 'Rejected']);
+const applicationStatusEnum = z.enum(['Pending', 'Paid', 'Approved', 'Rejected']);
 
 const payoutIntervalEnum = z.enum(['daily', 'weekly', 'monthly']);
 const countrySchema = z
@@ -190,7 +190,10 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (reque
             
             console.log(`📊 Database: Created rental for subscription ${subscriptionId}`);
 
-            // 5. Send Confirmation Email to Driver
+            // 5. Update Application status to Approved
+            await db.from('applications').update({ status: 'Approved' }).eq('id', application_id);
+
+            // 6. Send Confirmation Email to Driver
             if (process.env.RESEND_API_KEY) {
               const { data: appData } = await db.from('applications').select('name, email').eq('id', application_id).single();
               const { data: carData } = await db.from('cars').select('name').eq('id', car_id).single();
@@ -223,6 +226,17 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (reque
                 }
               }
             }
+          }
+        } else if (application_id) {
+          console.log(`✅ Webhook: Payment succeeded for application ${application_id} (No car assigned yet)`);
+          
+          // Update application status to 'Paid'
+          const { error: updateError } = await db.from('applications').update({ status: 'Paid' }).eq('id', application_id);
+          
+          if (updateError) {
+            console.error(`❌ Webhook: Failed to update application ${application_id} to Paid status:`, updateError);
+          } else {
+            console.log(`📊 Database: Updated application ${application_id} status to 'Paid'`);
           }
         }
         break;
