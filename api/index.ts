@@ -303,7 +303,7 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (reque
   response.status(200).send('received');
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 let dbInitialized: Promise<void> | null = null;
 const ensureDB = async () => {

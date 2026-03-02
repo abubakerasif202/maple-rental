@@ -37,7 +37,7 @@ const applySchema = z.object({
   }, 'Start date must be today or in the future'),
   licensePhoto: z.string().min(1, 'License photo is required'),
   uberScreenshot: z.string().optional().nullable(),
-  selectedAmount: z.number().min(1, 'Please select an agreement amount'),
+  selectedAmount: z.coerce.number().min(1, 'Please select an agreement amount'),
 });
 
 type ApplyValues = z.infer<typeof applySchema>;
@@ -163,7 +163,7 @@ export default function Apply() {
     try {
       // First, create the application to get an ID
       const appRes = await api.post('/applications', data);
-      const applicationId = appRes.data.id;
+      const applicationId = Number(appRes.data.applicationId);
 
       // Then, create subscription session
       const subRes = await api.post('/create-subscription', {
@@ -261,6 +261,20 @@ export default function Apply() {
               <button onClick={() => setSubmissionError(null)} className="text-red-500/50 hover:text-red-500">
                 <X className="w-5 h-5" />
               </button>
+            </motion.div>
+          )}
+
+          {Object.keys(errors).length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="bg-brand-gold/10 border-b border-brand-gold/50 p-6 flex items-start gap-4"
+            >
+              <AlertCircle className="w-5 h-5 text-brand-gold shrink-0 mt-0.5" />
+              <div className="flex-grow">
+                <h3 className="text-sm font-bold text-brand-gold uppercase tracking-widest mb-1">Incomplete Application</h3>
+                <p className="text-sm text-brand-gold/80 font-light">Please review the form. Some required fields are missing or incorrectly formatted (Check phone number and document uploads).</p>
+              </div>
             </motion.div>
           )}
 
