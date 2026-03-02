@@ -57,7 +57,7 @@ export default function Cars() {
                     </div>
                   </div>
                   <div className="mt-auto">
-                    <Link to={`/car/${car.id}`} className={`flex items-center justify-center gap-2 w-full text-center font-bold py-5 transition-all duration-300 uppercase tracking-widest text-xs ${car.status === 'Available' ? 'bg-brand-gold hover:bg-brand-gold-light text-brand-navy shadow-lg' : 'bg-white/5 text-brand-grey/40 cursor-not-allowed border border-white/5'}`} onClick={(e) => car.status !== 'Available' && e.preventDefault()}>
+                    <Link to={`/cars/${car.id}`} className={`flex items-center justify-center gap-2 w-full text-center font-bold py-5 transition-all duration-300 uppercase tracking-widest text-xs ${car.status === 'Available' ? 'bg-brand-gold hover:bg-brand-gold-light text-brand-navy shadow-lg' : 'bg-white/5 text-brand-grey/40 cursor-not-allowed border border-white/5'}`} onClick={(e) => car.status !== 'Available' && e.preventDefault()}>
                       {car.status === 'Available' ? <>View Details <ArrowRight className="w-4 h-4" /></> : 'Currently Rented'}
                     </Link>
                   </div>

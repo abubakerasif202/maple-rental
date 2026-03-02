@@ -56,12 +56,6 @@ export default function Home() {
                 >
                   Apply Now <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </Link>
-                <Link
-                  to="/cars"
-                  className="bg-white border border-brand-gold text-brand-navy px-10 py-4 font-bold text-sm uppercase tracking-widest transition-all flex items-center justify-center hover:bg-brand-gold/5"
-                >
-                  View Fleet
-                </Link>
               </motion.div>
             </motion.div>
 
@@ -220,12 +214,6 @@ export default function Home() {
                   className="w-full sm:w-auto px-12 py-5 bg-brand-gold text-brand-navy font-bold tracking-widest uppercase text-sm hover:bg-brand-gold-light transition-all duration-300 shadow-xl"
                 >
                   Apply Now
-                </Link>
-                <Link
-                  to="/cars"
-                  className="w-full sm:w-auto px-12 py-5 border border-white/20 text-white font-bold tracking-widest uppercase text-sm hover:bg-white/5 transition-all duration-300"
-                >
-                  View Fleet
                 </Link>
               </div>
             </motion.div>

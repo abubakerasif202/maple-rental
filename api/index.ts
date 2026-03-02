@@ -35,6 +35,7 @@ const applicationSchema = z.object({
   licensePhoto: z.string().optional().nullable(),
   uberScreenshot: z.string().optional().nullable(),
 });
+const applicationStatusEnum = z.enum(['Pending', 'Approved', 'Rejected']);
 
 const payoutIntervalEnum = z.enum(['daily', 'weekly', 'monthly']);
 const countrySchema = z
@@ -52,8 +53,8 @@ const merchantSchema = z.object({
 
 const SAAS_FRONTEND_BASE =
   process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
-const SAAS_ONBOARDING_REFRESH_URL = `${SAAS_FRONTEND_BASE}/platform/onboarding?status=refresh`;
-const SAAS_ONBOARDING_RETURN_URL = `${SAAS_FRONTEND_BASE}/platform/onboarding?status=complete`;
+const SAAS_ONBOARDING_REFRESH_URL = `${SAAS_FRONTEND_BASE}/admin/dashboard?onboardingStatus=refresh`;
+const SAAS_ONBOARDING_RETURN_URL = `${SAAS_FRONTEND_BASE}/admin/dashboard?onboardingStatus=complete`;
 
 const toOrigin = (value?: string) => {
   if (!value) return null;
@@ -281,10 +282,11 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (reque
     }
   } catch (err) {
     console.error(`Error processing webhook event ${event.type}:`, err);
+    return response.status(500).send('Webhook processing failed');
   }
 
   // Return a 200 response to acknowledge receipt of the event
-  response.send();
+  response.status(200).send('received');
 });
 
 app.use(express.json());
@@ -343,29 +345,37 @@ const authenticateAdmin = async (req: express.Request, res: express.Response, ne
 
 app.post('/api/create-subscription', async (req, res) => {
   const payload = z.object({
-    carId: z.coerce.number().int().positive(),
+    carId: z.coerce.number().int().positive().optional(),
     applicationId: z.coerce.number().int().positive().optional(),
+    customWeeklyPrice: z.coerce.number().optional(),
+    customBond: z.coerce.number().optional(),
   });
 
   try {
-    const { carId, applicationId } = payload.parse(req.body);
-    const { data: car, error: carError } = await db
-      .from('cars')
-      .select('id, name, weeklyPrice, bond')
-      .eq('id', carId)
-      .single();
+    const { carId, applicationId, customWeeklyPrice, customBond } = payload.parse(req.body);
+    
+    let carName = 'Car Lease';
+    let weeklyRent = customWeeklyPrice || 0;
+    let bond = customBond || 0;
 
-    if (carError || !car) {
-      return res.status(404).json({ error: 'Car not found' });
+    if (carId) {
+      const { data: car, error: carError } = await db
+        .from('cars')
+        .select('id, name, weeklyPrice, bond, status')
+        .eq('id', carId)
+        .single();
+
+      if (carError || !car) {
+        return res.status(404).json({ error: 'Car not found' });
+      }
+      
+      carName = car.name;
+      if (!customWeeklyPrice) weeklyRent = Number(car.weeklyPrice);
+      if (!customBond) bond = Number(car.bond);
     }
 
-    const weeklyRent = Number(car.weeklyPrice);
-    const bond = Number(car.bond);
-    if (!Number.isFinite(weeklyRent) || weeklyRent <= 0) {
-      return res.status(400).json({ error: 'Invalid pricing configuration for selected car' });
-    }
-    if (!Number.isFinite(bond) || bond < 0) {
-      return res.status(400).json({ error: 'Invalid bond configuration for selected car' });
+    if (!weeklyRent || weeklyRent <= 0) {
+      return res.status(400).json({ error: 'Invalid weekly price configuration' });
     }
 
     const recurringAmount = weeklyRent + LEASE_STRIPE_SETTINGS.fees.accountManagementWeekly;
@@ -374,7 +384,7 @@ app.post('/api/create-subscription', async (req, res) => {
     const upfrontItems = [
       {
         amountCents: Math.round(bond * 100),
-        description: 'Security Bond',
+        description: 'Security Bond (Refundable)',
       },
       {
         amountCents: Math.round(weeklyRent * 100),
@@ -395,7 +405,7 @@ app.post('/api/create-subscription', async (req, res) => {
     const customer = await stripe.customers.create({
       description: 'Maple Rental Subscription Customer',
       metadata: {
-        car_id: String(carId),
+        car_id: carId ? String(carId) : '',
         application_id: applicationId ? String(applicationId) : '',
         lease_minimum_weeks: String(LEASE_STRIPE_SETTINGS.minimumRentalWeeks),
         insurance_coverage_region: LEASE_STRIPE_SETTINGS.insuranceCoverageRegion,
@@ -403,7 +413,7 @@ app.post('/api/create-subscription', async (req, res) => {
     });
 
     const product = await stripe.products.create({
-      name: `${car.name || 'Car Rental'} Lease`,
+      name: `${carName} Subscription`,
     });
 
     const price = await stripe.prices.create({
@@ -428,7 +438,7 @@ app.post('/api/create-subscription', async (req, res) => {
       payment_behavior: 'default_incomplete',
       payment_settings: { save_default_payment_method: 'on_subscription' },
       metadata: {
-        car_id: String(carId),
+        car_id: carId ? String(carId) : '',
         application_id: applicationId ? String(applicationId) : '',
         lease_minimum_weeks: String(LEASE_STRIPE_SETTINGS.minimumRentalWeeks),
         insurance_coverage_region: LEASE_STRIPE_SETTINGS.insuranceCoverageRegion,
@@ -445,14 +455,14 @@ app.post('/api/create-subscription', async (req, res) => {
       paymentIntentId: paymentIntent.id,
       billingBreakdown: {
         currency: LEASE_STRIPE_SETTINGS.currency.toUpperCase(),
-        upfrontDue: Number((upfrontDueCents / 100).toFixed(2)),
-        recurringWeekly: Number((recurringAmountCents / 100).toFixed(2)),
+        upfrontDue: upfrontDueCents / 100,
+        recurringWeekly: recurringAmountCents / 100,
         minimumRentalWeeks: LEASE_STRIPE_SETTINGS.minimumRentalWeeks,
-      },
+      }
     });
-  } catch (error: any) {
-    console.error('Subscription intent error:', error);
-    res.status(500).json({ error: error.message });
+  } catch (error) {
+    console.error('Stripe Subscription Error:', error);
+    res.status(500).json({ error: 'Failed to initiate payment session' });
   }
 });
 
@@ -756,11 +766,23 @@ app.post('/api/applications', async (req, res) => {
     };
 
     if (data.licensePhoto) {
+      if (!data.licensePhoto.startsWith('data:')) {
+        return res.status(400).json({ error: 'License photo must be a valid image data URL' });
+      }
       licensePhotoUrl = await uploadImage(data.licensePhoto, 'license');
+      if (!licensePhotoUrl) {
+        return res.status(500).json({ error: 'Failed to upload license photo' });
+      }
     }
 
     if (data.uberScreenshot) {
+      if (!data.uberScreenshot.startsWith('data:')) {
+        return res.status(400).json({ error: 'Uber screenshot must be a valid image data URL' });
+      }
       uberScreenshotUrl = await uploadImage(data.uberScreenshot, 'uber');
+      if (!uberScreenshotUrl) {
+        return res.status(500).json({ error: 'Failed to upload uber screenshot' });
+      }
     }
 
     const { data: inserted, error } = await db.from('applications').insert([
@@ -775,8 +797,8 @@ app.post('/api/applications', async (req, res) => {
         address: data.address,
         weeklyBudget: data.weeklyBudget || null,
         intendedStartDate: data.intendedStartDate,
-        licensePhoto: licensePhotoUrl || data.licensePhoto || null,
-        uberScreenshot: uberScreenshotUrl || data.uberScreenshot || null,
+        licensePhoto: licensePhotoUrl,
+        uberScreenshot: uberScreenshotUrl,
       }
     ]).select('id').single();
 
@@ -846,16 +868,15 @@ app.post('/api/applications', async (req, res) => {
 });
 
 app.put('/api/applications/:id/status', authenticateAdmin, async (req, res) => {
-  const { status } = req.body;
-  if (!status) {
-    return res.status(400).json({ error: 'Status is required' });
-  }
-
   try {
+    const { status } = z.object({ status: applicationStatusEnum }).parse(req.body ?? {});
     const { error } = await db.from('applications').update({ status }).eq('id', req.params.id);
     if (error) throw error;
     res.json({ success: true });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
+    }
     console.error('Application update error:', error);
     res.status(500).json({ error: 'Failed to update application status' });
   }

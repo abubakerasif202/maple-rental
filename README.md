@@ -23,5 +23,5 @@ View your app in AI Studio: https://ai.studio/apps/edb4d6f6-9a94-4e5b-91f2-ccb6d
 
 1. Ensure `APP_URL` points to the URL that serves the client (for example `http://localhost:5173`) so the backend can build return/refresh URLs.
 2. Start the local server: `npm run dev`.
-3. Navigate to `/platform` to exercise the Accounts v2 onboarding flow, create a Connect Express merchant, and capture the onboarding link (refresh it if it expires).
+3. Navigate to `/admin/dashboard` to exercise the Accounts v2 onboarding flow, create a Connect Express merchant, and capture the onboarding link (refresh it if it expires).
 4. Use the page content to contrast Stripe-owned versus buy-rate monetization and tune the `payoutInterval` before moving to production.
