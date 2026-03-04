@@ -12,30 +12,155 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 // Validation Schemas
-const carSchema = z.object({
-  name: z.string().min(1),
-  modelYear: z.number().int().min(1900).max(new Date().getFullYear() + 1),
-  weeklyPrice: z.number().positive(),
-  bond: z.number().nonnegative(),
-  status: z.enum(['Available', 'Rented', 'Maintenance']),
-  image: z.string().url(),
+const modelYearSchema = z.number().int().min(1900).max(new Date().getFullYear() + 1);
+const weeklyPriceSchema = z.number().positive();
+
+const carSchema = z
+  .object({
+    name: z.string().min(1),
+    modelYear: modelYearSchema.optional(),
+    model_year: modelYearSchema.optional(),
+    weeklyPrice: weeklyPriceSchema.optional(),
+    weekly_price: weeklyPriceSchema.optional(),
+    bond: z.number().nonnegative(),
+    status: z.enum(['Available', 'Rented', 'Maintenance']),
+    image: z.string().url(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.model_year == null && value.modelYear == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['modelYear'],
+        message: 'modelYear is required',
+      });
+    }
+    if (value.weekly_price == null && value.weeklyPrice == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['weeklyPrice'],
+        message: 'weeklyPrice is required',
+      });
+    }
+  })
+  .transform((value) => ({
+    name: value.name,
+    model_year: value.model_year ?? value.modelYear!,
+    weekly_price: value.weekly_price ?? value.weeklyPrice!,
+    bond: value.bond,
+    status: value.status,
+    image: value.image,
+  }));
+
+const applicationSchema = z
+  .object({
+    name: z.string().min(2),
+    phone: z.string().min(10),
+    email: z.string().email(),
+    licenseNumber: z.string().min(5).optional(),
+    license_number: z.string().min(5).optional(),
+    licenseExpiry: z.string().optional(),
+    license_expiry: z.string().optional(),
+    uberStatus: z.enum(['Active', 'Applying', 'Not Yet Registered']).optional(),
+    uber_status: z.enum(['Active', 'Applying', 'Not Yet Registered']).optional(),
+    experience: z.string().min(1),
+    address: z.string().min(5),
+    weeklyBudget: z.string().optional(),
+    weekly_budget: z.string().optional(),
+    intendedStartDate: z.string().optional(),
+    intended_start_date: z.string().optional(),
+    licensePhoto: z.string().optional().nullable(),
+    license_photo: z.string().optional().nullable(),
+    uberScreenshot: z.string().optional().nullable(),
+    uber_screenshot: z.string().optional().nullable(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.license_number && !value.licenseNumber) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['licenseNumber'],
+        message: 'License number is required',
+      });
+    }
+    if (!value.license_expiry && !value.licenseExpiry) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['licenseExpiry'],
+        message: 'License expiry is required',
+      });
+    }
+    if (!value.uber_status && !value.uberStatus) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['uberStatus'],
+        message: 'Uber status is required',
+      });
+    }
+    if (!value.intended_start_date && !value.intendedStartDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['intendedStartDate'],
+        message: 'Intended start date is required',
+      });
+    }
+  })
+  .transform((value) => ({
+    name: value.name,
+    phone: value.phone,
+    email: value.email,
+    license_number: value.license_number ?? value.licenseNumber!,
+    license_expiry: value.license_expiry ?? value.licenseExpiry!,
+    uber_status: value.uber_status ?? value.uberStatus!,
+    experience: value.experience,
+    address: value.address,
+    weekly_budget: value.weekly_budget ?? value.weeklyBudget,
+    intended_start_date: value.intended_start_date ?? value.intendedStartDate!,
+    license_photo: value.license_photo ?? value.licensePhoto,
+    uber_screenshot: value.uber_screenshot ?? value.uberScreenshot,
+  }));
+const applicationStatusEnum = z.enum(['Pending', 'Paid', 'Approved', 'Rejected']);
+
+const mapCarToApi = (car: any) => ({
+  ...car,
+  modelYear: car.model_year,
+  weeklyPrice: Number(car.weekly_price),
 });
 
-const applicationSchema = z.object({
-  name: z.string().min(2),
-  phone: z.string().min(10),
-  email: z.string().email(),
-  licenseNumber: z.string().min(5),
-  licenseExpiry: z.string(),
-  uberStatus: z.enum(['Active', 'Applying', 'Not Yet Registered']),
-  experience: z.string().min(1),
-  address: z.string().min(5),
-  weeklyBudget: z.string().optional(),
-  intendedStartDate: z.string(),
-  licensePhoto: z.string().optional().nullable(),
-  uberScreenshot: z.string().optional().nullable(),
+const mapApplicationToApi = (application: any) => ({
+  ...application,
+  licenseNumber: application.license_number,
+  licenseExpiry: application.license_expiry,
+  uberStatus: application.uber_status,
+  weeklyBudget: application.weekly_budget,
+  intendedStartDate: application.intended_start_date,
+  licensePhoto: application.license_photo,
+  uberScreenshot: application.uber_screenshot,
+  createdAt: application.created_at,
 });
-const applicationStatusEnum = z.enum(['Pending', 'Paid', 'Approved', 'Rejected']);
+
+const mapRentalToApi = (rental: any) => ({
+  ...rental,
+  applicationId: rental.application_id,
+  carId: rental.car_id,
+  startDate: rental.start_date,
+  endDate: rental.end_date,
+  weeklyPrice: Number(rental.weekly_price),
+  createdAt: rental.created_at,
+});
+
+const mapAgreementToApi = (agreement: any) => ({
+  ...agreement,
+  applicationId: agreement.application_id,
+  carId: agreement.car_id,
+  createdAt: agreement.created_at,
+});
+
+const mapMerchantToApi = (merchant: any) => ({
+  ...merchant,
+  stripeAccountId: merchant.stripe_account_id,
+  payoutInterval: merchant.payout_interval,
+  onboardingStatus: merchant.onboarding_status,
+  createdAt: merchant.created_at,
+});
 
 const payoutIntervalEnum = z.enum(['daily', 'weekly', 'monthly']);
 const countrySchema = z
@@ -144,8 +269,8 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (reque
 
         if (account.details_submitted) {
           await db.from('merchants')
-            .update({ onboardingStatus: 'active' })
-            .eq('stripeAccountId', account.id);
+            .update({ onboarding_status: 'active' })
+            .eq('stripe_account_id', account.id);
         }
         break;
       }
@@ -167,22 +292,22 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (reque
           const { data: existingRental } = await db
             .from('rentals')
             .select('id')
-            .eq('stripeSubscriptionId', subscriptionId)
+            .eq('stripe_subscription_id', subscriptionId)
             .single();
 
           if (!existingRental) {
             // 2. Fetch car details for the rental record
-            const { data: car } = await db.from('cars').select('weeklyPrice').eq('id', car_id).single();
+            const { data: car } = await db.from('cars').select('weekly_price').eq('id', car_id).single();
 
             // 3. Create Rental record
             await db.from('rentals').insert([{
-              carId: Number(car_id),
-              applicationId: Number(application_id),
-              startDate: new Date().toISOString().split('T')[0],
-              weeklyPrice: car?.weeklyPrice || 0,
+              car_id: Number(car_id),
+              application_id: Number(application_id),
+              start_date: new Date().toISOString().split('T')[0],
+              weekly_price: car?.weekly_price || 0,
               status: 'Active',
-              stripeSubscriptionId: subscriptionId,
-              stripeCustomerId: customerId
+              stripe_subscription_id: subscriptionId,
+              stripe_customer_id: customerId
             }]);
 
             // 4. Update Car status
@@ -250,7 +375,7 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (reque
         if (subscriptionId) {
           await db.from('rentals')
             .update({ status: 'Overdue' })
-            .eq('stripeSubscriptionId', subscriptionId);
+            .eq('stripe_subscription_id', subscriptionId);
         }
         break;
       }
@@ -263,8 +388,8 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (reque
 
         // 1. Update Rental status to 'Completed' or 'Cancelled'
         await db.from('rentals')
-          .update({ status: 'Completed', endDate: new Date().toISOString().split('T')[0] })
-          .eq('stripeSubscriptionId', subscriptionId);
+          .update({ status: 'Completed', end_date: new Date().toISOString().split('T')[0] })
+          .eq('stripe_subscription_id', subscriptionId);
 
         // 2. Update Car status back to 'Available'
         if (car_id) {
@@ -283,11 +408,11 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (reque
         if (status === 'past_due' || status === 'unpaid') {
           await db.from('rentals')
             .update({ status: 'Overdue' })
-            .eq('stripeSubscriptionId', subscriptionId);
+            .eq('stripe_subscription_id', subscriptionId);
         } else if (status === 'active') {
           await db.from('rentals')
             .update({ status: 'Active' })
-            .eq('stripeSubscriptionId', subscriptionId);
+            .eq('stripe_subscription_id', subscriptionId);
         }
         break;
       }
@@ -375,7 +500,7 @@ app.post('/api/create-subscription', async (req, res) => {
     if (carId) {
       const { data: car, error: carError } = await db
         .from('cars')
-        .select('id, name, weeklyPrice, bond, status')
+        .select('id, name, weekly_price, bond, status')
         .eq('id', carId)
         .single();
 
@@ -384,7 +509,7 @@ app.post('/api/create-subscription', async (req, res) => {
       }
       
       carName = car.name;
-      if (!customWeeklyPrice) weeklyRent = Number(car.weeklyPrice);
+      if (!customWeeklyPrice) weeklyRent = Number(car.weekly_price);
       if (!customBond) bond = Number(car.bond);
     }
 
@@ -500,7 +625,7 @@ app.post('/api/create-payment-intent', async (req, res) => {
     const { bookingId, currency } = payload.parse(req.body);
     const { data: booking, error: bookingError } = await db
       .from('bookings')
-      .select('id, totalAmount')
+      .select('id, total_amount')
       .eq('id', bookingId)
       .single();
 
@@ -508,7 +633,7 @@ app.post('/api/create-payment-intent', async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    const amount = Number(booking.totalAmount);
+    const amount = Number(booking.total_amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({ error: 'Invalid booking amount' });
     }
@@ -576,12 +701,12 @@ app.get('/api/financials/weekly', authenticateAdmin, async (_req, res) => {
     // 1. Calculate Projected Weekly Gross (Database)
     const { data: activeRentals, error: rentalsError } = await db
       .from('rentals')
-      .select('weeklyPrice')
+      .select('weekly_price')
       .eq('status', 'Active');
 
     if (rentalsError) throw rentalsError;
 
-    const projectedGrossWeekly = activeRentals?.reduce((sum, rental) => sum + Number(rental.weeklyPrice), 0) || 0;
+    const projectedGrossWeekly = activeRentals?.reduce((sum, rental) => sum + Number(rental.weekly_price), 0) || 0;
     
     // 2. Estimate Net (Subtract Platform Fees)
     // Assuming $1.00/wk account management fee per active rental
@@ -622,12 +747,12 @@ app.get('/api/stats', authenticateAdmin, async (_req, res) => {
     const [applications, rentalsActive, incomeRows] = await Promise.all([
       db.from('applications').select('*', { count: 'exact', head: true }),
       db.from('rentals').select('*', { count: 'exact', head: true }).eq('status', 'Active'),
-      db.from('rentals').select('weeklyPrice').eq('status', 'Active'),
+      db.from('rentals').select('weekly_price').eq('status', 'Active'),
     ]);
 
     const applicationsCount = applications.count || 0;
     const activeRentalsCount = rentalsActive.count || 0;
-    const totalWeeklyIncome = incomeRows.data?.reduce((sum, row) => sum + Number(row.weeklyPrice), 0) || 0;
+    const totalWeeklyIncome = incomeRows.data?.reduce((sum, row) => sum + Number(row.weekly_price), 0) || 0;
 
     res.json({
       totalApplications: applicationsCount,
@@ -646,7 +771,7 @@ app.get('/api/cars', async (_req, res) => {
     console.error('Fetch cars error', error);
     return res.status(500).json({ error: 'Failed to fetch cars' });
   }
-  res.json(data || []);
+  res.json((data || []).map(mapCarToApi));
 });
 
 app.get('/api/cars/:id', async (req, res) => {
@@ -655,7 +780,7 @@ app.get('/api/cars/:id', async (req, res) => {
   if (error || !data) {
     return res.status(404).json({ error: 'Car not found' });
   }
-  res.json(data);
+  res.json(mapCarToApi(data));
 });
 
 app.post('/api/cars', authenticateAdmin, async (req, res) => {
@@ -664,8 +789,8 @@ app.post('/api/cars', authenticateAdmin, async (req, res) => {
     const { data: inserted, error } = await db.from('cars').insert([
       {
         name: data.name,
-        modelYear: data.modelYear,
-        weeklyPrice: data.weeklyPrice,
+        model_year: data.model_year,
+        weekly_price: data.weekly_price,
         bond: data.bond,
         status: data.status,
         image: data.image
@@ -688,8 +813,8 @@ app.put('/api/cars/:id', authenticateAdmin, async (req, res) => {
     const data = carSchema.parse(req.body);
     const { error } = await db.from('cars').update({
       name: data.name,
-      modelYear: data.modelYear,
-      weeklyPrice: data.weeklyPrice,
+      model_year: data.model_year,
+      weekly_price: data.weekly_price,
       bond: data.bond,
       status: data.status,
       image: data.image
@@ -723,16 +848,16 @@ app.get('/api/rentals', authenticateAdmin, async (_req, res) => {
       .from('rentals')
       .select(`
         *,
-        applications:applicationId(name),
-        cars:carId(name)
+        applications:application_id(name),
+        cars:car_id(name)
       `)
-      .order('createdAt', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) throw error;
 
     // Map the relationships to match previous API response
     const formattedRentals = data.map((rental: any) => ({
-      ...rental,
+      ...mapRentalToApi(rental),
       applicantName: rental.applications?.name,
       carName: rental.cars?.name
     }));
@@ -745,11 +870,11 @@ app.get('/api/rentals', authenticateAdmin, async (_req, res) => {
 });
 
 app.get('/api/applications', authenticateAdmin, async (_req, res) => {
-  const { data, error } = await db.from('applications').select('*').order('createdAt', { ascending: false });
+  const { data, error } = await db.from('applications').select('*').order('created_at', { ascending: false });
   if (error) {
     return res.status(500).json({ error: 'Failed to fetch applications' });
   }
-  res.json(data || []);
+  res.json((data || []).map(mapApplicationToApi));
 });
 
 app.post('/api/applications', async (req, res) => {
@@ -779,21 +904,21 @@ app.post('/api/applications', async (req, res) => {
       return publicUrlData.publicUrl;
     };
 
-    if (data.licensePhoto) {
-      if (!data.licensePhoto.startsWith('data:')) {
+    if (data.license_photo) {
+      if (!data.license_photo.startsWith('data:')) {
         return res.status(400).json({ error: 'License photo must be a valid image data URL' });
       }
-      licensePhotoUrl = await uploadImage(data.licensePhoto, 'license');
+      licensePhotoUrl = await uploadImage(data.license_photo, 'license');
       if (!licensePhotoUrl) {
         return res.status(500).json({ error: 'Failed to upload license photo' });
       }
     }
 
-    if (data.uberScreenshot) {
-      if (!data.uberScreenshot.startsWith('data:')) {
+    if (data.uber_screenshot) {
+      if (!data.uber_screenshot.startsWith('data:')) {
         return res.status(400).json({ error: 'Uber screenshot must be a valid image data URL' });
       }
-      uberScreenshotUrl = await uploadImage(data.uberScreenshot, 'uber');
+      uberScreenshotUrl = await uploadImage(data.uber_screenshot, 'uber');
       if (!uberScreenshotUrl) {
         return res.status(500).json({ error: 'Failed to upload uber screenshot' });
       }
@@ -804,15 +929,15 @@ app.post('/api/applications', async (req, res) => {
         name: data.name,
         phone: data.phone,
         email: data.email,
-        licenseNumber: data.licenseNumber,
-        licenseExpiry: data.licenseExpiry,
-        uberStatus: data.uberStatus,
+        license_number: data.license_number,
+        license_expiry: data.license_expiry,
+        uber_status: data.uber_status,
         experience: data.experience,
         address: data.address,
-        weeklyBudget: data.weeklyBudget || null,
-        intendedStartDate: data.intendedStartDate,
-        licensePhoto: licensePhotoUrl,
-        uberScreenshot: uberScreenshotUrl,
+        weekly_budget: data.weekly_budget || null,
+        intended_start_date: data.intended_start_date,
+        license_photo: licensePhotoUrl,
+        uber_screenshot: uberScreenshotUrl,
       }
     ]).select('id').single();
 
@@ -857,9 +982,9 @@ app.post('/api/applications', async (req, res) => {
                 <li><strong>Phone:</strong> ${data.phone}</li>
                 <li><strong>Email:</strong> ${data.email}</li>
                 <li><strong>Address:</strong> ${data.address}</li>
-                <li><strong>Uber Status:</strong> ${data.uberStatus}</li>
+                <li><strong>Uber Status:</strong> ${data.uber_status}</li>
                 <li><strong>Experience:</strong> ${data.experience}</li>
-                <li><strong>Intended Start:</strong> ${data.intendedStartDate}</li>
+                <li><strong>Intended Start:</strong> ${data.intended_start_date}</li>
               </ul>
               <p>Please log in to the admin dashboard to review their documents and approve/deny the application.</p>
             </div>
@@ -906,11 +1031,11 @@ app.post('/api/bookings', async (req, res) => {
   try {
     const { data, error } = await db.from('bookings').insert([
       {
-        carId,
-        applicationId,
-        startDate,
-        endDate,
-        totalAmount,
+        car_id: carId,
+        application_id: applicationId,
+        start_date: startDate,
+        end_date: endDate,
+        total_amount: totalAmount,
         status: 'pending'
       }
     ]).select('id').single();
@@ -1010,8 +1135,8 @@ app.post('/api/agreements', authenticateAdmin, async (req, res) => {
     const data = createLeaseAgreementSchema.parse(req.body);
     const { data: inserted, error } = await db.from('lease_agreements').insert([
       {
-        applicationId: data.applicationId,
-        carId: data.carId,
+        application_id: data.applicationId,
+        car_id: data.carId,
         content: data.content,
         status: data.status
       }
@@ -1034,15 +1159,15 @@ app.get('/api/agreements', authenticateAdmin, async (_req, res) => {
       .from('lease_agreements')
       .select(`
         *,
-        applications:applicationId(name),
-        cars:carId(name)
+        applications:application_id(name),
+        cars:car_id(name)
       `)
-      .order('createdAt', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) throw error;
 
     const formattedAgreements = data.map((item: any) => ({
-      ...item,
+      ...mapAgreementToApi(item),
       applicantName: item.applications?.name,
       carName: item.cars?.name
     }));
@@ -1060,8 +1185,8 @@ app.get('/api/agreements/:id', authenticateAdmin, async (req, res) => {
       .from('lease_agreements')
       .select(`
         *,
-        applications:applicationId(name),
-        cars:carId(name)
+        applications:application_id(name),
+        cars:car_id(name)
       `)
       .eq('id', req.params.id)
       .single();
@@ -1071,7 +1196,7 @@ app.get('/api/agreements/:id', authenticateAdmin, async (req, res) => {
     }
 
     res.json({
-      ...data,
+      ...mapAgreementToApi(data),
       applicantName: data.applications?.name,
       carName: data.cars?.name
     });
@@ -1138,15 +1263,15 @@ app.post('/api/saas/merchants', authenticateAdmin, async (req, res) => {
         name: data.businessName,
         email: data.email,
         country: data.country,
-        stripeAccountId: account.id,
-        payoutInterval: data.payoutInterval
+        stripe_account_id: account.id,
+        payout_interval: data.payoutInterval
       }
     ]).select().single();
 
     if (insertError) throw insertError;
 
     res.status(201).json({
-      merchant: inserted,
+      merchant: mapMerchantToApi(inserted),
       onboardingLink: accountLink.url,
       onboardingExpiresAt: accountLink.expires_at ? new Date(accountLink.expires_at * 1000).toISOString() : null,
     });
@@ -1161,9 +1286,9 @@ app.post('/api/saas/merchants', authenticateAdmin, async (req, res) => {
 
 app.get('/api/saas/merchants', authenticateAdmin, async (_req, res) => {
   try {
-    const { data, error } = await db.from('merchants').select('id, name, email, country, stripeAccountId, payoutInterval, onboardingStatus, createdAt').order('createdAt', { ascending: false });
+    const { data, error } = await db.from('merchants').select('id, name, email, country, stripe_account_id, payout_interval, onboarding_status, created_at').order('created_at', { ascending: false });
     if (error) throw error;
-    res.json(data);
+    res.json((data || []).map(mapMerchantToApi));
   } catch (error) {
     console.error('Fetch SaaS merchants error:', error);
     res.status(500).json({ error: 'Failed to fetch merchants' });
@@ -1178,13 +1303,13 @@ app.post('/api/saas/merchants/:id/link', authenticateAdmin, async (req, res) => 
       return res.status(404).json({ error: 'Merchant not found' });
     }
 
-    const accountLink = await createOnboardingLink(merchant.stripeAccountId);
+    const accountLink = await createOnboardingLink(merchant.stripe_account_id);
 
-    // In Supabase we typically don't explicitly set updatedAt if there's a trigger,
+    // In Supabase we typically don't explicitly set updated_at if there's a trigger,
     // but if we need to force it we can just update a field. We might just 
     // leave it alone since updating the timestamp isn't functionally critical right here if no data changed.
     // Or we could execute a dummy update:
-    await db.from('merchants').update({ updatedAt: new Date().toISOString() }).eq('id', merchant.id);
+    await db.from('merchants').update({ updated_at: new Date().toISOString() }).eq('id', merchant.id);
 
     res.json({
       onboardingLink: accountLink.url,

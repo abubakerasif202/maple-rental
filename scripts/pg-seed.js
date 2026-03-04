@@ -1,11 +1,16 @@
 import pg from 'pg';
 import fs from 'fs';
 import path from 'path';
+import dotenv from 'dotenv';
 
 const { Client } = pg;
+dotenv.config();
 
-// This string was provided by the user earlier in the chat
-const connectionString = "postgresql://postgres:abubakerasif202@db.soxbdujttijsqmwqanfj.supabase.co:5432/postgres";
+const connectionString = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL || '';
+if (!connectionString) {
+    console.error("Missing SUPABASE_DB_URL or DATABASE_URL environment variable.");
+    process.exit(1);
+}
 
 const client = new Client({
     connectionString,
@@ -13,6 +18,11 @@ const client = new Client({
 
 async function runSchema() {
     try {
+        if (process.env.ALLOW_SCHEMA_RESET !== 'true') {
+            console.error("Refusing to run destructive schema reset. Set ALLOW_SCHEMA_RESET=true to proceed.");
+            process.exit(1);
+        }
+
         await client.connect();
         console.log("Connected to PostgreSQL using the provided connection string.");
 

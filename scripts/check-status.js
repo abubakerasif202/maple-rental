@@ -1,7 +1,13 @@
 import pg from 'pg';
+import dotenv from 'dotenv';
 
 const { Client } = pg;
-const connectionString = "postgresql://postgres:abubakerasif202@db.soxbdujttijsqmwqanfj.supabase.co:5432/postgres";
+dotenv.config();
+const connectionString = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL || '';
+if (!connectionString) {
+    console.error("Missing SUPABASE_DB_URL or DATABASE_URL environment variable.");
+    process.exit(1);
+}
 
 const client = new Client({ connectionString });
 

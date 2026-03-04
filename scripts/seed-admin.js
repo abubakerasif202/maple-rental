@@ -14,8 +14,14 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function seedAdmin() {
-    const adminEmail = process.argv[2] || 'admin@maplefleet.com';
-    const adminPass = process.argv[3] || 'admin123456';
+    const adminEmail = process.argv[2] || process.env.ADMIN_EMAIL || '';
+    const adminPass = process.argv[3] || process.env.ADMIN_PASSWORD || '';
+
+    if (!adminEmail || !adminPass) {
+        console.error("Usage: node scripts/seed-admin.js <adminEmail> <adminPassword>");
+        console.error("Or set ADMIN_EMAIL and ADMIN_PASSWORD in environment.");
+        process.exit(1);
+    }
 
     console.log(`Creating Admin User: ${adminEmail}`);
 
