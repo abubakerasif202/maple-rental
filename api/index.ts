@@ -320,8 +320,10 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (reque
 
             // 6. Send Confirmation Email to Driver
             if (process.env.RESEND_API_KEY) {
-              const { data: appData } = await db.from('applications').select('name, email').eq('id', application_id).single();
-              const { data: carData } = await db.from('cars').select('name').eq('id', car_id).single();
+              const [{ data: appData }, { data: carData }] = await Promise.all([
+                db.from('applications').select('name, email').eq('id', application_id).single(),
+                db.from('cars').select('name').eq('id', car_id).single()
+              ]);
 
               if (appData && carData) {
                 const { Resend } = await import('resend');
