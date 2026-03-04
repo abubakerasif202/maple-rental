@@ -678,7 +678,7 @@ app.post('/api/auth/login', async (req, res) => {
     res.cookie('admin_token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
     });
     res.json({ username: data.user?.email });
   } catch (err) {
