@@ -971,7 +971,7 @@ app.post('/api/applications', async (req, res) => {
         // Email to the Admin
         await resend.emails.send({
           from: 'Maple Rentals Notifications <noreply@maplerentals.com.au>',
-          to: 'admin@maplerentals.com.au',
+          to: ADMIN_EMAIL,
           subject: `New Driver Application: ${data.name}`,
           html: `
             <div style="font-family: sans-serif; color: #1a202c;">
