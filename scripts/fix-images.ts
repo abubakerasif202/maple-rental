@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { db } from '../src/db/index.js';
+import { db } from '../api/db/index.js';
 
 async function fixImages() {
     const images = [
@@ -25,3 +25,4 @@ async function fixImages() {
 }
 
 fixImages();
+

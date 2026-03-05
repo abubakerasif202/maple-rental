@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { db } from '../src/db/index.js';
+import { db } from '../api/db/index.js';
 
 async function setupBucket() {
     const BUCKET_NAME = 'applications';
@@ -29,3 +29,4 @@ async function setupBucket() {
 }
 
 setupBucket();
+

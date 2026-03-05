@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { db } from '../src/db/index.js';
+import { db } from '../api/db/index.js';
 
 async function logCars() {
     const { data, error } = await db.from('cars').select('*');
@@ -9,3 +9,4 @@ async function logCars() {
 }
 
 logCars();
+

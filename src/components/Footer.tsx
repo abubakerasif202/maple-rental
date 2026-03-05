@@ -1,19 +1,25 @@
 import { Link } from 'react-router-dom';
 import { Mail, Phone } from 'lucide-react';
 
-
+const quickLinks = [
+  { label: 'Home', path: '/' },
+  { label: 'Pricing', path: '/pricing' },
+  { label: 'Our Fleet', path: '/cars' },
+  { label: 'Apply', path: '/apply' },
+  { label: 'Admin Login', path: '/admin/login' },
+];
 
 export default function Footer() {
   return (
-    <footer className="bg-brand-navy text-gray-400 py-20 border-t border-white/10">
+    <footer id="contact" className="bg-brand-navy text-gray-400 py-20 border-t border-white/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-16">
           <div>
             <Link to="/" className="flex items-center mb-8 group">
               <img
-                src="/logo.png"
+                src="/maple-logo.webp"
                 alt="Maple Rentals Logo"
-                className="h-20 md:h-24 object-contain bg-white rounded-lg px-3 py-2"
+                className="h-20 md:h-24 object-contain rounded-lg"
               />
             </Link>
             <p className="text-sm text-gray-500 max-w-xs leading-relaxed font-light">
@@ -24,9 +30,13 @@ export default function Footer() {
           <div>
             <h3 className="text-xs font-bold text-white uppercase tracking-widest mb-8">Quick Links</h3>
             <ul className="space-y-5">
-              <li><Link to="/" className="text-sm hover:text-brand-gold transition-colors font-light">Home</Link></li>
-              <li><Link to="/cars" className="text-sm hover:text-brand-gold transition-colors font-light">Our Fleet</Link></li>
-              <li><Link to="/admin/login" className="text-sm hover:text-brand-gold transition-colors font-light opacity-50">Admin Login</Link></li>
+              {quickLinks.map((link) => (
+                <li key={link.path}>
+                  <Link to={link.path} className="text-sm hover:text-brand-gold transition-colors font-light">
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
 

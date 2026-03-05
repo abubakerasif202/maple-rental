@@ -8,8 +8,8 @@ import Cars from './pages/Cars';
 import CarDetails from './pages/CarDetails';
 import Success from './pages/Success';
 import AdminLogin from './pages/AdminLogin';
+import Pricing from './pages/Pricing';
 
-// Lazy load heavy pages
 const Apply = lazy(() => import('./pages/Apply'));
 const Checkout = lazy(() => import('./pages/Checkout'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
@@ -17,7 +17,7 @@ const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
+      staleTime: 1000 * 60 * 5,
       retry: 1,
     },
   },
@@ -33,6 +33,7 @@ export default function App() {
             <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-brand-navy text-white font-serif italic uppercase tracking-widest text-sm">Loading Experience...</div>}>
               <Routes>
                 <Route path="/" element={<Home />} />
+                <Route path="/pricing" element={<Pricing />} />
                 <Route path="/cars" element={<Cars />} />
                 <Route path="/cars/:id" element={<CarDetails />} />
                 <Route path="/checkout/:id" element={<Checkout />} />
