@@ -4,7 +4,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import Stripe from 'stripe';
 import { z } from 'zod';
-import { db, initializeDB } from '../src/db/index.js';
+import { db, initializeDB } from './db/index.js';
 import { ensureEsbuildBinaryPath } from '../scripts/ensureEsbuildBinaryPath.js';
 import { renderCarLeaseAgreement } from './templates/carLeaseAgreement.js';
 
@@ -119,7 +119,7 @@ app.use(cookieParser());
 // Stripe Webhook Endpoint (Must be before express.json() to get raw body)
 app.post('/api/webhook', express.raw({ type: 'application/json' }), async (request, response) => {
   const sig = request.headers['stripe-signature'];
-  let event;
+  let event: Stripe.Event;
 
   try {
     event = stripe.webhooks.constructEvent(
@@ -127,9 +127,10 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (reque
       sig as string,
       process.env.STRIPE_WEBHOOK_SECRET || ''
     );
-  } catch (err: any) {
-    console.error(`Stripe Webhook Error: ${err.message}`);
-    response.status(400).send(`Webhook Error: ${err.message}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error(`Stripe Webhook Error: ${message}`);
+    response.status(400).send(`Webhook Error: ${message}`);
     return;
   }
 

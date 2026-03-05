@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { CreditCard, ShieldCheck, CheckCircle2, ChevronRight, ArrowLeft, Loader2, DollarSign, Calendar, Info } from 'lucide-react';
+import { CreditCard, ShieldCheck, CheckCircle2, ArrowLeft, Loader2, Info } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { useQuery } from '@tanstack/react-query';
 import api from '../lib/api';
 import { Car } from '../types';
 
@@ -74,64 +75,68 @@ export default function Checkout() {
   const [searchParams] = useSearchParams();
   const application_id = searchParams.get('application_id');
   
-  const [car, setCar] = useState<Car | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [stripeOptions, setStripeOptions] = useState<any>(null);
-  const [totalAmount, setTotalAmount] = useState(0);
+  // Use React Query for car data
+  const { data: car, error: carError, isLoading: isCarLoading } = useQuery<Car>({
+    queryKey: ['car', car_id],
+    queryFn: async () => {
+      const res = await api.get(`/cars/${car_id}`);
+      return res.data;
+    },
+    enabled: !!car_id,
+  });
 
-  useEffect(() => {
-    if (!car && car_id) {
-      api.get(`/cars/${car_id}`).then(res => {
-        setCar(res.data);
-        setTotalAmount(Number(res.data.bond) + Number(res.data.weekly_price) + 12.2); // Default estimate
-      }).catch(() => setError('Vehicle not found'));
-    }
-  }, [car, car_id]);
+  // Use React Query for subscription initialization
+  const { data: subscription, error: subError, isLoading: isSubLoading } = useQuery({
+    queryKey: ['checkout-session', car_id, application_id],
+    queryFn: async () => {
+      const res = await api.post('/create-subscription', {
+        car_id: Number(car_id),
+        application_id: application_id ? Number(application_id) : undefined,
+      });
+      return res.data;
+    },
+    enabled: !!car,
+    staleTime: Infinity, // Ensure it only runs once per component lifecycle
+    retry: false,
+  });
 
-  useEffect(() => {
-    const initCheckout = async () => {
-      if (!car) return;
-      try {
-        const res = await api.post('/create-subscription', {
-          car_id: car.id,
-          application_id: application_id ? Number(application_id) : undefined,
-        });
-        
-        setClientSecret(res.data.clientSecret);
-        setTotalAmount(res.data.billingBreakdown.upfrontDue);
-        setStripeOptions({
-          clientSecret: res.data.clientSecret,
-          appearance: {
-            theme: 'night',
-            variables: {
-              colorPrimary: '#D4AF37',
-              colorBackground: '#0A0E14',
-              colorText: '#ffffff',
-              colorDanger: '#ef4444',
-              fontFamily: 'Space Grotesk, sans-serif',
-              spacingUnit: '4px',
-              borderRadius: '8px',
-            },
-          },
-        });
-      } catch (err) {
-        setError('Failed to initialize payment session.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    initCheckout();
-  }, [car, application_id]);
-
-  if (loading) {
+  if (isCarLoading || isSubLoading) {
     return (
       <div className="min-h-screen bg-brand-navy flex items-center justify-center">
         <Loader2 className="w-12 h-12 text-brand-gold animate-spin" />
       </div>
     );
   }
+
+  const error = carError || subError;
+  if (error) {
+    return (
+      <div className="min-h-screen bg-brand-navy flex items-center justify-center text-white">
+        <div className="text-center">
+          <p className="mb-4">Failed to initialize checkout. Please try again.</p>
+          <Link to="/cars" className="text-brand-gold hover:underline">Return to Fleet</Link>
+        </div>
+      </div>
+    );
+  }
+
+  const stripeOptions = subscription ? {
+    clientSecret: subscription.clientSecret,
+    appearance: {
+      theme: 'night' as const,
+      variables: {
+        colorPrimary: '#D4AF37',
+        colorBackground: '#0A0E14',
+        colorText: '#ffffff',
+        colorDanger: '#ef4444',
+        fontFamily: 'Space Grotesk, sans-serif',
+        spacingUnit: '4px',
+        borderRadius: '8px',
+      },
+    },
+  } : null;
+
+  const totalAmount = subscription?.billingBreakdown.upfrontDue || 0;
 
   return (
     <div className="pt-32 pb-24 min-h-screen bg-brand-navy">
@@ -157,7 +162,7 @@ export default function Checkout() {
                   <p className="text-brand-grey font-light">Complete your upfront payment to start your rental agreement.</p>
                 </div>
 
-                {clientSecret && (
+                {stripeOptions && (
                   <div className="bg-white/5 border border-white/10 p-8 rounded-3xl">
                     <Elements stripe={stripePromise} options={stripeOptions}>
                       <CheckoutForm 
