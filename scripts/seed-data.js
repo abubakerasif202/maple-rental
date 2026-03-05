@@ -19,24 +19,24 @@ async function seedData() {
     const mockCars = [
         {
             name: "Toyota Camry Hybrid Ascent",
-            modelYear: 2023,
-            weeklyPrice: 350,
+            model_year: 2023,
+            weekly_price: 350,
             bond: 500,
             status: "Available",
             image: "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?q=80&w=1600&auto=format&fit=crop"
         },
         {
             name: "Toyota Camry Hybrid SL",
-            modelYear: 2024,
-            weeklyPrice: 400,
+            model_year: 2024,
+            weekly_price: 400,
             bond: 500,
             status: "Available",
             image: "https://images.unsplash.com/photo-1657872737697-737a2d123ef2?q=80&w=1600&auto=format&fit=crop"
         },
         {
             name: "Toyota Camry Hybrid Ascent Sport",
-            modelYear: 2023,
-            weeklyPrice: 380,
+            model_year: 2023,
+            weekly_price: 380,
             bond: 500,
             status: "Available",
             image: "https://images.unsplash.com/photo-1624578571415-09e9b1991929?q=80&w=1600&auto=format&fit=crop"

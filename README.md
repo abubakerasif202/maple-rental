@@ -34,15 +34,5 @@ View your app in AI Studio: https://ai.studio/apps/edb4d6f6-9a94-4e5b-91f2-ccb6d
 
 ## Scraped Data
 
-- Added sanitized Starr365 scrape output at `data/starr365_pages.json`.
-- This dataset currently contains authenticated page metadata (`url` path, title, status, link counts), not vehicle records.
-- Added extracted statement scrape data at `data/starr365_statement_data.json` from `statement_data.php` (invoice/statement sections and rows).
-- Added invoice export data from `C:\Users\abuba\Invoice-list.xls`:
-  - `data/invoice_list_from_xls.json` (structured rows + metadata)
-  - `data/invoice_list_from_xls.csv` (flat tabular export)
-- Added rental client export data from `C:\Users\abuba\RentalClientList.xlsx`:
-  - `data/rentalclientlist_from_xlsx.json`
-  - `data/rentalclientlist_from_xlsx.csv`
-- Added fleets export data from `C:\Users\abuba\Fleets.xlsx`:
-  - `data/fleets_from_xlsx.json`
-  - `data/fleets_from_xlsx.csv`
+- Do not commit raw customer, invoice, or operational exports to this repository.
+- Keep any temporary scrape/export artifacts in local, untracked paths only.

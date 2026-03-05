@@ -23,7 +23,7 @@ export default function Navbar() {
               <img
                 src="/logo.png"
                 alt="Maple Rentals Logo"
-                className="h-12 md:h-16 object-contain bg-white rounded-lg px-2 py-1"
+                className="h-16 md:h-20 object-contain drop-shadow-2xl"
               />
             </Link>
           </div>

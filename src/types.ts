@@ -1,8 +1,8 @@
 export interface Car {
   id: number;
   name: string;
-  modelYear: number;
-  weeklyPrice: number;
+  model_year: number;
+  weekly_price: number;
   bond: number;
   status: 'Available' | 'Rented' | 'Maintenance';
   image: string;
@@ -13,35 +13,35 @@ export interface Application {
   name: string;
   phone: string;
   email: string;
-  licenseNumber: string;
-  licenseExpiry: string;
-  uberStatus: 'Active' | 'Applying' | 'Not Yet Registered';
+  license_number: string;
+  license_expiry: string;
+  uber_status: 'Active' | 'Applying' | 'Not Yet Registered';
   experience: string;
   address: string;
-  weeklyBudget: string;
-  intendedStartDate: string;
-  licensePhoto?: string;
-  uberScreenshot?: string;
+  weekly_budget: string;
+  intended_start_date: string;
+  license_photo?: string;
+  uber_screenshot?: string;
   status: 'Pending' | 'Paid' | 'Approved' | 'Rejected';
-  createdAt: string;
+  created_at: string;
 }
 
 export interface Rental {
   id: number;
-  applicationId: number;
-  carId: number;
-  applicantName?: string;
-  carName?: string;
-  startDate: string;
-  weeklyPrice: number;
+  application_id: number;
+  car_id: number;
+  applicant_name?: string;
+  car_name?: string;
+  start_date: string;
+  weekly_price: number;
   status: 'Active' | 'Completed' | 'Cancelled';
-  createdAt: string;
+  created_at: string;
 }
 
 export interface DashboardStats {
-  totalApplications: number;
-  activeRentals: number;
-  totalWeeklyIncome: number;
+  total_applications: number;
+  active_rentals: number;
+  total_weekly_income: number;
 }
 
 export interface SaasMerchant {
@@ -49,8 +49,8 @@ export interface SaasMerchant {
   name: string;
   email: string;
   country: string;
-  stripeAccountId: string;
-  payoutInterval: 'daily' | 'weekly' | 'monthly';
-  onboardingStatus: string;
-  createdAt: string;
+  stripe_account_id: string;
+  payout_interval: 'daily' | 'weekly' | 'monthly';
+  onboarding_status: string;
+  created_at: string;
 }

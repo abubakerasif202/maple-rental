@@ -76,32 +76,32 @@ export const createCheckoutSession = async (bookingData: any): Promise<any> => {
 };
 
 export interface CreateSaasMerchantPayload {
-  businessName: string;
+  business_name: string;
   email: string;
   country?: string;
-  payoutInterval?: 'daily' | 'weekly' | 'monthly';
+  payout_interval?: 'daily' | 'weekly' | 'monthly';
 }
 
 export interface SaasMerchantResponse {
   merchant: SaasMerchant;
-  onboardingLink: string | null;
-  onboardingExpiresAt: string | null;
+  onboarding_link: string | null;
+  onboarding_expires_at: string | null;
 }
 
 export interface SaasAccountLinkResponse {
-  onboardingLink: string | null;
-  onboardingExpiresAt: string | null;
+  onboarding_link: string | null;
+  onboarding_expires_at: string | null;
 }
 
 export interface StripeLeaseSettings {
   currency: string;
-  recurringInterval: 'week';
-  minimumRentalWeeks: number;
-  insuranceCoverageRegion: string;
+  recurring_interval: 'week';
+  minimum_rental_weeks: number;
+  insurance_coverage_region: string;
   fees: {
-    accountManagementWeekly: number;
-    newAccountSetup: number;
-    directDebitAccountSetup: number;
+    account_management_weekly: number;
+    new_account_setup: number;
+    direct_debit_account_setup: number;
   };
 }
 
@@ -112,30 +112,30 @@ export interface LeaseFeePayload {
 }
 
 export interface LeaseAgreementPayload {
-  agreementDate?: string;
-  registeredOwnerName?: string;
-  registeredOwnerAddress?: string;
-  registeredOwnerContact?: string;
-  registeredOwnerEmail?: string;
-  renteeName?: string;
-  renteeDob?: string;
-  renteeLicenseNumber?: string;
-  renteeLicenseState?: string;
-  renteeAddress?: string;
-  renteeContact?: string;
-  renteeEmail?: string;
-  vehicleMake?: string;
-  vehicleModel?: string;
-  vehicleYear?: string;
-  vehicleVin?: string;
-  kmAllowance?: string;
-  weeklyRent?: string;
-  fuelPolicy?: string;
-  insuranceCoverage?: string;
-  rentalStartDate?: string;
-  rentalEndDate?: string;
-  minimumRentalPeriod?: string;
-  returnPolicy?: string;
+  agreement_date?: string;
+  registered_owner_name?: string;
+  registered_owner_address?: string;
+  registered_owner_contact?: string;
+  registered_owner_email?: string;
+  rentee_name?: string;
+  rentee_dob?: string;
+  rentee_license_number?: string;
+  rentee_license_state?: string;
+  rentee_address?: string;
+  rentee_contact?: string;
+  rentee_email?: string;
+  vehicle_make?: string;
+  vehicle_model?: string;
+  vehicle_year?: string;
+  vehicle_vin?: string;
+  km_allowance?: string;
+  weekly_rent?: string;
+  fuel_policy?: string;
+  insurance_coverage?: string;
+  rental_start_date?: string;
+  rental_end_date?: string;
+  minimum_rental_period?: string;
+  return_policy?: string;
   fees?: LeaseFeePayload[];
 }
 
@@ -179,18 +179,18 @@ export const fetchStripeLeaseSettings = async (): Promise<StripeLeaseSettings> =
 
 export interface SavedLeaseAgreement {
   id: number;
-  applicationId: number;
-  carId: number;
+  application_id: number;
+  car_id: number;
   content: string;
   status: string;
-  createdAt: string;
-  applicantName?: string;
-  carName?: string;
+  created_at: string;
+  applicant_name?: string;
+  car_name?: string;
 }
 
 export const saveLeaseAgreement = async (payload: {
-  applicationId: number;
-  carId: number;
+  application_id: number;
+  car_id: number;
   content: string;
   status?: string;
 }): Promise<{ id: string }> => {
@@ -209,14 +209,14 @@ export const deleteSavedLeaseAgreement = async (id: number): Promise<{ success: 
 };
 
 export interface WeeklyFinancials {
-  projectedGrossWeekly: number;
-  projectedNetWeekly: number;
-  estimatedPlatformFees: number;
-  actualPayoutsWeekly: number;
-  recentPayouts: Array<{
+  projected_gross_weekly: number;
+  projected_net_weekly: number;
+  estimated_platform_fees: number;
+  actual_payouts_weekly: number;
+  recent_payouts: Array<{
     id: string;
     amount: number;
-    arrivalDate: string;
+    arrival_date: string;
     status: string;
   }>;
 }

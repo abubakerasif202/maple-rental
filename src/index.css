@@ -6,14 +6,15 @@
   --font-serif: "Playfair Display", serif;
   --font-script: "Dancing Script", cursive;
   
-  --color-brand-gold: #D4AF37;
-  --color-brand-gold-light: #F9E29C;
-  --color-brand-gold-dark: #A68A2D;
-  --color-brand-navy: #0B162C;
-  --color-brand-navy-light: #162440;
-  --color-brand-charcoal: #0B162C;
-  --color-brand-grey: #8A8F98;
-  --color-brand-orange: #E67E22;
+  --color-brand-gold: #C5A028;
+  --color-brand-gold-light: #E5C76B;
+  --color-brand-gold-dark: #947A1F;
+  --color-brand-navy: #002347;
+  --color-brand-navy-light: #003366;
+  --color-brand-charcoal: #001A33;
+  --color-brand-grey: #94A3B8;
+  --color-brand-red: #E31B23;
+  --color-brand-silver: #E5E4E2;
 }
 
 @layer base {
