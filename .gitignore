@@ -13,3 +13,6 @@ coverage/
 gha-creds-*.json
 data/
 *.har
+
+.vercel
+.env*.local
