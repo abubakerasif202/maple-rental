@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { db, initializeDB } from './db/index.js';
 import { ensureEsbuildBinaryPath } from '../scripts/ensureEsbuildBinaryPath.js';
 import { renderCarLeaseAgreement } from './templates/carLeaseAgreement.js';
+import { buildRentalPlanWithPricing, getRentalPlanById, rentalPlans } from '../src/lib/rentalPlans.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -92,6 +93,13 @@ const LEASE_STRIPE_SETTINGS = {
     direct_debit_account_setup: 2.2,
   },
 };
+
+const RENTAL_PLAN_SETUP_FEES_AUD = Number(
+  (
+    LEASE_STRIPE_SETTINGS.fees.new_account_setup +
+    LEASE_STRIPE_SETTINGS.fees.direct_debit_account_setup
+  ).toFixed(2)
+);
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -362,20 +370,56 @@ const authenticateAdmin = async (req: express.Request, res: express.Response, ne
   }
 };
 
+app.get('/api/rental-plans', (_req, res) => {
+  res.json(
+    rentalPlans.map((plan) => buildRentalPlanWithPricing(plan, LEASE_STRIPE_SETTINGS.fees))
+  );
+});
+
 app.post('/api/create-subscription', async (req, res) => {
   const payload = z.object({
     car_id: z.coerce.number().int().positive().optional(),
     application_id: z.coerce.number().int().positive().optional(),
+    plan_id: z.string().min(1).optional(),
     custom_weekly_price: z.coerce.number().optional(),
     custom_bond: z.coerce.number().optional(),
   });
 
   try {
-    const { car_id, application_id, custom_weekly_price, custom_bond } = payload.parse(req.body);
-    
-    let carName = 'Car Lease';
-    let weeklyRent = custom_weekly_price || 0;
-    let bond = custom_bond || 0;
+    const { car_id, application_id, plan_id, custom_weekly_price, custom_bond } = payload.parse(req.body);
+
+    if (car_id && plan_id) {
+      return res.status(400).json({ error: 'Provide either car_id or plan_id, not both' });
+    }
+
+    const selectedPlanBase = getRentalPlanById(plan_id);
+    const selectedPlan = selectedPlanBase
+      ? buildRentalPlanWithPricing(selectedPlanBase, LEASE_STRIPE_SETTINGS.fees)
+      : null;
+
+    if (plan_id && !selectedPlan) {
+      return res.status(404).json({ error: 'Rental plan not found' });
+    }
+
+    let productName = 'Car Lease';
+    let bondAud = custom_bond || 0;
+    let initialRentalAud = custom_weekly_price || 0;
+    let serviceFeeAud = LEASE_STRIPE_SETTINGS.fees.account_management_weekly;
+    let recurringAmountAud = initialRentalAud + serviceFeeAud;
+    let recurringLabel = 'per week';
+    let recurringInterval = LEASE_STRIPE_SETTINGS.recurring_interval as 'week' | 'month';
+    let recurringIntervalCount = 1;
+
+    if (selectedPlan) {
+      productName = selectedPlan.name + ' Driver Plan';
+      bondAud = selectedPlan.pricing.bondAud;
+      initialRentalAud = selectedPlan.pricing.initialRentalAud;
+      serviceFeeAud = selectedPlan.pricing.serviceFeeAud;
+      recurringAmountAud = selectedPlan.pricing.recurringDueAud;
+      recurringLabel = selectedPlan.pricing.recurringLabel;
+      recurringInterval = selectedPlan.pricing.recurringInterval;
+      recurringIntervalCount = selectedPlan.pricing.recurringIntervalCount;
+    }
 
     if (car_id) {
       const { data: car, error: carError } = await db
@@ -387,27 +431,34 @@ app.post('/api/create-subscription', async (req, res) => {
       if (carError || !car) {
         return res.status(404).json({ error: 'Car not found' });
       }
-      
-      carName = car.name;
-      if (!custom_weekly_price) weeklyRent = Number(car.weekly_price);
-      if (!custom_bond) bond = Number(car.bond);
+
+      productName = car.name;
+      if (!custom_weekly_price) initialRentalAud = Number(car.weekly_price);
+      if (!custom_bond) bondAud = Number(car.bond);
+      serviceFeeAud = LEASE_STRIPE_SETTINGS.fees.account_management_weekly;
+      recurringAmountAud = Number((initialRentalAud + serviceFeeAud).toFixed(2));
+      recurringLabel = 'per week';
+      recurringInterval = LEASE_STRIPE_SETTINGS.recurring_interval;
+      recurringIntervalCount = 1;
     }
 
-    if (!weeklyRent || weeklyRent <= 0) {
-      return res.status(400).json({ error: 'Invalid weekly price configuration' });
+    if (!initialRentalAud || initialRentalAud <= 0) {
+      return res.status(400).json({ error: 'Invalid rental price configuration' });
     }
 
-    const recurringAmount = weeklyRent + LEASE_STRIPE_SETTINGS.fees.account_management_weekly;
-    const recurringAmountCents = Math.round(recurringAmount * 100);
+    if (!recurringAmountAud || recurringAmountAud <= 0) {
+      return res.status(400).json({ error: 'Invalid recurring amount configuration' });
+    }
 
+    const recurringAmountCents = Math.round(recurringAmountAud * 100);
     const upfrontItems = [
       {
-        amountCents: Math.round(bond * 100),
+        amountCents: Math.round(bondAud * 100),
         description: 'Security Bond (Refundable)',
       },
       {
-        amountCents: Math.round(weeklyRent * 100),
-        description: 'Initial Weekly Rent',
+        amountCents: Math.round(initialRentalAud * 100),
+        description: selectedPlan ? 'Initial ' + selectedPlan.name + ' Rental' : 'Initial Weekly Rent',
       },
       {
         amountCents: Math.round(LEASE_STRIPE_SETTINGS.fees.new_account_setup * 100),
@@ -426,20 +477,25 @@ app.post('/api/create-subscription', async (req, res) => {
       metadata: {
         car_id: car_id ? String(car_id) : '',
         application_id: application_id ? String(application_id) : '',
+        pricing_plan_id: selectedPlan?.id ?? '',
+        pricing_plan_name: selectedPlan?.name ?? '',
         lease_minimum_weeks: String(LEASE_STRIPE_SETTINGS.minimum_rental_weeks),
         insurance_coverage_region: LEASE_STRIPE_SETTINGS.insurance_coverage_region,
       },
     });
 
     const product = await stripe.products.create({
-      name: `${carName} Subscription`,
+      name: productName + ' Subscription',
     });
 
     const price = await stripe.prices.create({
       product: product.id,
       unit_amount: recurringAmountCents,
       currency: LEASE_STRIPE_SETTINGS.currency,
-      recurring: { interval: LEASE_STRIPE_SETTINGS.recurring_interval },
+      recurring: {
+        interval: recurringInterval,
+        interval_count: recurringIntervalCount,
+      },
     });
 
     for (const item of upfrontItems) {
@@ -459,6 +515,8 @@ app.post('/api/create-subscription', async (req, res) => {
       metadata: {
         car_id: car_id ? String(car_id) : '',
         application_id: application_id ? String(application_id) : '',
+        pricing_plan_id: selectedPlan?.id ?? '',
+        pricing_plan_name: selectedPlan?.name ?? '',
         lease_minimum_weeks: String(LEASE_STRIPE_SETTINGS.minimum_rental_weeks),
         insurance_coverage_region: LEASE_STRIPE_SETTINGS.insurance_coverage_region,
       },
@@ -475,9 +533,19 @@ app.post('/api/create-subscription', async (req, res) => {
       billingBreakdown: {
         currency: LEASE_STRIPE_SETTINGS.currency.toUpperCase(),
         upfrontDue: upfrontDueCents / 100,
+        recurringAmount: recurringAmountCents / 100,
         recurringWeekly: recurringAmountCents / 100,
+        recurringLabel,
+        recurringInterval,
+        recurringIntervalCount,
         minimumRentalWeeks: LEASE_STRIPE_SETTINGS.minimum_rental_weeks,
-      }
+        bond: Number(bondAud.toFixed(2)),
+        initialRental: Number(initialRentalAud.toFixed(2)),
+        setupFees: RENTAL_PLAN_SETUP_FEES_AUD,
+        serviceFee: Number(serviceFeeAud.toFixed(2)),
+        planId: selectedPlan?.id ?? null,
+        planName: selectedPlan?.name ?? null,
+      },
     });
   } catch (error) {
     console.error('Stripe Subscription Error:', error);

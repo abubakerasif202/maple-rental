@@ -12,10 +12,25 @@ const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } }
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
 };
 
-function CheckoutForm({ amount, onSuccess, onCancel }: { amount: number, onSuccess: () => void, onCancel: () => void }) {
+interface BillingBreakdown {
+  upfrontDue: number;
+  recurringAmount: number;
+  recurringLabel: string;
+  bond: number;
+  initialRental: number;
+  setupFees: number;
+  serviceFee: number;
+}
+
+interface SubscriptionSession {
+  clientSecret: string;
+  billingBreakdown: BillingBreakdown;
+}
+
+function CheckoutForm({ amount, onSuccess, onCancel }: { amount: number; onSuccess: () => void; onCancel: () => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const [error, setError] = useState<string | null>(null);
@@ -59,11 +74,7 @@ function CheckoutForm({ amount, onSuccess, onCancel }: { amount: number, onSucce
           disabled={!stripe || processing}
           className="flex-[2] bg-brand-gold text-brand-navy py-5 font-bold uppercase tracking-widest text-sm hover:bg-brand-gold-light transition-all shadow-lg flex items-center justify-center gap-3 disabled:opacity-50"
         >
-          {processing ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            `Pay $${amount.toFixed(2)} & Start Lease`
-          )}
+          {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : `Pay $${amount.toFixed(2)} & Start Lease`}
         </button>
       </div>
     </form>
@@ -74,8 +85,7 @@ export default function Checkout() {
   const { id: car_id } = useParams();
   const [searchParams] = useSearchParams();
   const application_id = searchParams.get('application_id');
-  
-  // Use React Query for car data
+
   const { data: car, error: carError, isLoading: isCarLoading } = useQuery<Car>({
     queryKey: ['car', car_id],
     queryFn: async () => {
@@ -85,8 +95,7 @@ export default function Checkout() {
     enabled: !!car_id,
   });
 
-  // Use React Query for subscription initialization
-  const { data: subscription, error: subError, isLoading: isSubLoading } = useQuery({
+  const { data: subscription, error: subError, isLoading: isSubLoading } = useQuery<SubscriptionSession>({
     queryKey: ['checkout-session', car_id, application_id],
     queryFn: async () => {
       const res = await api.post('/create-subscription', {
@@ -96,7 +105,7 @@ export default function Checkout() {
       return res.data;
     },
     enabled: !!car,
-    staleTime: Infinity, // Ensure it only runs once per component lifecycle
+    staleTime: Infinity,
     retry: false,
   });
 
@@ -120,30 +129,33 @@ export default function Checkout() {
     );
   }
 
-  const stripeOptions = subscription ? {
-    clientSecret: subscription.clientSecret,
-    appearance: {
-      theme: 'night' as const,
-      variables: {
-        colorPrimary: '#D4AF37',
-        colorBackground: '#0A0E14',
-        colorText: '#ffffff',
-        colorDanger: '#ef4444',
-        fontFamily: 'Space Grotesk, sans-serif',
-        spacingUnit: '4px',
-        borderRadius: '8px',
-      },
-    },
-  } : null;
+  const stripeOptions = subscription
+    ? {
+        clientSecret: subscription.clientSecret,
+        appearance: {
+          theme: 'night' as const,
+          variables: {
+            colorPrimary: '#D4AF37',
+            colorBackground: '#0A0E14',
+            colorText: '#ffffff',
+            colorDanger: '#ef4444',
+            fontFamily: 'Space Grotesk, sans-serif',
+            spacingUnit: '4px',
+            borderRadius: '8px',
+          },
+        },
+      }
+    : null;
 
-  const totalAmount = subscription?.billingBreakdown.upfrontDue || 0;
+  const billingBreakdown = subscription?.billingBreakdown;
+  const totalAmount = billingBreakdown?.upfrontDue || 0;
 
   return (
     <div className="pt-32 pb-24 min-h-screen bg-brand-navy">
       <div className="container mx-auto px-6">
         <div className="max-w-6xl mx-auto">
-          <Link 
-            to={car ? `/cars/${car.id}` : "/cars"}
+          <Link
+            to={car ? `/cars/${car.id}` : '/cars'}
             className="inline-flex items-center gap-2 text-brand-grey hover:text-brand-gold transition-colors mb-12 uppercase tracking-widest text-[10px] font-bold"
           >
             <ArrowLeft className="w-4 h-4" /> Back to Vehicle
@@ -165,7 +177,7 @@ export default function Checkout() {
                 {stripeOptions && (
                   <div className="bg-white/5 border border-white/10 p-8 rounded-3xl">
                     <Elements stripe={stripePromise} options={stripeOptions}>
-                      <CheckoutForm 
+                      <CheckoutForm
                         amount={totalAmount}
                         onSuccess={() => {}}
                         onCancel={() => window.history.back()}
@@ -195,7 +207,7 @@ export default function Checkout() {
                 transition={{ duration: 0.5, delay: 0.2 }}
                 className="sticky top-32 space-y-8"
               >
-                {car && (
+                {car && billingBreakdown && (
                   <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
                     <div className="aspect-video relative">
                       <img src={car.image} alt={car.name} className="w-full h-full object-cover" />
@@ -205,26 +217,22 @@ export default function Checkout() {
                         <p className="text-brand-gold text-[10px] font-bold uppercase tracking-widest">{car.model_year} Model Hybrid</p>
                       </div>
                     </div>
-                    
+
                     <div className="p-8 space-y-6">
                       <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest border-b border-white/5 pb-4">Upfront Payment Breakdown</h4>
-                      
+
                       <div className="space-y-4">
                         <div className="flex justify-between text-sm">
                           <span className="text-brand-grey font-light">Security Bond (Refundable)</span>
-                          <span className="text-white font-bold">${car.bond.toFixed(2)}</span>
+                          <span className="text-white font-bold">${billingBreakdown.bond.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-brand-grey font-light">First Week Rent</span>
-                          <span className="text-white font-bold">${car.weekly_price.toFixed(2)}</span>
+                          <span className="text-brand-grey font-light">Initial Rental</span>
+                          <span className="text-white font-bold">${billingBreakdown.initialRental.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-brand-grey font-light">New Account Setup Fee</span>
-                          <span className="text-white font-bold">$10.00</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-brand-grey font-light">Direct Debit Setup Fee</span>
-                          <span className="text-white font-bold">$2.20</span>
+                          <span className="text-brand-grey font-light">Setup Fees</span>
+                          <span className="text-white font-bold">${billingBreakdown.setupFees.toFixed(2)}</span>
                         </div>
                       </div>
 
@@ -239,7 +247,7 @@ export default function Checkout() {
                         <Info className="w-4 h-4 text-brand-gold" />
                       </div>
                       <p className="text-[10px] text-brand-grey leading-relaxed">
-                        Following your upfront payment, your recurring weekly rental of <strong>${(car.weekly_price + 1).toFixed(2)}</strong> (including account management fee) will begin 7 days from today.
+                        Following your upfront payment, your recurring rental of <strong>${billingBreakdown.recurringAmount.toFixed(2)}</strong> {billingBreakdown.recurringLabel} will begin after activation. This includes the ${billingBreakdown.serviceFee.toFixed(2)} service fee.
                       </p>
                     </div>
                   </div>
@@ -251,7 +259,7 @@ export default function Checkout() {
                     {[
                       { step: 1, text: 'Complete upfront payment' },
                       { step: 2, text: 'Team verifies your driver documents' },
-                      { step: 3, text: 'Collect your vehicle from our Sydney hub' }
+                      { step: 3, text: 'Collect your vehicle from our Sydney hub' },
                     ].map((item) => (
                       <div key={item.step} className="flex gap-4 items-center">
                         <div className="w-6 h-6 rounded-full bg-brand-gold/20 flex items-center justify-center text-brand-gold text-[10px] font-bold">

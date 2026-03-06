@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { Car, Application, Rental, DashboardStats, SaasMerchant } from '../types';
+import type { RentalPlanWithPricing } from './rentalPlans';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -72,6 +73,11 @@ export const fetchRentals = async (): Promise<Rental[]> => {
 
 export const createCheckoutSession = async (bookingData: any): Promise<any> => {
   const { data } = await api.post('/bookings', bookingData);
+  return data;
+};
+
+export const fetchRentalPlans = async (): Promise<RentalPlanWithPricing[]> => {
+  const { data } = await api.get('/rental-plans');
   return data;
 };
 

@@ -1,9 +1,19 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Check, CreditCard, ShieldCheck, Star } from 'lucide-react';
+import { ArrowRight, Check, CreditCard, ShieldCheck, Star, AlertCircle, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { rentalPlans } from '../lib/rentalPlans';
+import { useQuery } from '@tanstack/react-query';
+import { fetchRentalPlans } from '../lib/api';
 
 export default function Pricing() {
+  const {
+    data: rentalPlans = [],
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ['rental-plans'],
+    queryFn: fetchRentalPlans,
+  });
+
   return (
     <div className="min-h-screen bg-[#F4F6F8] text-brand-navy selection:bg-brand-gold selection:text-black">
       <section className="bg-brand-navy py-24 md:py-28 px-4">
@@ -30,66 +40,109 @@ export default function Pricing() {
             transition={{ duration: 0.6 }}
             className="text-slate-300 text-lg max-w-3xl mx-auto font-light leading-relaxed"
           >
-            These plan tiers were merged from the replica app into the main project so drivers can compare commitment levels before choosing a vehicle. Final availability and checkout still happen through the main fleet and application flow.
+            Compare the actual recurring charges, upfront bond, and onboarding costs before you start your application. The plan you choose here now carries directly into the Stripe subscription flow.
           </motion.p>
         </div>
       </section>
 
       <section className="py-20 md:py-24 px-4">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-          {rentalPlans.map((plan, index) => (
-            <motion.div
-              key={plan.id}
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, delay: index * 0.08 }}
-              className={`relative rounded-3xl border overflow-hidden flex flex-col ${plan.popular ? 'bg-brand-navy text-white border-brand-gold/50 shadow-[0_25px_70px_rgba(0,35,71,0.22)]' : 'bg-white text-brand-navy border-slate-200 shadow-sm'}`}
-            >
-              {plan.popular && (
-                <div className="absolute top-5 right-5 flex items-center gap-1 rounded-full bg-brand-gold px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-brand-navy">
-                  <Star className="w-3 h-3 fill-current" />
-                  Most Popular
-                </div>
-              )}
+        <div className="max-w-6xl mx-auto">
+          {isLoading && (
+            <div className="rounded-3xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm">
+              <Loader2 className="w-8 h-8 animate-spin text-brand-gold mx-auto mb-4" />
+              <p className="text-sm uppercase tracking-[0.2em] font-bold text-slate-500">Loading pricing plans</p>
+            </div>
+          )}
 
-              <div className="p-8 flex-1">
-                <p className={`text-[10px] font-bold uppercase tracking-[0.35em] mb-4 ${plan.popular ? 'text-brand-gold' : 'text-slate-400'}`}>{plan.highlight}</p>
-                <h2 className="text-3xl font-serif font-bold mb-3">{plan.name}</h2>
-                <p className={`text-sm leading-relaxed mb-8 ${plan.popular ? 'text-slate-300' : 'text-slate-500'}`}>{plan.description}</p>
+          {isError && (
+            <div className="rounded-3xl border border-red-200 bg-white px-6 py-16 text-center shadow-sm">
+              <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-4" />
+              <p className="text-sm uppercase tracking-[0.2em] font-bold text-red-500 mb-3">Pricing unavailable</p>
+              <p className="text-slate-600 mb-6">We could not load the current rental plans. Try again shortly or continue with the standard application flow.</p>
+              <Link
+                to="/apply"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-navy px-5 py-4 text-xs font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-brand-navy-light"
+              >
+                Start Application <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          )}
 
-                <div className="mb-8">
-                  <div className="flex items-end gap-2">
-                    <span className={`text-5xl font-bold ${plan.popular ? 'text-brand-gold' : 'text-brand-navy'}`}>${plan.priceAud}</span>
-                    <span className={`text-xs uppercase tracking-[0.22em] mb-2 ${plan.popular ? 'text-slate-300' : 'text-slate-400'}`}>{plan.cadence}</span>
+          {!isLoading && !isError && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {rentalPlans.map((plan, index) => (
+                <motion.div
+                  key={plan.id}
+                  initial={{ opacity: 0, y: 24 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.45, delay: index * 0.08 }}
+                  className={`relative rounded-3xl border overflow-hidden flex flex-col ${plan.popular ? 'bg-brand-navy text-white border-brand-gold/50 shadow-[0_25px_70px_rgba(0,35,71,0.22)]' : 'bg-white text-brand-navy border-slate-200 shadow-sm'}`}
+                >
+                  {plan.popular && (
+                    <div className="absolute top-5 right-5 flex items-center gap-1 rounded-full bg-brand-gold px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-brand-navy">
+                      <Star className="w-3 h-3 fill-current" />
+                      Most Popular
+                    </div>
+                  )}
+
+                  <div className="p-8 flex-1">
+                    <p className={`text-[10px] font-bold uppercase tracking-[0.35em] mb-4 ${plan.popular ? 'text-brand-gold' : 'text-slate-400'}`}>{plan.highlight}</p>
+                    <h2 className="text-3xl font-serif font-bold mb-3">{plan.name}</h2>
+                    <p className={`text-sm leading-relaxed mb-8 ${plan.popular ? 'text-slate-300' : 'text-slate-500'}`}>{plan.description}</p>
+
+                    <div className="mb-8 space-y-3">
+                      <div className="flex items-end gap-2">
+                        <span className={`text-5xl font-bold ${plan.popular ? 'text-brand-gold' : 'text-brand-navy'}`}>
+                          ${plan.pricing.recurringDueAud.toFixed(2)}
+                        </span>
+                        <span className={`text-xs uppercase tracking-[0.22em] mb-2 ${plan.popular ? 'text-slate-300' : 'text-slate-400'}`}>
+                          {plan.pricing.recurringLabel}
+                        </span>
+                      </div>
+                      <p className={`text-xs uppercase tracking-[0.18em] ${plan.popular ? 'text-slate-400' : 'text-slate-500'}`}>
+                        Includes ${plan.pricing.serviceFeeAud.toFixed(2)} service fee each billing cycle
+                      </p>
+                    </div>
+
+                    <div className={`grid grid-cols-2 gap-4 rounded-2xl border p-4 mb-8 ${plan.popular ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-slate-50'}`}>
+                      <div>
+                        <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-2 ${plan.popular ? 'text-slate-400' : 'text-slate-500'}`}>Due now</p>
+                        <p className="text-2xl font-bold">${plan.pricing.upfrontDueAud.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-2 ${plan.popular ? 'text-slate-400' : 'text-slate-500'}`}>Bond</p>
+                        <p className="text-2xl font-bold">${plan.pricing.bondAud.toFixed(2)}</p>
+                      </div>
+                    </div>
+
+                    <ul className="space-y-4">
+                      {plan.features.map((feature) => (
+                        <li key={feature} className="flex items-start gap-3 text-sm">
+                          <Check className={`w-4 h-4 mt-0.5 ${plan.popular ? 'text-brand-gold' : 'text-brand-navy'}`} />
+                          <span className={plan.popular ? 'text-slate-200' : 'text-slate-600'}>{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                </div>
 
-                <ul className="space-y-4">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-3 text-sm">
-                      <Check className={`w-4 h-4 mt-0.5 ${plan.popular ? 'text-brand-gold' : 'text-brand-navy'}`} />
-                      <span className={plan.popular ? 'text-slate-200' : 'text-slate-600'}>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="p-8 pt-0 space-y-3">
-                <Link
-                  to="/apply"
-                  className={`w-full inline-flex items-center justify-center gap-2 rounded-xl px-5 py-4 text-xs font-bold uppercase tracking-[0.22em] transition-colors ${plan.popular ? 'bg-brand-gold text-brand-navy hover:bg-brand-gold-light' : 'bg-brand-navy text-white hover:bg-brand-navy-light'}`}
-                >
-                  Start Application <ArrowRight className="w-4 h-4" />
-                </Link>
-                <Link
-                  to="/cars"
-                  className={`w-full inline-flex items-center justify-center gap-2 rounded-xl border px-5 py-4 text-xs font-bold uppercase tracking-[0.22em] transition-colors ${plan.popular ? 'border-white/15 text-white hover:border-white/40' : 'border-slate-200 text-brand-navy hover:border-brand-navy/25'}`}
-                >
-                  Browse Fleet
-                </Link>
-              </div>
-            </motion.div>
-          ))}
+                  <div className="p-8 pt-0 space-y-3">
+                    <Link
+                      to={`/apply?planId=${plan.id}`}
+                      className={`w-full inline-flex items-center justify-center gap-2 rounded-xl px-5 py-4 text-xs font-bold uppercase tracking-[0.22em] transition-colors ${plan.popular ? 'bg-brand-gold text-brand-navy hover:bg-brand-gold-light' : 'bg-brand-navy text-white hover:bg-brand-navy-light'}`}
+                    >
+                      Choose Plan <ArrowRight className="w-4 h-4" />
+                    </Link>
+                    <Link
+                      to="/cars"
+                      className={`w-full inline-flex items-center justify-center gap-2 rounded-xl border px-5 py-4 text-xs font-bold uppercase tracking-[0.22em] transition-colors ${plan.popular ? 'border-white/15 text-white hover:border-white/40' : 'border-slate-200 text-brand-navy hover:border-brand-navy/25'}`}
+                    >
+                      Browse Fleet
+                    </Link>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -99,12 +152,12 @@ export default function Pricing() {
             {
               icon: ShieldCheck,
               title: 'Protected payments',
-              body: 'Stripe powers the payment flow once your application and vehicle allocation are confirmed.',
+              body: 'Stripe powers the upfront bond and ongoing subscription once you submit your application.',
             },
             {
               icon: CreditCard,
               title: 'Transparent onboarding costs',
-              body: 'Upfront and recurring charges remain visible in the main checkout flow before you pay.',
+              body: 'Every plan now shows the real upfront total, setup fees, and recurring charge before you pay.',
             },
             {
               icon: Check,
@@ -125,4 +178,3 @@ export default function Pricing() {
     </div>
   );
 }
-
