@@ -234,7 +234,7 @@ export default function Apply() {
       });
       const application_id = Number(appRes.data.application_id);
 
-      const subRes = await api.post('/create-subscription', {
+      const subRes = await api.post('/stripe/create-subscription', {
         application_id,
         plan_id: selected_plan_id,
       });

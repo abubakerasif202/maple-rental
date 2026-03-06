@@ -62,7 +62,7 @@ export const updateApplicationStatus = async (id: number, status: string): Promi
 };
 
 export const fetchStats = async (): Promise<DashboardStats> => {
-  const { data } = await api.get('/stats');
+  const { data } = await api.get('/financials/stats');
   return data;
 };
 
@@ -72,12 +72,12 @@ export const fetchRentals = async (): Promise<Rental[]> => {
 };
 
 export const createCheckoutSession = async (bookingData: any): Promise<any> => {
-  const { data } = await api.post('/bookings', bookingData);
+  const { data } = await api.post('/stripe/create-subscription', bookingData);
   return data;
 };
 
 export const fetchRentalPlans = async (): Promise<RentalPlanWithPricing[]> => {
-  const { data } = await api.get('/rental-plans');
+  const { data } = await api.get('/stripe/rental-plans');
   return data;
 };
 
@@ -118,30 +118,30 @@ export interface LeaseFeePayload {
 }
 
 export interface LeaseAgreementPayload {
-  agreement_date?: string;
-  registered_owner_name?: string;
-  registered_owner_address?: string;
-  registered_owner_contact?: string;
-  registered_owner_email?: string;
-  rentee_name?: string;
-  rentee_dob?: string;
-  rentee_license_number?: string;
-  rentee_license_state?: string;
-  rentee_address?: string;
-  rentee_contact?: string;
-  rentee_email?: string;
-  vehicle_make?: string;
-  vehicle_model?: string;
-  vehicle_year?: string;
-  vehicle_vin?: string;
-  km_allowance?: string;
-  weekly_rent?: string;
-  fuel_policy?: string;
-  insurance_coverage?: string;
-  rental_start_date?: string;
-  rental_end_date?: string;
-  minimum_rental_period?: string;
-  return_policy?: string;
+  agreementDate?: string;
+  registeredOwnerName?: string;
+  registeredOwnerAddress?: string;
+  registeredOwnerContact?: string;
+  registeredOwnerEmail?: string;
+  renteeName?: string;
+  renteeDob?: string;
+  renteeLicenseNumber?: string;
+  renteeLicenseState?: string;
+  renteeAddress?: string;
+  renteeContact?: string;
+  renteeEmail?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleYear?: string;
+  vehicleVin?: string;
+  kmAllowance?: string;
+  weeklyRent?: string;
+  fuelPolicy?: string;
+  insuranceCoverage?: string;
+  rentalStartDate?: string;
+  rentalEndDate?: string;
+  minimumRentalPeriod?: string;
+  returnPolicy?: string;
   fees?: LeaseFeePayload[];
 }
 

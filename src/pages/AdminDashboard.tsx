@@ -207,17 +207,17 @@ export default function AdminDashboard() {
       const selectedCar = cars.find(c => c.id === car_id);
 
       const payload = {
-        agreement_date: new Date().toLocaleDateString('en-AU'),
-        rentee_name: selectedApplication?.name,
-        rentee_email: selectedApplication?.email,
-        rentee_contact: selectedApplication?.phone,
-        rentee_address: selectedApplication?.address,
-        rentee_license_number: selectedApplication?.license_number,
-        vehicle_make: 'Toyota',
-        vehicle_model: selectedCar?.name.includes('Camry') ? 'Camry Hybrid' : selectedCar?.name,
-        vehicle_year: selectedCar?.model_year.toString(),
-        weekly_rent: `$${selectedCar?.weekly_price.toFixed(2)}`,
-        rental_start_date: agreementForm.rentalStartDate,
+        agreementDate: new Date().toLocaleDateString('en-AU'),
+        renteeName: selectedApplication?.name,
+        renteeEmail: selectedApplication?.email,
+        renteeContact: selectedApplication?.phone,
+        renteeAddress: selectedApplication?.address,
+        renteeLicenseNumber: selectedApplication?.license_number,
+        vehicleMake: 'Toyota',
+        vehicleModel: selectedCar?.name.includes('Camry') ? 'Camry Hybrid' : selectedCar?.name,
+        vehicleYear: selectedCar?.model_year.toString(),
+        weeklyRent: `$${selectedCar?.weekly_price.toFixed(2)}`,
+        rentalStartDate: agreementForm.rentalStartDate,
       };
 
       const res = await api.renderCarLeaseAgreement(payload);

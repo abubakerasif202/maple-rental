@@ -42,6 +42,20 @@ async function seedAdmin() {
     }
 
     console.log("Admin account created successfully!", user);
+
+    if (user && user.user) {
+        console.log(`Adding ${adminEmail} to the admins table...`);
+        const { error: insertError } = await supabase.from('admins').upsert([
+            { id: user.user.id, email: adminEmail }
+        ]);
+
+        if (insertError) {
+            console.error("Error adding admin to database table:", insertError);
+            process.exit(1);
+        }
+        console.log("Admin table entry created!");
+    }
+
     process.exit(0);
 }
 

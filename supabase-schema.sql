@@ -88,6 +88,23 @@ CREATE TABLE lease_agreements (
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
+-- 7. Admins Table (Single-Admin Whitelist)
+CREATE TABLE admins (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+-- Function to check if the current user is an admin
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM admins WHERE id = auth.uid()
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- --- INDEXES (For Performance) ---
 CREATE INDEX idx_rentals_car_id ON rentals(car_id);
 CREATE INDEX idx_rentals_application_id ON rentals(application_id);
@@ -106,13 +123,13 @@ ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE merchants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lease_agreements ENABLE ROW LEVEL SECURITY;
 
--- Define Admin Policy (Restricts access to the single admin email)
-CREATE POLICY admin_full_access ON cars FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'admin@maplerentals.com.au');
-CREATE POLICY admin_full_access ON applications FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'admin@maplerentals.com.au');
-CREATE POLICY admin_full_access ON rentals FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'admin@maplerentals.com.au');
-CREATE POLICY admin_full_access ON bookings FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'admin@maplerentals.com.au');
-CREATE POLICY admin_full_access ON merchants FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'admin@maplerentals.com.au');
-CREATE POLICY admin_full_access ON lease_agreements FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'admin@maplerentals.com.au');
+-- Define Admin Policy (Restricts access to the admins table)
+CREATE POLICY admin_full_access ON cars FOR ALL TO authenticated USING (is_admin());
+CREATE POLICY admin_full_access ON applications FOR ALL TO authenticated USING (is_admin());
+CREATE POLICY admin_full_access ON rentals FOR ALL TO authenticated USING (is_admin());
+CREATE POLICY admin_full_access ON bookings FOR ALL TO authenticated USING (is_admin());
+CREATE POLICY admin_full_access ON merchants FOR ALL TO authenticated USING (is_admin());
+CREATE POLICY admin_full_access ON lease_agreements FOR ALL TO authenticated USING (is_admin());
 
 -- Public Access (Read-only for Cars, Insert for Applications)
 CREATE POLICY public_view_cars ON cars FOR SELECT TO anon USING (status = 'Available');
