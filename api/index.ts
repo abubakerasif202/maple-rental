@@ -58,7 +58,8 @@ app.use(
 app.use(cookieParser());
 
 // Webhooks (MUST be before express.json() for raw body)
-app.use('/api/webhook', webhookRoutes);
+app.use('/api/webhook/stripe', webhookRoutes);
+app.use('/api/stripe/webhook', webhookRoutes);
 
 // JSON Body Parser (with limit for image uploads)
 app.use(express.json({ limit: '10mb' }));
@@ -103,6 +104,7 @@ app.use('/api/financials', financialRoutes);
 app.get('/api/stats', (_req, res) => res.redirect(307, '/api/financials/stats'));
 app.get('/api/rental-plans', (_req, res) => res.redirect(307, '/api/stripe/rental-plans'));
 app.post('/api/create-subscription', (_req, res) => res.redirect(307, '/api/stripe/create-subscription'));
+app.post('/api/bookings/verify-payment', (_req, res) => res.redirect(307, '/api/stripe/verify-payment'));
 
 // Server Startup
 const startServer = async () => {

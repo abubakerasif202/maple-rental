@@ -6,13 +6,103 @@ import { z } from 'zod';
 import crypto from 'crypto';
 
 const router = express.Router();
+const APPLICATIONS_BUCKET = 'applications';
+const DOCUMENT_URL_TTL_SECONDS = 60 * 15;
+
+const isAbsoluteUrl = (value: string) => /^https?:\/\//i.test(value);
+const SUPABASE_STORAGE_PATH_PREFIXES = [
+  `/storage/v1/object/public/${APPLICATIONS_BUCKET}/`,
+  `/storage/v1/object/sign/${APPLICATIONS_BUCKET}/`,
+  `/object/public/${APPLICATIONS_BUCKET}/`,
+  `/object/sign/${APPLICATIONS_BUCKET}/`,
+];
+
+const extractStoragePath = (value: string) => {
+  if (!isAbsoluteUrl(value)) {
+    return value;
+  }
+
+  try {
+    const { pathname } = new URL(value);
+    const prefix = SUPABASE_STORAGE_PATH_PREFIXES.find((candidate) => pathname.includes(candidate));
+
+    if (!prefix) {
+      return null;
+    }
+
+    return decodeURIComponent(pathname.slice(pathname.indexOf(prefix) + prefix.length));
+  } catch {
+    return null;
+  }
+};
+
+const createSignedDocumentUrl = async (path: string | null | undefined) => {
+  if (!path) {
+    return null;
+  }
+
+  const storagePath = extractStoragePath(path);
+  if (!storagePath) {
+    return path;
+  }
+
+  const { data, error } = await db.storage
+    .from(APPLICATIONS_BUCKET)
+    .createSignedUrl(storagePath, DOCUMENT_URL_TTL_SECONDS);
+
+  if (error) {
+    console.error(`Failed to sign application document ${storagePath}:`, error);
+    return null;
+  }
+
+  return data.signedUrl;
+};
 
 router.get('/', authenticateAdmin, async (_req, res) => {
   const { data, error } = await db.from('applications').select('*').order('created_at', { ascending: false });
   if (error) {
     return res.status(500).json({ error: 'Failed to fetch applications' });
   }
-  res.json(data || []);
+
+  const applications = await Promise.all((data || []).map(async (application) => ({
+    ...application,
+    license_photo: await createSignedDocumentUrl(application.license_photo),
+    uber_screenshot: await createSignedDocumentUrl(application.uber_screenshot),
+  })));
+
+  res.json(applications);
+});
+
+router.get('/:id/documents/:document', authenticateAdmin, async (req, res) => {
+  try {
+    const { document } = z.object({
+      document: z.enum(['license_photo', 'uber_screenshot']),
+    }).parse(req.params);
+
+    const { data: application, error } = await db
+      .from('applications')
+      .select(`id, ${document}`)
+      .eq('id', req.params.id)
+      .single();
+
+    if (error || !application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    const signedUrl = await createSignedDocumentUrl(application[document]);
+    if (!signedUrl) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    res.json({ url: signedUrl });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
+    }
+
+    console.error('Application document fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch application document' });
+  }
 });
 
 router.post('/', async (req, res) => {
@@ -44,7 +134,7 @@ router.post('/', async (req, res) => {
       const filename = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}-${filePrefix}`;
 
       const { data: uploadData, error: uploadError } = await db.storage
-        .from('applications')
+        .from(APPLICATIONS_BUCKET)
         .upload(filename, buffer, { contentType });
 
       if (uploadError) {
@@ -52,8 +142,7 @@ router.post('/', async (req, res) => {
         return null;
       }
 
-      const { data: publicUrlData } = db.storage.from('applications').getPublicUrl(filename);
-      return publicUrlData.publicUrl;
+      return uploadData.path || filename;
     };
 
     if (data.license_photo) {

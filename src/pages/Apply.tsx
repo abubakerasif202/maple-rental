@@ -121,6 +121,7 @@ function CheckoutForm({ amount, onSuccess, onCancel }: { amount: number; onSucce
 
 export default function Apply() {
   const [searchParams] = useSearchParams();
+  const requestedCarId = searchParams.get('carId');
   const [step, setStep] = useState(1);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -327,10 +328,19 @@ export default function Apply() {
             <form onSubmit={handleSubmit(onSubmit)}>
               {step === 1 && (
                 <div className="space-y-8">
-                  <div className="mb-12">
-                    <h2 className="text-3xl font-bold text-white mb-2 uppercase tracking-tighter">Driver Details</h2>
-                    <p className="text-brand-grey font-light">Tell us about yourself and choose the rental cadence you want to start with.</p>
+                <div className="mb-12">
+                  <h2 className="text-3xl font-bold text-white mb-2 uppercase tracking-tighter">Driver Details</h2>
+                  <p className="text-brand-grey font-light">Tell us about yourself and choose the rental cadence you want to start with.</p>
+                </div>
+
+                {requestedCarId && (
+                  <div className="rounded-2xl border border-brand-gold/20 bg-brand-gold/5 px-6 py-5">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-brand-gold mb-2">Vehicle interest noted</p>
+                    <p className="text-sm text-brand-grey font-light">
+                      Submit your application first. Once approved, the team will send you a secure checkout link for your selected vehicle.
+                    </p>
                   </div>
+                )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-2">

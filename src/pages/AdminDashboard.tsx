@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Plus, 
-  Search, 
+import {
+  Plus,
+  Search,
   MoreVertical, 
   CheckCircle2, 
   XCircle, 
@@ -21,9 +21,13 @@ import {
   Building2,
   Globe,
   Car,
-  Users
+  Users,
+  Mail,
+  Phone,
+  MapPin,
+  BadgeCheck
 } from 'lucide-react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import * as api from '../lib/api';
 import { Car as CarType, Application, Rental, DashboardStats, SaasMerchant } from '../types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -45,6 +49,7 @@ export default function AdminDashboard() {
   });
 
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+  const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   
   // Agreement Management State
   const [isGeneratingAgreement, setIsGeneratingAgreement] = useState(false);
@@ -92,6 +97,11 @@ export default function AdminDashboard() {
   const { data: rentals = [] } = useQuery<Rental[]>({
     queryKey: ['rentals'],
     queryFn: () => api.fetchRentals(),
+  });
+
+  const { data: weeklyFinancials } = useQuery<api.WeeklyFinancials>({
+    queryKey: ['weekly-financials'],
+    queryFn: () => api.fetchWeeklyFinancials(),
   });
 
   const { data: merchants = [] } = useQuery<SaasMerchant[]>({
@@ -231,6 +241,7 @@ export default function AdminDashboard() {
   };
 
   const approvedApplications = applications.filter(app => app.status === 'Approved' || app.status === 'Paid');
+  const formatCurrency = (value?: number) => `$${(value ?? 0).toFixed(2)}`;
 
   return (
     <div className="min-h-screen bg-brand-navy flex">
@@ -257,9 +268,13 @@ export default function AdminDashboard() {
                   <p className="text-brand-grey font-light">Performance metrics and recent activities.</p>
                 </div>
                 <div className="flex gap-4">
-                   <Link to="/admin/financials" className="flex items-center gap-3 px-6 py-4 bg-white/5 border border-white/10 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-all">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('financials')}
+                    className="flex items-center gap-3 px-6 py-4 bg-white/5 border border-white/10 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-all"
+                  >
                     <TrendingUp className="w-4 h-4 text-brand-gold" /> View Detailed Financials
-                  </Link>
+                  </button>
                 </div>
               </div>
 
@@ -433,22 +448,20 @@ export default function AdminDashboard() {
                             <button 
                               className="p-2 bg-white/5 text-brand-grey rounded-lg hover:bg-brand-gold hover:text-brand-navy transition-all"
                               title="View Documents"
-                              onClick={() => {
-                                if (app.status === 'Approved' || app.status === 'Paid') {
-                                  set_selected_agreement_application_id(app.id.toString());
-                                  setActiveTab('agreements');
-                                } else {
-                                  showNotification('Review documents in detail view (TODO)', 'success');
-                                }
-                              }}
+                              onClick={() => setSelectedApplication(app)}
                             >
                               <FileText className="w-4 h-4" />
                             </button>
                             {(app.status === 'Approved' || app.status === 'Paid') && (
                                 <button 
                                   onClick={() => {
-                                    const firstCarId = cars.find(c => c.status === 'Available')?.id || 1;
-                                    const link = `${window.location.origin}/checkout/${firstCarId}?application_id=${app.id}`;
+                                    const firstAvailableCarId = cars.find(c => c.status === 'Available')?.id;
+                                    if (!firstAvailableCarId) {
+                                      showNotification('No available vehicles for checkout', 'error');
+                                      return;
+                                    }
+
+                                    const link = `${window.location.origin}/checkout/${firstAvailableCarId}?application_id=${app.id}`;
                                     navigator.clipboard.writeText(link);
                                     showNotification('Checkout link copied!', 'success');
                                   }}
@@ -608,6 +621,118 @@ export default function AdminDashboard() {
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'financials' && (
+            <motion.div
+              key="financials"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-12"
+            >
+              <div className="flex justify-between items-end">
+                <div>
+                  <h2 className="text-4xl font-bold text-white uppercase tracking-tighter mb-2">Weekly <span className="text-brand-gold italic">Financials</span></h2>
+                  <p className="text-brand-grey font-light">Projected revenue, payout performance, and recent transfers.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void queryClient.invalidateQueries({ queryKey: ['weekly-financials'] });
+                    void queryClient.invalidateQueries({ queryKey: ['stats'] });
+                  }}
+                  className="flex items-center gap-3 px-6 py-4 bg-white/5 border border-white/10 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-all"
+                >
+                  <RefreshCw className="w-4 h-4 text-brand-gold" /> Refresh Data
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8">
+                {[
+                  {
+                    label: 'Projected Gross',
+                    value: formatCurrency(weeklyFinancials?.projected_gross_weekly),
+                    helper: 'Total billed weekly',
+                    icon: DollarSign,
+                  },
+                  {
+                    label: 'Projected Net',
+                    value: formatCurrency(weeklyFinancials?.projected_net_weekly),
+                    helper: 'After estimated fees',
+                    icon: TrendingUp,
+                  },
+                  {
+                    label: 'Platform Fees',
+                    value: formatCurrency(weeklyFinancials?.estimated_platform_fees),
+                    helper: 'Estimated weekly costs',
+                    icon: AlertCircle,
+                  },
+                  {
+                    label: 'Recent Payouts',
+                    value: formatCurrency(weeklyFinancials?.actual_payouts_weekly),
+                    helper: 'Paid out this week',
+                    icon: ShieldCheck,
+                  },
+                ].map((card) => (
+                  <div key={card.label} className="bg-white/5 border border-white/10 p-8 rounded-3xl">
+                    <div className="flex items-start justify-between gap-4 mb-6">
+                      <div>
+                        <p className="text-[10px] text-brand-grey font-bold uppercase tracking-[0.2em] mb-3">{card.label}</p>
+                        <h3 className="text-3xl font-bold text-white tracking-tighter">{card.value}</h3>
+                      </div>
+                      <div className="w-12 h-12 bg-brand-gold/10 rounded-2xl flex items-center justify-center border border-brand-gold/20">
+                        <card.icon className="w-5 h-5 text-brand-gold" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-brand-grey font-light">{card.helper}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden">
+                <div className="px-8 py-6 border-b border-white/10 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-white font-bold uppercase tracking-widest text-xs">Recent Stripe Payouts</h3>
+                    <p className="text-brand-grey text-xs font-light mt-2">Latest payout activity reported by the financials API.</p>
+                  </div>
+                </div>
+
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-white/5 border-b border-white/10">
+                      <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Payout ID</th>
+                      <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Arrival Date</th>
+                      <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Amount</th>
+                      <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {(weeklyFinancials?.recent_payouts || []).map((payout) => (
+                      <tr key={payout.id} className="hover:bg-white/5 transition-all">
+                        <td className="px-8 py-6 text-xs text-brand-gold font-bold">{payout.id}</td>
+                        <td className="px-8 py-6 text-xs text-brand-grey">
+                          {new Date(payout.arrival_date).toLocaleDateString()}
+                        </td>
+                        <td className="px-8 py-6 text-sm text-white font-bold">{formatCurrency(payout.amount)}</td>
+                        <td className="px-8 py-6">
+                          <span className="px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest border bg-white/5 text-brand-grey border-white/10">
+                            {payout.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {(!weeklyFinancials?.recent_payouts || weeklyFinancials.recent_payouts.length === 0) && (
+                      <tr>
+                        <td colSpan={4} className="px-8 py-12 text-center text-brand-grey text-xs font-light italic">
+                          No payout data available yet.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -818,6 +943,136 @@ export default function AdminDashboard() {
             {notification.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
             <p className="text-xs font-bold uppercase tracking-widest">{notification.message}</p>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Application Review Modal */}
+      <AnimatePresence>
+        {selectedApplication && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-xl bg-brand-navy/60">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-brand-navy border border-white/10 w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl"
+            >
+              <div className="p-8 border-b border-white/10 flex justify-between items-center bg-white/5">
+                <div>
+                  <h3 className="text-xl font-bold text-white uppercase tracking-tighter">Review Application</h3>
+                  <p className="text-[10px] text-brand-grey uppercase tracking-widest mt-1">Driver profile and submitted documents</p>
+                </div>
+                <button
+                  onClick={() => setSelectedApplication(null)}
+                  className="text-brand-grey hover:text-white p-2 bg-white/5 rounded-full"
+                >
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-8 space-y-8 max-h-[75vh] overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4">
+                    <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Applicant Details</h4>
+                    <div className="space-y-4 text-sm">
+                      <div className="flex items-center gap-3 text-white"><BadgeCheck className="w-4 h-4 text-brand-gold" /> {selectedApplication.name}</div>
+                      <div className="flex items-center gap-3 text-brand-grey"><Mail className="w-4 h-4 text-brand-gold" /> {selectedApplication.email}</div>
+                      <div className="flex items-center gap-3 text-brand-grey"><Phone className="w-4 h-4 text-brand-gold" /> {selectedApplication.phone}</div>
+                      <div className="flex items-start gap-3 text-brand-grey"><MapPin className="w-4 h-4 text-brand-gold mt-0.5" /> <span>{selectedApplication.address}</span></div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4">
+                    <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Application Snapshot</h4>
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <p className="text-brand-grey uppercase tracking-widest mb-2">Status</p>
+                        <p className="text-white font-bold">{selectedApplication.status}</p>
+                      </div>
+                      <div>
+                        <p className="text-brand-grey uppercase tracking-widest mb-2">Uber Status</p>
+                        <p className="text-white font-bold">{selectedApplication.uber_status}</p>
+                      </div>
+                      <div>
+                        <p className="text-brand-grey uppercase tracking-widest mb-2">Experience</p>
+                        <p className="text-white font-bold">{selectedApplication.experience}</p>
+                      </div>
+                      <div>
+                        <p className="text-brand-grey uppercase tracking-widest mb-2">Start Date</p>
+                        <p className="text-white font-bold">{selectedApplication.intended_start_date}</p>
+                      </div>
+                      <div>
+                        <p className="text-brand-grey uppercase tracking-widest mb-2">License #</p>
+                        <p className="text-white font-bold">{selectedApplication.license_number}</p>
+                      </div>
+                      <div>
+                        <p className="text-brand-grey uppercase tracking-widest mb-2">Expiry</p>
+                        <p className="text-white font-bold">{selectedApplication.license_expiry}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4">
+                    <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">License Photo</h4>
+                    {selectedApplication.license_photo ? (
+                      <a
+                        href={selectedApplication.license_photo}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 bg-brand-gold text-brand-navy font-bold uppercase tracking-widest text-[10px] hover:bg-brand-gold-light transition-all"
+                      >
+                        <ExternalLink className="w-4 h-4" /> Open License Photo
+                      </a>
+                    ) : (
+                      <div className="px-6 py-4 border border-white/10 rounded-2xl text-brand-grey text-xs font-light">
+                        No license photo uploaded.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4">
+                    <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Uber Screenshot</h4>
+                    {selectedApplication.uber_screenshot ? (
+                      <a
+                        href={selectedApplication.uber_screenshot}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 bg-white/5 border border-white/10 text-white font-bold uppercase tracking-widest text-[10px] hover:bg-white/10 transition-all"
+                      >
+                        <ExternalLink className="w-4 h-4 text-brand-gold" /> Open Uber Screenshot
+                      </a>
+                    ) : (
+                      <div className="px-6 py-4 border border-white/10 rounded-2xl text-brand-grey text-xs font-light">
+                        No Uber screenshot uploaded.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-8 border-t border-white/10 bg-white/5 flex gap-4">
+                <button
+                  onClick={() => setSelectedApplication(null)}
+                  className="flex-1 py-5 border border-white/10 text-white font-bold uppercase tracking-widest text-xs hover:bg-white/5 transition-all"
+                >
+                  Close
+                </button>
+                {(selectedApplication.status === 'Approved' || selectedApplication.status === 'Paid') && (
+                  <button
+                    onClick={() => {
+                      set_selected_agreement_application_id(selectedApplication.id.toString());
+                      setSelectedApplication(null);
+                      setActiveTab('agreements');
+                    }}
+                    className="flex-[2] bg-brand-gold text-brand-navy py-5 font-bold uppercase tracking-widest text-xs hover:bg-brand-gold-light transition-all shadow-lg flex items-center justify-center gap-3"
+                  >
+                    <FileText className="w-4 h-4" /> Continue to Agreement
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

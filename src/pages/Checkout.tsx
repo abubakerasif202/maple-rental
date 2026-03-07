@@ -85,6 +85,7 @@ export default function Checkout() {
   const { id: car_id } = useParams();
   const [searchParams] = useSearchParams();
   const application_id = searchParams.get('application_id');
+  const hasApplicationId = Boolean(application_id);
 
   const { data: car, error: carError, isLoading: isCarLoading } = useQuery<Car>({
     queryKey: ['car', car_id],
@@ -98,13 +99,13 @@ export default function Checkout() {
   const { data: subscription, error: subError, isLoading: isSubLoading } = useQuery<SubscriptionSession>({
     queryKey: ['checkout-session', car_id, application_id],
     queryFn: async () => {
-      const res = await api.post('/create-subscription', {
+      const res = await api.post('/stripe/create-subscription', {
         car_id: Number(car_id),
-        application_id: application_id ? Number(application_id) : undefined,
+        application_id: Number(application_id),
       });
       return res.data;
     },
-    enabled: !!car,
+    enabled: !!car && hasApplicationId,
     staleTime: Infinity,
     retry: false,
   });
@@ -113,6 +114,23 @@ export default function Checkout() {
     return (
       <div className="min-h-screen bg-brand-navy flex items-center justify-center">
         <Loader2 className="w-12 h-12 text-brand-gold animate-spin" />
+      </div>
+    );
+  }
+
+  if (!hasApplicationId) {
+    return (
+      <div className="min-h-screen bg-brand-navy flex items-center justify-center text-white px-6">
+        <div className="max-w-lg text-center space-y-6">
+          <p className="text-brand-gold text-[10px] font-bold uppercase tracking-widest">Application required</p>
+          <h1 className="text-4xl font-bold uppercase tracking-tighter">Complete your driver application first</h1>
+          <p className="text-brand-grey font-light">
+            Vehicle checkout links are issued after an application has been reviewed. Start with the application form and we&apos;ll send the secure payment link once you&apos;re approved.
+          </p>
+          <Link to={car_id ? `/apply?carId=${car_id}` : '/apply'} className="inline-flex items-center gap-2 bg-brand-gold text-brand-navy px-8 py-4 font-bold uppercase tracking-widest text-xs hover:bg-brand-gold-light transition-all">
+            Start Application
+          </Link>
+        </div>
       </div>
     );
   }

@@ -45,10 +45,19 @@ export const merchantSchema = z.object({
 
 export const subscriptionPayloadSchema = z.object({
   car_id: z.coerce.number().int().positive().optional(),
-  application_id: z.coerce.number().int().positive().optional(),
+  application_id: z.coerce.number().int().positive(),
   plan_id: z.string().min(1).optional(),
-  custom_weekly_price: z.coerce.number().optional(),
-  custom_bond: z.coerce.number().optional(),
+}).strict().superRefine((value, ctx) => {
+  const hasCar = typeof value.car_id === 'number';
+  const hasPlan = typeof value.plan_id === 'string';
+
+  if (hasCar === hasPlan) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Provide exactly one of car_id or plan_id',
+      path: ['car_id'],
+    });
+  }
 });
 
 export const paymentIntentPayloadSchema = z.object({

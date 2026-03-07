@@ -154,8 +154,7 @@ export default function CarDetails() {
               </div>
 
               <Link 
-                to={`/checkout/${car.id}`} 
-                state={{ car, totalAmount: car.bond + car.weekly_price + 10 + 2.2 }}
+                to={`/apply?carId=${car.id}`}
                 className={`flex items-center justify-center gap-3 w-full py-6 font-bold text-sm transition-all uppercase tracking-widest shadow-2xl ${
                   car.status === 'Available' 
                     ? 'bg-brand-gold hover:bg-brand-gold-light text-brand-navy' 
@@ -165,7 +164,7 @@ export default function CarDetails() {
               >
                 {car.status === 'Available' ? (
                   <>
-                    Apply & Rent Now
+                    Start Application
                     <ChevronRight className="w-5 h-5" />
                   </>
                 ) : 'Currently Rented'}

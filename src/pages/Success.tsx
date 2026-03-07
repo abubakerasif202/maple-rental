@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { CheckCircle, Home } from 'lucide-react';
+import api from '../lib/api';
 
 export default function Success() {
   const [searchParams] = useSearchParams();
@@ -9,24 +10,37 @@ export default function Success() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
 
   useEffect(() => {
-    if (sessionId || paymentIntentId) {
-      fetch('/api/bookings/verify-payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, paymentIntentId }),
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            setStatus('success');
-          } else {
-            setStatus('error');
-          }
-        })
-        .catch(() => setStatus('error'));
-    } else {
-      setStatus('error');
-    }
+    let isMounted = true;
+
+    const verifyPayment = async () => {
+      if (!sessionId && !paymentIntentId) {
+        if (isMounted) {
+          setStatus('error');
+        }
+        return;
+      }
+
+      try {
+        const { data } = await api.post('/stripe/verify-payment', {
+          sessionId,
+          paymentIntentId,
+        });
+
+        if (isMounted) {
+          setStatus(data.success ? 'success' : 'error');
+        }
+      } catch {
+        if (isMounted) {
+          setStatus('error');
+        }
+      }
+    };
+
+    verifyPayment();
+
+    return () => {
+      isMounted = false;
+    };
   }, [sessionId, paymentIntentId]);
 
   return (
@@ -44,7 +58,7 @@ export default function Success() {
               <CheckCircle className="mx-auto h-20 w-20 text-brand-gold mb-8" />
               <h2 className="text-3xl font-serif font-bold text-white mb-4 tracking-tight">Payment Successful!</h2>
               <p className="text-brand-grey font-light leading-relaxed mb-10">
-                Your booking has been confirmed. We've sent a confirmation email with your rental details.
+                Your payment has been confirmed. We&apos;ll email you with the next steps for your rental shortly.
               </p>
               <Link
                 to="/"
