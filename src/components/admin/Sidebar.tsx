@@ -6,6 +6,7 @@ import {
   Car, 
   Calendar, 
   TrendingUp,
+  DollarSign,
   LogOut, 
   FileText, 
   Building2 
@@ -22,6 +23,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, handleLogout
     { id: 'dashboard', icon: LayoutDashboard, label: 'Overview' },
     { id: 'applications', icon: Users, label: 'Applications' },
     { id: 'rentals', icon: Calendar, label: 'Rentals' },
+    { id: 'customers', icon: Users, label: 'Customers' },
+    { id: 'invoices', icon: DollarSign, label: 'Invoices' },
     { id: 'financials', icon: TrendingUp, label: 'Financials' },
     { id: 'cars', icon: Car, label: 'Fleet' },
     { id: 'agreements', icon: FileText, label: 'Agreements' },

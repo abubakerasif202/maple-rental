@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus,
@@ -29,7 +29,16 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import * as api from '../lib/api';
-import { Car as CarType, Application, Rental, DashboardStats, SaasMerchant } from '../types';
+import {
+  Car as CarType,
+  Application,
+  Rental,
+  DashboardStats,
+  SaasMerchant,
+  AdminDatasetResponse,
+  OperationalCustomer,
+  OperationalInvoice,
+} from '../types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Sidebar from '../components/admin/Sidebar';
 
@@ -72,6 +81,8 @@ export default function AdminDashboard() {
     country: 'AU',
     payout_interval: 'weekly' as const
   });
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [invoiceSearch, setInvoiceSearch] = useState('');
 
   const showNotification = (message: string, type: 'success' | 'error') => {
     setNotification({ message, type });
@@ -97,6 +108,16 @@ export default function AdminDashboard() {
   const { data: rentals = [] } = useQuery<Rental[]>({
     queryKey: ['rentals'],
     queryFn: () => api.fetchRentals(),
+  });
+
+  const { data: customerDataset } = useQuery<AdminDatasetResponse<OperationalCustomer>>({
+    queryKey: ['operational-customers'],
+    queryFn: () => api.fetchOperationalCustomers(),
+  });
+
+  const { data: invoiceDataset } = useQuery<AdminDatasetResponse<OperationalInvoice>>({
+    queryKey: ['operational-invoices'],
+    queryFn: () => api.fetchOperationalInvoices(),
   });
 
   const { data: weeklyFinancials } = useQuery<api.WeeklyFinancials>({
@@ -241,7 +262,83 @@ export default function AdminDashboard() {
   };
 
   const approvedApplications = applications.filter(app => app.status === 'Approved' || app.status === 'Paid');
-  const formatCurrency = (value?: number) => `$${(value ?? 0).toFixed(2)}`;
+  const formatCurrency = (value?: number | string | null) => `$${Number(value ?? 0).toFixed(2)}`;
+  const formatDate = (value?: string | null) => {
+    if (!value) {
+      return 'N/A';
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value;
+    }
+
+    return parsed.toLocaleDateString();
+  };
+  const customerRecords = customerDataset?.items || [];
+  const invoiceRecords = invoiceDataset?.items || [];
+  const customerHistoryAvailable = customerDataset?.available !== false;
+  const invoiceHistoryAvailable = invoiceDataset?.available !== false;
+  const operationalHistoryMessage =
+    customerDataset?.message ||
+    invoiceDataset?.message ||
+    'Operational history is not installed in this environment yet.';
+  const filteredCustomers = customerRecords.filter((customer) => {
+    const query = customerSearch.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+
+    return [
+      customer.full_name,
+      customer.email || '',
+      customer.phone || '',
+      customer.company_name || '',
+      customer.staff_number || '',
+    ].some((value) => value.toLowerCase().includes(query));
+  });
+  const filteredInvoices = invoiceRecords.filter((invoice) => {
+    const query = invoiceSearch.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+
+    return [
+      invoice.external_invoice_number,
+      invoice.customer_name,
+      invoice.car_registration || '',
+      invoice.customer_email || '',
+      invoice.status,
+    ].some((value) => value.toLowerCase().includes(query));
+  });
+  const customerTotals = {
+    total_billed: customerRecords.reduce((sum, customer) => sum + (Number(customer.total_billed) || 0), 0),
+    outstanding_balance: customerRecords.reduce(
+      (sum, customer) => sum + (Number(customer.outstanding_balance) || 0),
+      0
+    ),
+  };
+  const invoiceTotals = {
+    total_amount: invoiceRecords.reduce((sum, invoice) => sum + (Number(invoice.amount) || 0), 0),
+    outstanding_balance: invoiceRecords.reduce((sum, invoice) => sum + (Number(invoice.balance) || 0), 0),
+    open_count: invoiceRecords.filter((invoice) => invoice.status === 'Open').length,
+  };
+  const renderOperationalUnavailable = (title: string) => (
+    <div className="bg-white/5 border border-white/10 rounded-3xl p-10 space-y-4">
+      <div className="w-12 h-12 bg-brand-gold/10 rounded-2xl flex items-center justify-center border border-brand-gold/20">
+        <AlertCircle className="w-5 h-5 text-brand-gold" />
+      </div>
+      <div>
+        <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
+        <p className="text-sm text-brand-grey leading-relaxed">{operationalHistoryMessage}</p>
+      </div>
+      <div className="bg-brand-navy/60 border border-white/10 rounded-2xl px-5 py-4 text-[11px] text-brand-grey font-light">
+        Run <span className="font-mono text-white">npm run migrate:operational-history</span> with
+        {' '}<span className="font-mono text-white">SUPABASE_DB_URL</span>, then run
+        {' '}<span className="font-mono text-white">powershell -ExecutionPolicy Bypass -File scripts/import-operational-history-from-workbooks.ps1 -Apply</span>.
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-brand-navy flex">
@@ -624,6 +721,234 @@ export default function AdminDashboard() {
                   </tbody>
                 </table>
               </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'customers' && (
+            <motion.div
+              key="customers"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-12"
+            >
+              <div className="flex justify-between items-end">
+                <div>
+                  <h2 className="text-4xl font-bold text-white uppercase tracking-tighter mb-2">Legacy <span className="text-brand-gold italic">Customers</span></h2>
+                  <p className="text-brand-grey font-light">Private customer records imported from the operational client roster.</p>
+                </div>
+                <div className="flex gap-4">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-brand-grey absolute left-4 top-1/2 -translate-y-1/2" />
+                    <input
+                      value={customerSearch}
+                      onChange={(event) => setCustomerSearch(event.target.value)}
+                      placeholder="Search customers..."
+                      className="bg-white/5 border border-white/10 rounded-xl pl-12 pr-6 py-4 text-sm text-white focus:border-brand-gold outline-none transition-all w-72"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {!customerHistoryAvailable ? (
+                renderOperationalUnavailable('Customer history schema is not installed')
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {[
+                      { label: 'Imported Customers', value: customerRecords.length, helper: 'Rows in the private customer roster', icon: Users },
+                      { label: 'Total Billed', value: formatCurrency(customerTotals.total_billed), helper: 'Across linked invoice history', icon: DollarSign },
+                      { label: 'Outstanding Balance', value: formatCurrency(customerTotals.outstanding_balance), helper: 'Open balances still on file', icon: AlertCircle },
+                    ].map((card) => (
+                      <div key={card.label} className="bg-white/5 border border-white/10 p-8 rounded-3xl">
+                        <div className="flex items-start justify-between gap-4 mb-6">
+                          <div>
+                            <p className="text-[10px] text-brand-grey font-bold uppercase tracking-[0.2em] mb-3">{card.label}</p>
+                            <h3 className="text-3xl font-bold text-white tracking-tighter">{card.value}</h3>
+                          </div>
+                          <div className="w-12 h-12 bg-brand-gold/10 rounded-2xl flex items-center justify-center border border-brand-gold/20">
+                            <card.icon className="w-5 h-5 text-brand-gold" />
+                          </div>
+                        </div>
+                        <p className="text-xs text-brand-grey font-light">{card.helper}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-white/5 border-b border-white/10">
+                          <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Customer</th>
+                          <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Contact</th>
+                          <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Invoice Activity</th>
+                          <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Outstanding</th>
+                          <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Last Invoice</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {filteredCustomers.map((customer) => (
+                          <tr key={customer.id} className="hover:bg-white/5 transition-all">
+                            <td className="px-8 py-6">
+                              <div>
+                                <p className="text-sm font-bold text-white">{customer.full_name}</p>
+                                <p className="text-[10px] text-brand-grey uppercase tracking-widest">
+                                  {customer.staff_number || customer.external_id || 'Legacy record'}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-8 py-6">
+                              <div className="space-y-1">
+                                <p className="text-xs text-white">{customer.email || 'No email on file'}</p>
+                                <p className="text-[10px] text-brand-grey">{customer.phone || 'No phone on file'}</p>
+                              </div>
+                            </td>
+                            <td className="px-8 py-6">
+                              <div>
+                                <p className="text-sm font-bold text-white">{customer.invoice_count} invoices</p>
+                                <p className="text-[10px] text-brand-grey uppercase tracking-widest">
+                                  {formatCurrency(customer.total_billed)} billed
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-8 py-6 text-sm font-bold text-white">
+                              {formatCurrency(customer.outstanding_balance)}
+                            </td>
+                            <td className="px-8 py-6 text-xs text-brand-grey">
+                              {formatDate(customer.last_invoice_date)}
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredCustomers.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="px-8 py-12 text-center text-brand-grey text-xs font-light italic">
+                              No customer records matched the current search.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'invoices' && (
+            <motion.div
+              key="invoices"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-12"
+            >
+              <div className="flex justify-between items-end">
+                <div>
+                  <h2 className="text-4xl font-bold text-white uppercase tracking-tighter mb-2">Invoice <span className="text-brand-gold italic">History</span></h2>
+                  <p className="text-brand-grey font-light">Imported legacy invoice history for operational review and reconciliation.</p>
+                </div>
+                <div className="flex gap-4">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-brand-grey absolute left-4 top-1/2 -translate-y-1/2" />
+                    <input
+                      value={invoiceSearch}
+                      onChange={(event) => setInvoiceSearch(event.target.value)}
+                      placeholder="Search invoices..."
+                      className="bg-white/5 border border-white/10 rounded-xl pl-12 pr-6 py-4 text-sm text-white focus:border-brand-gold outline-none transition-all w-72"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {!invoiceHistoryAvailable ? (
+                renderOperationalUnavailable('Invoice history schema is not installed')
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {[
+                      { label: 'Imported Invoices', value: invoiceRecords.length, helper: 'Rows imported from the workbook export', icon: FileText },
+                      { label: 'Outstanding Balance', value: formatCurrency(invoiceTotals.outstanding_balance), helper: 'Balance still open across all imported invoices', icon: AlertCircle },
+                      { label: 'Open Invoices', value: invoiceTotals.open_count, helper: 'Invoices with remaining balance', icon: DollarSign },
+                    ].map((card) => (
+                      <div key={card.label} className="bg-white/5 border border-white/10 p-8 rounded-3xl">
+                        <div className="flex items-start justify-between gap-4 mb-6">
+                          <div>
+                            <p className="text-[10px] text-brand-grey font-bold uppercase tracking-[0.2em] mb-3">{card.label}</p>
+                            <h3 className="text-3xl font-bold text-white tracking-tighter">{card.value}</h3>
+                          </div>
+                          <div className="w-12 h-12 bg-brand-gold/10 rounded-2xl flex items-center justify-center border border-brand-gold/20">
+                            <card.icon className="w-5 h-5 text-brand-gold" />
+                          </div>
+                        </div>
+                        <p className="text-xs text-brand-grey font-light">{card.helper}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-white/5 border-b border-white/10">
+                          <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Invoice</th>
+                          <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Customer</th>
+                          <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Vehicle</th>
+                          <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Amount / Balance</th>
+                          <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Invoice Date</th>
+                          <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {filteredInvoices.map((invoice) => (
+                          <tr key={invoice.id} className="hover:bg-white/5 transition-all">
+                            <td className="px-8 py-6">
+                              <div>
+                                <p className="text-sm font-bold text-white">#{invoice.external_invoice_number}</p>
+                                <p className="text-[10px] text-brand-grey uppercase tracking-widest">{invoice.due_label || 'No due label'}</p>
+                              </div>
+                            </td>
+                            <td className="px-8 py-6">
+                              <div>
+                                <p className="text-sm font-bold text-white">{invoice.customer_name}</p>
+                                <p className="text-[10px] text-brand-grey">{invoice.customer_email || 'No linked email'}</p>
+                              </div>
+                            </td>
+                            <td className="px-8 py-6 text-xs text-brand-grey">
+                              {invoice.car_registration || 'N/A'}
+                            </td>
+                            <td className="px-8 py-6">
+                              <div>
+                                <p className="text-sm font-bold text-white">{formatCurrency(invoice.amount)}</p>
+                                <p className="text-[10px] text-brand-grey uppercase tracking-widest">
+                                  Balance {formatCurrency(invoice.balance)}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-8 py-6 text-xs text-brand-grey">
+                              {formatDate(invoice.invoice_date)}
+                            </td>
+                            <td className="px-8 py-6">
+                              <span className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest border ${
+                                invoice.status === 'Paid'
+                                  ? 'bg-green-500/10 text-green-500 border-green-500/20'
+                                  : 'bg-brand-gold/10 text-brand-gold border-brand-gold/20'
+                              }`}>
+                                {invoice.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredInvoices.length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="px-8 py-12 text-center text-brand-grey text-xs font-light italic">
+                              No invoice records matched the current search.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </motion.div>
           )}
 

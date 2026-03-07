@@ -1,5 +1,14 @@
 import axios from 'axios';
-import { Car, Application, Rental, DashboardStats, SaasMerchant } from '../types';
+import {
+  Car,
+  Application,
+  Rental,
+  DashboardStats,
+  SaasMerchant,
+  AdminDatasetResponse,
+  OperationalCustomer,
+  OperationalInvoice,
+} from '../types';
 import type { RentalPlanWithPricing } from './rentalPlans';
 
 const api = axios.create({
@@ -68,6 +77,20 @@ export const fetchStats = async (): Promise<DashboardStats> => {
 
 export const fetchRentals = async (): Promise<Rental[]> => {
   const { data } = await api.get('/rentals');
+  return data;
+};
+
+export const fetchOperationalCustomers = async (): Promise<
+  AdminDatasetResponse<OperationalCustomer>
+> => {
+  const { data } = await api.get('/customers');
+  return data;
+};
+
+export const fetchOperationalInvoices = async (): Promise<
+  AdminDatasetResponse<OperationalInvoice>
+> => {
+  const { data } = await api.get('/invoices');
   return data;
 };
 

@@ -44,6 +44,53 @@ export interface DashboardStats {
   total_weekly_income: number;
 }
 
+export interface AdminDatasetResponse<T> {
+  available: boolean;
+  items: T[];
+  message?: string;
+}
+
+export interface OperationalCustomer {
+  id: number;
+  external_id?: string | null;
+  staff_number?: string | null;
+  full_name: string;
+  preferred_name?: string | null;
+  company_name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  date_of_birth?: string | null;
+  street?: string | null;
+  city?: string | null;
+  postcode?: string | null;
+  state?: string | null;
+  source: string;
+  created_at: string;
+  updated_at: string;
+  invoice_count: number;
+  total_billed: number;
+  outstanding_balance: number;
+  last_invoice_date?: string | null;
+}
+
+export interface OperationalInvoice {
+  id: number;
+  external_invoice_number: string;
+  customer_id?: number | null;
+  customer_name: string;
+  car_registration?: string | null;
+  invoice_date: string;
+  due_label?: string | null;
+  amount: number;
+  balance: number;
+  transaction_summary?: string | null;
+  source: string;
+  created_at: string;
+  customer_email?: string | null;
+  customer_phone?: string | null;
+  status: 'Open' | 'Paid';
+}
+
 export interface SaasMerchant {
   id: number;
   name: string;

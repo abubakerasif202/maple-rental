@@ -15,6 +15,8 @@ import agreementRoutes from './routes/agreements.js';
 import saasRoutes from './routes/saas.js';
 import financialRoutes from './routes/financials.js';
 import webhookRoutes from './routes/webhooks.js';
+import customerRoutes from './routes/customers.js';
+import invoiceRoutes from './routes/invoices.js';
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -99,6 +101,8 @@ app.use('/api/rentals', rentalRoutes);
 app.use('/api/agreements', agreementRoutes);
 app.use('/api/saas', saasRoutes);
 app.use('/api/financials', financialRoutes);
+app.use('/api/customers', customerRoutes);
+app.use('/api/invoices', invoiceRoutes);
 
 // Legacy/Compatibility Redirects or Aliases
 app.get('/api/stats', (_req, res) => res.redirect(307, '/api/financials/stats'));
