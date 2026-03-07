@@ -3,6 +3,7 @@ import { db } from '../db/index.js';
 import { authenticateAdmin } from './auth.js';
 import { applicationSchema, applicationStatusEnum } from '../validation.js';
 import { z } from 'zod';
+import crypto from 'crypto';
 
 const router = express.Router();
 
@@ -40,7 +41,7 @@ router.post('/', async (req, res) => {
         return null;
       }
 
-      const filename = `${Date.now()}-${Math.floor(Math.random() * 10000)}-${filePrefix}`;
+      const filename = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}-${filePrefix}`;
 
       const { data: uploadData, error: uploadError } = await db.storage
         .from('applications')
