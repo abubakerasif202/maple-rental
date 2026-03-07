@@ -6,6 +6,7 @@ const {
   mockGetUser,
   mockSignInWithPassword,
   mockStorageFrom,
+  mockCreateAuthClient,
 } = vi.hoisted(() => ({
   mockState: {
     cars: [] as Array<Record<string, any>>,
@@ -16,6 +17,7 @@ const {
   mockGetUser: vi.fn(),
   mockSignInWithPassword: vi.fn(),
   mockStorageFrom: vi.fn(),
+  mockCreateAuthClient: vi.fn(),
 }));
 
 vi.mock('../db/index.js', () => {
@@ -147,11 +149,8 @@ vi.mock('../db/index.js', () => {
         createBucket: vi.fn(async () => ({ error: null })),
         updateBucket: vi.fn(async () => ({ error: null })),
       },
-      auth: {
-        getUser: mockGetUser,
-        signInWithPassword: mockSignInWithPassword,
-      },
     },
+    createAuthClient: mockCreateAuthClient,
     initializeDB: vi.fn(() => Promise.resolve()),
   };
 });
@@ -300,6 +299,12 @@ beforeEach(() => {
     },
     error: null,
   }));
+  mockCreateAuthClient.mockReturnValue({
+    auth: {
+      getUser: mockGetUser,
+      signInWithPassword: mockSignInWithPassword,
+    },
+  });
   mockStorageFrom.mockImplementation((bucket: string) => ({
     upload: vi.fn(async (path: string) => ({ data: { path }, error: null })),
     createSignedUrl: vi.fn(async (path: string) => ({

@@ -1,5 +1,5 @@
 import express from 'express';
-import { db } from '../db/index.js';
+import { createAuthClient } from '../db/index.js';
 
 const router = express.Router();
 
@@ -16,7 +16,8 @@ export const authenticateAdmin = async (req: express.Request, res: express.Respo
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    const { data, error } = await db.auth.getUser(token);
+    const authClient = createAuthClient();
+    const { data, error } = await authClient.auth.getUser(token);
     if (error || !data.user) {
       return res.status(401).json({ error: 'Invalid token' });
     }
@@ -49,7 +50,8 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    const { data, error } = await db.auth.signInWithPassword({
+    const authClient = createAuthClient();
+    const { data, error } = await authClient.auth.signInWithPassword({
       email,
       password: pass,
     });
