@@ -2,9 +2,53 @@ import express from 'express';
 import Stripe from 'stripe';
 import { db } from '../db/index.js';
 import { STRIPE_CONFIG } from '../constants.js';
+import {
+  getCarSelectColumns,
+  getRentalApplicationIdColumn,
+  getRentalCarIdColumn,
+  getSchemaCompat,
+  toRentalWritePayload,
+} from '../schemaCompat.js';
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', STRIPE_CONFIG);
+
+const getRentalStatusUpdatePayload = async (
+  status: string,
+  endDate?: string
+) => {
+  const compat = await getSchemaCompat();
+  const payload: Record<string, unknown> = { status };
+
+  if (endDate) {
+    payload[compat.coreMode === 'camel' ? 'endDate' : 'end_date'] = endDate;
+  }
+
+  return payload;
+};
+
+const updateRentalsBySubscriptionIdentity = async (
+  subscriptionId: string,
+  metadata: Record<string, string | undefined>,
+  payload: Record<string, unknown>
+) => {
+  const compat = await getSchemaCompat();
+
+  if (compat.rentalStripeSubscriptionColumn) {
+    await db.from('rentals').update(payload).eq(compat.rentalStripeSubscriptionColumn, subscriptionId);
+    return;
+  }
+
+  if (!metadata.car_id || !metadata.application_id) {
+    return;
+  }
+
+  await db
+    .from('rentals')
+    .update(payload)
+    .eq(await getRentalCarIdColumn(), Number(metadata.car_id))
+    .eq(await getRentalApplicationIdColumn(), Number(metadata.application_id));
+};
 
 router.post('/', express.raw({ type: 'application/json' }), async (request, response) => {
   const sig = request.headers['stripe-signature'];
@@ -36,9 +80,11 @@ router.post('/', express.raw({ type: 'application/json' }), async (request, resp
         console.log(`ℹ️ Webhook: Connected account updated ${account.id}`);
 
         if (account.details_submitted) {
-          await db.from('merchants')
-            .update({ onboarding_status: 'active' })
-            .eq('stripe_account_id', account.id);
+          const compat = await getSchemaCompat();
+          await db
+            .from('merchants')
+            .update(compat.merchantMode === 'camel' ? { onboardingStatus: 'active' } : { onboarding_status: 'active' })
+            .eq(compat.merchantMode === 'camel' ? 'stripeAccountId' : 'stripe_account_id', account.id);
         }
         break;
       }
@@ -55,24 +101,42 @@ router.post('/', express.raw({ type: 'application/json' }), async (request, resp
         if (car_id && application_id) {
           console.log(`✅ Webhook: Payment succeeded for car ${car_id} and application ${application_id}`);
 
-          const { data: existingRental } = await db
-            .from('rentals')
-            .select('id')
-            .eq('stripe_subscription_id', subscriptionId)
-            .single();
+          const compat = await getSchemaCompat();
+          const rentalCarIdColumn = await getRentalCarIdColumn();
+          const rentalApplicationIdColumn = await getRentalApplicationIdColumn();
+          const existingRentalResult = compat.rentalStripeSubscriptionColumn
+            ? await db
+                .from('rentals')
+                .select('id')
+                .eq(compat.rentalStripeSubscriptionColumn, subscriptionId)
+                .limit(1)
+            : await db
+                .from('rentals')
+                .select('id')
+                .eq(rentalCarIdColumn, Number(car_id))
+                .eq(rentalApplicationIdColumn, Number(application_id))
+                .eq('status', 'Active')
+                .limit(1);
+          const existingRental = existingRentalResult.data?.[0];
 
           if (!existingRental) {
-            const { data: car } = await db.from('cars').select('weekly_price').eq('id', car_id).single();
+            const { data: car } = await db
+              .from('cars')
+              .select(await getCarSelectColumns())
+              .eq('id', car_id)
+              .single();
 
-            await db.from('rentals').insert([{
+            const rentalPayload = await toRentalWritePayload({
               car_id: Number(car_id),
               application_id: Number(application_id),
               start_date: new Date().toISOString().split('T')[0],
-              weekly_price: car?.weekly_price || 0,
+              weekly_price: Number(car?.weekly_price) || 0,
               status: 'Active',
               stripe_subscription_id: subscriptionId,
-              stripe_customer_id: customerId
-            }]);
+              stripe_customer_id: customerId,
+            });
+
+            await db.from('rentals').insert([rentalPayload]);
 
             await db.from('cars').update({ status: 'Rented' }).eq('id', car_id);
             await db.from('applications').update({ status: 'Approved' }).eq('id', application_id);
@@ -117,9 +181,12 @@ router.post('/', express.raw({ type: 'application/json' }), async (request, resp
         const invoice = event.data.object as any;
         const subscriptionId = invoice.subscription as string;
         if (subscriptionId) {
-          await db.from('rentals')
-            .update({ status: 'Overdue' })
-            .eq('stripe_subscription_id', subscriptionId);
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+          await updateRentalsBySubscriptionIdentity(
+            subscriptionId,
+            subscription.metadata,
+            await getRentalStatusUpdatePayload('Overdue')
+          );
         }
         break;
       }
@@ -128,9 +195,11 @@ router.post('/', express.raw({ type: 'application/json' }), async (request, resp
         const subscriptionId = subscription.id;
         const { car_id } = subscription.metadata;
 
-        await db.from('rentals')
-          .update({ status: 'Completed', end_date: new Date().toISOString().split('T')[0] })
-          .eq('stripe_subscription_id', subscriptionId);
+        await updateRentalsBySubscriptionIdentity(
+          subscriptionId,
+          subscription.metadata,
+          await getRentalStatusUpdatePayload('Completed', new Date().toISOString().split('T')[0])
+        );
 
         if (car_id) {
           await db.from('cars').update({ status: 'Available' }).eq('id', car_id);
@@ -143,13 +212,17 @@ router.post('/', express.raw({ type: 'application/json' }), async (request, resp
         const status = subscription.status;
 
         if (status === 'past_due' || status === 'unpaid') {
-          await db.from('rentals')
-            .update({ status: 'Overdue' })
-            .eq('stripe_subscription_id', subscriptionId);
+          await updateRentalsBySubscriptionIdentity(
+            subscriptionId,
+            subscription.metadata,
+            await getRentalStatusUpdatePayload('Overdue')
+          );
         } else if (status === 'active') {
-          await db.from('rentals')
-            .update({ status: 'Active' })
-            .eq('stripe_subscription_id', subscriptionId);
+          await updateRentalsBySubscriptionIdentity(
+            subscriptionId,
+            subscription.metadata,
+            await getRentalStatusUpdatePayload('Active')
+          );
         }
         break;
       }

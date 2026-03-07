@@ -5,6 +5,12 @@ import { authenticateAdmin } from './auth.js';
 import { STRIPE_CONFIG, SAAS_CONFIG } from '../constants.js';
 import { merchantSchema } from '../validation.js';
 import { z } from 'zod';
+import {
+  getMerchantCreatedAtColumn,
+  getMerchantSelectColumns,
+  toMerchantUpdatedAtPayload,
+  toMerchantWritePayload,
+} from '../schemaCompat.js';
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', STRIPE_CONFIG);
@@ -54,15 +60,19 @@ router.post('/merchants', authenticateAdmin, async (req, res) => {
 
     const accountLink = await createOnboardingLink(account.id);
 
-    const { data: inserted, error: insertError } = await db.from('merchants').insert([
-      {
-        name: data.business_name,
-        email: data.email,
-        country: data.country,
-        stripe_account_id: account.id,
-        payout_interval: data.payout_interval
-      }
-    ]).select().single();
+    const payload = await toMerchantWritePayload({
+      name: data.business_name,
+      email: data.email,
+      country: data.country,
+      stripe_account_id: account.id,
+      payout_interval: data.payout_interval,
+    });
+    const selectColumns = await getMerchantSelectColumns();
+    const { data: inserted, error: insertError } = await db
+      .from('merchants')
+      .insert([payload])
+      .select(selectColumns)
+      .single();
 
     if (insertError) throw insertError;
 
@@ -82,7 +92,12 @@ router.post('/merchants', authenticateAdmin, async (req, res) => {
 
 router.get('/merchants', authenticateAdmin, async (_req, res) => {
   try {
-    const { data, error } = await db.from('merchants').select('id, name, email, country, stripe_account_id, payout_interval, onboarding_status, created_at').order('created_at', { ascending: false });
+    const selectColumns = await getMerchantSelectColumns();
+    const orderColumn = await getMerchantCreatedAtColumn();
+    const { data, error } = await db
+      .from('merchants')
+      .select(selectColumns)
+      .order(orderColumn, { ascending: false });
     if (error) throw error;
     res.json(data || []);
   } catch (error) {
@@ -94,14 +109,20 @@ router.get('/merchants', authenticateAdmin, async (_req, res) => {
 router.post('/merchants/:id/link', authenticateAdmin, async (req, res) => {
   try {
     const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
-    const { data: merchant, error: fetchError } = await db.from('merchants').select('*').eq('id', id).single();
+    const selectColumns = await getMerchantSelectColumns();
+    const { data: merchant, error: fetchError } = await db
+      .from('merchants')
+      .select(selectColumns)
+      .eq('id', id)
+      .single();
     if (fetchError || !merchant) {
       return res.status(404).json({ error: 'Merchant not found' });
     }
 
     const accountLink = await createOnboardingLink(merchant.stripe_account_id);
 
-    await db.from('merchants').update({ updated_at: new Date().toISOString() }).eq('id', merchant.id);
+    const updatePayload = await toMerchantUpdatedAtPayload(new Date().toISOString());
+    await db.from('merchants').update(updatePayload).eq('id', merchant.id);
 
     res.json({
       onboarding_link: accountLink.url,

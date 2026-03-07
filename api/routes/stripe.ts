@@ -5,6 +5,7 @@ import { LEASE_SETTINGS, RENTAL_PLAN_SETUP_FEES_AUD, STRIPE_CONFIG } from '../co
 import { buildRentalPlanWithPricing, getRentalPlanById, rentalPlans } from '../../src/lib/rentalPlans.js';
 import { subscriptionPayloadSchema, paymentIntentPayloadSchema } from '../validation.js';
 import { z } from 'zod';
+import { getBookingSelectColumns, getCarSelectColumns } from '../schemaCompat.js';
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', STRIPE_CONFIG);
@@ -69,9 +70,10 @@ router.post('/create-subscription', async (req, res) => {
     }
 
     if (car_id) {
+      const carSelectColumns = await getCarSelectColumns();
       const { data: car, error: carError } = await db
         .from('cars')
-        .select('id, name, weekly_price, bond, status')
+        .select(carSelectColumns)
         .eq('id', car_id)
         .single();
 
@@ -211,9 +213,10 @@ router.post('/create-subscription', async (req, res) => {
 router.post('/create-payment-intent', async (req, res) => {
   try {
     const { booking_id, currency } = paymentIntentPayloadSchema.parse(req.body);
+    const bookingSelectColumns = await getBookingSelectColumns();
     const { data: booking, error: bookingError } = await db
       .from('bookings')
-      .select('id, total_amount')
+      .select(bookingSelectColumns)
       .eq('id', booking_id)
       .single();
 

@@ -4,6 +4,12 @@ import { authenticateAdmin } from './auth.js';
 import { applicationSchema, applicationStatusEnum } from '../validation.js';
 import { z } from 'zod';
 import crypto from 'crypto';
+import {
+  getApplicationCreatedAtColumn,
+  getApplicationDocumentColumn,
+  getApplicationSelectColumns,
+  toApplicationWritePayload,
+} from '../schemaCompat.js';
 
 const router = express.Router();
 const APPLICATIONS_BUCKET = 'applications';
@@ -59,12 +65,18 @@ const createSignedDocumentUrl = async (path: string | null | undefined) => {
 };
 
 router.get('/', authenticateAdmin, async (_req, res) => {
-  const { data, error } = await db.from('applications').select('*').order('created_at', { ascending: false });
+  const selectColumns = await getApplicationSelectColumns();
+  const orderColumn = await getApplicationCreatedAtColumn();
+  const { data, error } = await db
+    .from('applications')
+    .select(selectColumns)
+    .order(orderColumn, { ascending: false });
   if (error) {
     return res.status(500).json({ error: 'Failed to fetch applications' });
   }
 
-  const applications = await Promise.all((data || []).map(async (application) => ({
+  const rows = ((data || []) as Array<Record<string, any>>);
+  const applications = await Promise.all(rows.map(async (application) => ({
     ...application,
     license_photo: await createSignedDocumentUrl(application.license_photo),
     uber_screenshot: await createSignedDocumentUrl(application.uber_screenshot),
@@ -79,9 +91,13 @@ router.get('/:id/documents/:document', authenticateAdmin, async (req, res) => {
       document: z.enum(['license_photo', 'uber_screenshot']),
     }).parse(req.params);
 
+    const documentColumn = await getApplicationDocumentColumn(document);
+    const selectColumn =
+      documentColumn === document ? document : `${document}:${documentColumn}`;
+
     const { data: application, error } = await db
       .from('applications')
-      .select(`id, ${document}`)
+      .select(`id, ${selectColumn}`)
       .eq('id', req.params.id)
       .single();
 
@@ -165,13 +181,17 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const { data: inserted, error } = await db.from('applications').insert([
-      {
-        ...data,
-        license_photo: licensePhotoUrl,
-        uber_screenshot: uberScreenshotUrl,
-      }
-    ]).select('id').single();
+    const payload = await toApplicationWritePayload({
+      ...data,
+      license_photo: licensePhotoUrl,
+      uber_screenshot: uberScreenshotUrl,
+    });
+
+    const { data: inserted, error } = await db
+      .from('applications')
+      .insert([payload])
+      .select('id')
+      .single();
 
     if (error) throw error;
 

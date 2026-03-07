@@ -3,21 +3,24 @@ import { db } from '../db/index.js';
 import { authenticateAdmin } from './auth.js';
 import Stripe from 'stripe';
 import { STRIPE_CONFIG } from '../constants.js';
+import { getRentalSelectColumns } from '../schemaCompat.js';
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', STRIPE_CONFIG);
 
 router.get('/weekly', authenticateAdmin, async (_req, res) => {
   try {
+    const rentalSelectColumns = await getRentalSelectColumns();
     const { data: activeRentals, error: rentalsError } = await db
       .from('rentals')
-      .select('weekly_price')
+      .select(rentalSelectColumns)
       .eq('status', 'Active');
 
     if (rentalsError) throw rentalsError;
 
-    const projected_gross_weekly = activeRentals?.reduce((sum, rental) => sum + Number(rental.weekly_price), 0) || 0;
-    const estimated_platform_fees = activeRentals?.length || 0;
+    const rentals = ((activeRentals || []) as Array<Record<string, any>>);
+    const projected_gross_weekly = rentals.reduce((sum, rental) => sum + Number(rental.weekly_price), 0);
+    const estimated_platform_fees = rentals.length || 0;
     const projected_net_weekly = projected_gross_weekly - estimated_platform_fees;
 
     const sevenDaysAgo = Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60);
@@ -50,15 +53,17 @@ router.get('/weekly', authenticateAdmin, async (_req, res) => {
 
 router.get('/stats', authenticateAdmin, async (_req, res) => {
   try {
+    const rentalSelectColumns = await getRentalSelectColumns();
     const [applications, rentalsActive, incomeRows] = await Promise.all([
       db.from('applications').select('*', { count: 'exact', head: true }),
       db.from('rentals').select('*', { count: 'exact', head: true }).eq('status', 'Active'),
-      db.from('rentals').select('weekly_price').eq('status', 'Active'),
+      db.from('rentals').select(rentalSelectColumns).eq('status', 'Active'),
     ]);
 
     const applicationsCount = applications.count || 0;
     const activeRentalsCount = rentalsActive.count || 0;
-    const totalWeeklyIncome = incomeRows.data?.reduce((sum, row) => sum + Number(row.weekly_price), 0) || 0;
+    const rentalRows = ((incomeRows.data || []) as Array<Record<string, any>>);
+    const totalWeeklyIncome = rentalRows.reduce((sum, row) => sum + Number(row.weekly_price), 0);
 
     res.json({
       total_applications: applicationsCount,

@@ -3,11 +3,17 @@ import { db } from '../db/index.js';
 import { authenticateAdmin } from './auth.js';
 import { carSchema } from '../validation.js';
 import { z } from 'zod';
+import { getCarCreatedAtColumn, getCarSelectColumns, toCarWritePayload } from '../schemaCompat.js';
 
 const router = express.Router();
 
 router.get('/', async (_req, res) => {
-  const { data, error } = await db.from('cars').select('*').order('created_at', { ascending: false });
+  const selectColumns = await getCarSelectColumns();
+  const orderColumn = await getCarCreatedAtColumn();
+  const { data, error } = await db
+    .from('cars')
+    .select(selectColumns)
+    .order(orderColumn, { ascending: false });
   if (error) {
     console.error('Fetch cars error', error);
     return res.status(500).json({ error: 'Failed to fetch cars' });
@@ -16,7 +22,8 @@ router.get('/', async (_req, res) => {
 });
 
 router.get('/:id', async (req, res) => {
-  const { data, error } = await db.from('cars').select('*').eq('id', req.params.id).single();
+  const selectColumns = await getCarSelectColumns();
+  const { data, error } = await db.from('cars').select(selectColumns).eq('id', req.params.id).single();
 
   if (error || !data) {
     return res.status(404).json({ error: 'Car not found' });
@@ -27,7 +34,8 @@ router.get('/:id', async (req, res) => {
 router.post('/', authenticateAdmin, async (req, res) => {
   try {
     const data = carSchema.parse(req.body);
-    const { data: inserted, error } = await db.from('cars').insert([data]).select('id').single();
+    const payload = await toCarWritePayload(data);
+    const { data: inserted, error } = await db.from('cars').insert([payload]).select('id').single();
 
     if (error) throw error;
     res.status(201).json({ id: String(inserted.id) });
@@ -43,7 +51,8 @@ router.post('/', authenticateAdmin, async (req, res) => {
 router.put('/:id', authenticateAdmin, async (req, res) => {
   try {
     const data = carSchema.parse(req.body);
-    const { error } = await db.from('cars').update(data).eq('id', req.params.id);
+    const payload = await toCarWritePayload(data);
+    const { error } = await db.from('cars').update(payload).eq('id', req.params.id);
 
     if (error) throw error;
     res.json({ success: true });

@@ -516,6 +516,8 @@ $payload = [ordered]@{
 $tempId = [guid]::NewGuid().ToString('N')
 $tempPayloadPath = Join-Path $repoRoot ".maple-import-$tempId.json"
 $tempScriptPath = Join-Path $repoRoot ".maple-import-$tempId.mjs"
+$tempStdoutPath = Join-Path $repoRoot ".maple-import-$tempId.stdout.log"
+$tempStderrPath = Join-Path $repoRoot ".maple-import-$tempId.stderr.log"
 
 try {
     $payload | ConvertTo-Json -Depth 8 | Set-Content -Path $tempPayloadPath -Encoding UTF8
@@ -542,6 +544,25 @@ if (!supabaseUrl || !supabaseKey) {
 
 const payload = JSON.parse(fs.readFileSync(payloadPath, 'utf8').replace(/^\uFEFF/, ''));
 const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
+
+async function getCoreSchemaMode() {
+  const response = await fetch(new URL('/rest/v1/', supabaseUrl), {
+    headers: {
+      apikey: supabaseKey,
+      Authorization: `Bearer ${supabaseKey}`,
+      Accept: 'application/openapi+json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to inspect Supabase schema: ${response.status} ${response.statusText}`);
+  }
+
+  const spec = await response.json();
+  const carsDefinition = spec?.definitions?.cars;
+  const hasCamelModelYear = Boolean(carsDefinition?.properties?.modelYear);
+  return hasCamelModelYear ? 'camel' : 'snake';
+}
 
 async function ensureEmpty(table) {
   const { count, error } = await supabase.from(table).select('id', { count: 'exact', head: true });
@@ -580,8 +601,54 @@ await deleteAll('rentals');
 await deleteAll('applications');
 await deleteAll('cars');
 
-const insertedCars = await insertInChunks('cars', payload.cars, 'id, name');
-const insertedApplications = await insertInChunks('applications', payload.applications, 'id, email');
+const coreSchemaMode = await getCoreSchemaMode();
+const carsToInsert = coreSchemaMode === 'camel'
+  ? payload.cars.map((car) => ({
+      name: car.name,
+      modelYear: car.model_year,
+      weeklyPrice: car.weekly_price,
+      bond: car.bond,
+      status: car.status,
+      image: car.image,
+    }))
+  : payload.cars.map((car) => ({
+      name: car.name,
+      model_year: car.model_year,
+      weekly_price: car.weekly_price,
+      bond: car.bond,
+      status: car.status,
+      image: car.image,
+    }));
+const applicationsToInsert = coreSchemaMode === 'camel'
+  ? payload.applications.map((application) => ({
+      name: application.name,
+      phone: application.phone,
+      email: application.email,
+      licenseNumber: application.license_number,
+      licenseExpiry: application.license_expiry,
+      uberStatus: application.uber_status,
+      experience: application.experience,
+      address: application.address,
+      weeklyBudget: application.weekly_budget,
+      intendedStartDate: application.intended_start_date,
+      status: application.status,
+    }))
+  : payload.applications.map((application) => ({
+      name: application.name,
+      phone: application.phone,
+      email: application.email,
+      license_number: application.license_number,
+      license_expiry: application.license_expiry,
+      uber_status: application.uber_status,
+      experience: application.experience,
+      address: application.address,
+      weekly_budget: application.weekly_budget,
+      intended_start_date: application.intended_start_date,
+      status: application.status,
+    }));
+
+const insertedCars = await insertInChunks('cars', carsToInsert, 'id, name');
+const insertedApplications = await insertInChunks('applications', applicationsToInsert, 'id, email');
 
 const carIdByRegistration = new Map(
   insertedCars.map((car) => {
@@ -605,11 +672,21 @@ const rentalsToInsert = payload.rentals.map((rental) => {
   }
 
   return {
-    car_id: carId,
-    application_id: applicationId,
-    start_date: rental.start_date,
-    weekly_price: rental.weekly_price,
-    status: rental.status,
+    ...(coreSchemaMode === 'camel'
+      ? {
+          carId,
+          applicationId,
+          startDate: rental.start_date,
+          weeklyPrice: rental.weekly_price,
+          status: rental.status,
+        }
+      : {
+          car_id: carId,
+          application_id: applicationId,
+          start_date: rental.start_date,
+          weekly_price: rental.weekly_price,
+          status: rental.status,
+        }),
   };
 });
 
@@ -629,11 +706,21 @@ console.log(JSON.stringify({
 '@
 
     Set-Content -Path $tempScriptPath -Value $nodeScript -Encoding UTF8
-    $nodeOutput = & node $tempScriptPath $tempPayloadPath $envPath 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw (($nodeOutput | Out-String).Trim())
+    $nodeProcess = Start-Process `
+        -FilePath 'node' `
+        -ArgumentList @($tempScriptPath, $tempPayloadPath, $envPath) `
+        -NoNewWindow `
+        -Wait `
+        -PassThru `
+        -RedirectStandardOutput $tempStdoutPath `
+        -RedirectStandardError $tempStderrPath
+    $nodeExitCode = $nodeProcess.ExitCode
+    $stdoutContent = if (Test-Path $tempStdoutPath) { Get-Content $tempStdoutPath -Raw } else { '' }
+    $stderrContent = if (Test-Path $tempStderrPath) { Get-Content $tempStderrPath -Raw } else { '' }
+    if ($nodeExitCode -ne 0) {
+        throw (($stderrContent + [Environment]::NewLine + $stdoutContent).Trim())
     }
-    $summary | Add-Member -NotePropertyName applyResult -NotePropertyValue (($nodeOutput | Out-String).Trim()) -Force
+    $summary | Add-Member -NotePropertyName applyResult -NotePropertyValue ($stdoutContent.Trim()) -Force
     $summary | ConvertTo-Json -Depth 8
 }
 finally {
@@ -643,5 +730,13 @@ finally {
 
     if (Test-Path $tempScriptPath) {
         Remove-Item $tempScriptPath -Force
+    }
+
+    if (Test-Path $tempStdoutPath) {
+        Remove-Item $tempStdoutPath -Force
+    }
+
+    if (Test-Path $tempStderrPath) {
+        Remove-Item $tempStderrPath -Force
     }
 }
