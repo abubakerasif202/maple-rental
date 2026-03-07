@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite-node api/index.ts",
-    "start": "vite-node api/index.ts",
-    "build": "node scripts/run-vite.js build",
+    "start": "node server-dist/api/index.js",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "node scripts/run-vite.js build",
+    "build:server": "tsc -p tsconfig.server.json",
     "preview": "node scripts/run-vite.js preview",
-    "clean": "rm -rf dist",
+    "clean": "node scripts/clean.js",
     "lint": "tsc --noEmit",
     "test": "vitest run"
   },

@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "server-dist",
+    "rootDir": ".",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "allowJs": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "isolatedModules": false,
+    "noEmit": false
+  },
+  "include": ["api/**/*.ts", "src/lib/rentalPlans.ts"],
+  "exclude": ["api/tests/**/*", "dist", "server-dist", "node_modules"]
+}

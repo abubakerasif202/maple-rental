@@ -2,8 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import path from 'node:path';
 import { initializeDB } from './db/index.js';
-import { ensureEsbuildBinaryPath } from '../scripts/ensureEsbuildBinaryPath.js';
 
 // Route Imports
 import authRoutes from './routes/auth.js';
@@ -17,7 +17,12 @@ import financialRoutes from './routes/financials.js';
 import webhookRoutes from './routes/webhooks.js';
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
+const shouldListen = process.env.VERCEL !== '1' && process.env.VITEST !== 'true';
 const PORT = Number(process.env.PORT) || 3000;
+const HOST = '0.0.0.0';
+const frontendDistDir = path.resolve(process.cwd(), 'dist');
+const frontendIndexPath = path.join(frontendDistDir, 'index.html');
 
 // CORS Configuration
 const toOrigin = (value?: string) => {
@@ -67,7 +72,14 @@ const ensureDB = async () => {
   return dbInitialized;
 };
 
-app.use(async (_req, res, next) => {
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    environment: process.env.NODE_ENV || 'development',
+  });
+});
+
+app.use('/api', async (_req, res, next) => {
   try {
     await ensureDB();
     next();
@@ -88,15 +100,16 @@ app.use('/api/saas', saasRoutes);
 app.use('/api/financials', financialRoutes);
 
 // Legacy/Compatibility Redirects or Aliases
-app.get('/api/stats', (req, res) => res.redirect(307, '/api/financials/stats'));
-app.get('/api/rental-plans', (req, res) => res.redirect(307, '/api/stripe/rental-plans'));
-app.post('/api/create-subscription', (req, res) => res.redirect(307, '/api/stripe/create-subscription'));
+app.get('/api/stats', (_req, res) => res.redirect(307, '/api/financials/stats'));
+app.get('/api/rental-plans', (_req, res) => res.redirect(307, '/api/stripe/rental-plans'));
+app.post('/api/create-subscription', (_req, res) => res.redirect(307, '/api/stripe/create-subscription'));
 
 // Server Startup
 const startServer = async () => {
   await ensureDB();
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (!isProduction) {
+    const { ensureEsbuildBinaryPath } = await import('../scripts/ensureEsbuildBinaryPath.js');
     ensureEsbuildBinaryPath();
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -105,20 +118,29 @@ const startServer = async () => {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static('dist'));
-    app.get('*', (_req, res) => {
-      res.sendFile('dist/index.html', { root: '.' });
+    app.use(express.static(frontendDistDir, { index: false }));
+    app.use((req, res, next) => {
+      if (!['GET', 'HEAD'].includes(req.method) || req.path.startsWith('/api/')) {
+        next();
+        return;
+      }
+
+      res.sendFile(frontendIndexPath, (err) => {
+        if (err) {
+          next(err);
+        }
+      });
     });
   }
 
-  if (process.env.VERCEL !== '1') {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+  if (shouldListen) {
+    app.listen(PORT, HOST, () => {
+      console.log(`Server running on http://${HOST}:${PORT}`);
     });
   }
 };
 
-if (process.env.VERCEL !== '1') {
+if (shouldListen) {
   startServer();
 }
 
