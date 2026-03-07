@@ -132,14 +132,21 @@ CREATE TABLE admins (
 );
 
 -- Function to check if the current user is an admin
-CREATE OR REPLACE FUNCTION is_admin()
-RETURNS BOOLEAN AS $$
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
 BEGIN
   RETURN EXISTS (
-    SELECT 1 FROM admins WHERE id = auth.uid()
+    SELECT 1
+    FROM public.admins
+    WHERE id = auth.uid()
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 -- --- INDEXES (For Performance) ---
 CREATE INDEX idx_rentals_car_id ON rentals(car_id);
