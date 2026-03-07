@@ -31,7 +31,6 @@ export default function InquiryForm() {
   const onSubmit = async (data: InquiryValues) => {
     // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 1500));
-    console.log('Inquiry submitted:', data);
     setIsSuccess(true);
     reset();
   };
