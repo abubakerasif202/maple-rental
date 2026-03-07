@@ -3,6 +3,8 @@ services:
     name: maple-rental
     runtime: node
     plan: free
+    branch: main
+    autoDeployTrigger: commit
     buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
@@ -20,8 +22,4 @@ services:
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: VITE_STRIPE_PUBLIC_KEY
-        sync: false
-      - key: STRIPE_WEBHOOK_SECRET
-        sync: false
-      - key: RESEND_API_KEY
         sync: false
