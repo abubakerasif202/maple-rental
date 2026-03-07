@@ -7,15 +7,11 @@ coverage/
 *.log
 .env*
 !.env.example
-.vercel
 .env*.local
 
 .gemini/
 gha-creds-*.json
 data/
 *.har
-
-.vercel
-.env*.local
 
 skills/

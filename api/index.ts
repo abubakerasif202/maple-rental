@@ -18,7 +18,7 @@ import webhookRoutes from './routes/webhooks.js';
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
-const shouldListen = process.env.VERCEL !== '1' && process.env.VITEST !== 'true';
+const shouldListen = process.env.VITEST !== 'true';
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = '0.0.0.0';
 const frontendDistDir = path.resolve(process.cwd(), 'dist');
