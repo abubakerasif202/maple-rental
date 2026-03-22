@@ -646,6 +646,7 @@ process.env.NODE_ENV = 'test';
 process.env.CHECKOUT_LINK_SECRET = 'test-checkout-secret';
 process.env.JWT_SECRET = 'test-jwt-secret';
 process.env.STRIPE_SECRET_KEY = 'sk_test_123';
+process.env.STRIPE_WEBHOOK_SECRET = 'test-webhook-secret';
 process.env.STRIPE_SECURITY_BOND_PRODUCT_ID = 'prod_security_bond';
 process.env.STRIPE_ONBOARDING_SETUP_PRODUCT_ID = 'prod_onboarding_setup';
 process.env.STRIPE_WEEKLY_RENTAL_PRODUCT_ID = 'prod_weekly_rental';
