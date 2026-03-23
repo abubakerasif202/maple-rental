@@ -163,12 +163,16 @@ const buildCorsOrigins = () =>
     toOrigin(process.env.APP_URL),
     toOrigin(process.env.FRONTEND_URL),
     process.env.CORS_ORIGIN || null,
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'http://localhost:4173',
-    'http://127.0.0.1:4173',
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
+    ...(!isProduction
+      ? [
+          'http://localhost:3000',
+          'http://127.0.0.1:3000',
+          'http://localhost:4173',
+          'http://127.0.0.1:4173',
+          'http://localhost:5173',
+          'http://127.0.0.1:5173',
+        ]
+      : []),
   ].filter((origin): origin is string => Boolean(origin));
 
 const applySecurityMiddleware = (app: express.Express) => {

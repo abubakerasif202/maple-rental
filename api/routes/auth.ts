@@ -10,13 +10,15 @@ import {
   createLocalAdminSessionToken,
   requireTrustedAdminWriteOrigin,
   createSupabaseAdminSessionToken,
+  clearAdminSessionCookie,
+  getEffectiveAdminEmail,
+  getSupabaseSessionExpiry,
 } from '../middleware/auth.js';
 
 const router = express.Router();
 const isVitest = process.env.VITEST === 'true';
 const isProduction = process.env.NODE_ENV === 'production' && !isVitest;
 
-const devAdminEmail = 'admin@maplerentals.com.au';
 const devAdminPassword = (process.env.ADMIN_PASSWORD || '').trim();
 
 const loginRateLimiter = rateLimit({
@@ -37,46 +39,6 @@ const loginRateLimiter = rateLimit({
 
 const canUseLocalAdminSession =
   !isProduction && Boolean(devAdminPassword);
-
-const getEffectiveAdminEmail = () => {
-  const configuredAdminEmail = (process.env.ADMIN_EMAIL || '')
-    .trim()
-    .toLowerCase();
-
-  if (configuredAdminEmail) {
-    return configuredAdminEmail;
-  }
-
-  if (!isProduction) {
-    return devAdminEmail;
-  }
-
-  return null;
-};
-
-const clearAdminSessionCookie = (req: express.Request, res: express.Response) => {
-  const { maxAge, ...cookieOptions } = createCookieOptions(req);
-  void maxAge;
-  res.clearCookie('admin_token', cookieOptions);
-};
-
-const getSupabaseSessionExpiry = (
-  session:
-    | {
-        expires_at?: number | null;
-      }
-    | null
-    | undefined
-) => {
-  if (
-    typeof session?.expires_at === 'number' &&
-    Number.isFinite(session.expires_at)
-  ) {
-    return session.expires_at * 1000;
-  }
-
-  return null;
-};
 
 router.post('/login', loginRateLimiter, async (req, res) => {
   try {

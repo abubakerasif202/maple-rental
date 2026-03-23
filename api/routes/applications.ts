@@ -494,7 +494,7 @@ router.post(
         const safeIntendedStart = escapeHtml(normalizedApplicationData.intended_start_date);
         const safeCarName = escapeHtml(String(selectedCar.name || 'Vehicle'));
         const applicantNameForSubject = sanitizeEmailHeaderValue(normalizedApplicationData.name);
-        await Promise.all([
+        const emailResults = await Promise.allSettled([
           resend.emails.send({
             from: 'Maple Rentals Notifications <noreply@maplerentals.com.au>',
             to: adminEmail,
@@ -533,8 +533,15 @@ router.post(
             `,
           }),
         ]);
+        for (const result of emailResults) {
+          if (result.status === 'rejected') {
+            console.error('Failed to send application review email:', result.reason);
+          }
+        }
       } catch (emailError) {
-        console.error('Failed to send application review emails:', emailError);
+        // Catches errors from getResend() initialization (e.g. missing API key at call time).
+        // Individual send() failures are handled above via Promise.allSettled.
+        console.error('Failed to initialise email client for application review:', emailError);
       }
     }
 

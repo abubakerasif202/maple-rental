@@ -30,7 +30,7 @@ type AdminSessionPayload =
   | LocalAdminSessionPayload
   | SupabaseAdminSessionPayload;
 
-const getEffectiveAdminEmail = () => {
+export const getEffectiveAdminEmail = () => {
   const configuredAdminEmail = (process.env.ADMIN_EMAIL || '')
     .trim()
     .toLowerCase();
@@ -79,12 +79,16 @@ const getTrustedWriteOrigins = (req: express.Request) =>
       toOrigin(process.env.APP_URL),
       toOrigin(process.env.FRONTEND_URL),
       toOrigin(process.env.CORS_ORIGIN),
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      'http://localhost:4173',
-      'http://127.0.0.1:4173',
-      'http://localhost:5173',
-      'http://127.0.0.1:5173',
+      ...(!isProduction
+        ? [
+            'http://localhost:3000',
+            'http://127.0.0.1:3000',
+            'http://localhost:4173',
+            'http://127.0.0.1:4173',
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
+          ]
+        : []),
     ].filter((origin): origin is string => Boolean(origin))
   );
 
@@ -227,13 +231,13 @@ const verifySupabaseAdminSessionToken = (token: string) => {
   return payload as SupabaseAdminSessionPayload;
 };
 
-const clearAdminSessionCookie = (req: express.Request, res: express.Response) => {
+export const clearAdminSessionCookie = (req: express.Request, res: express.Response) => {
   const { maxAge, ...cookieOptions } = createCookieOptions(req);
   void maxAge;
   res.clearCookie('admin_token', cookieOptions);
 };
 
-const getSupabaseSessionExpiry = (
+export const getSupabaseSessionExpiry = (
   session:
     | {
         expires_at?: number | null;
