@@ -278,7 +278,8 @@ router.get('/', authenticateAdmin, async (_req, res) => {
 
 router.get('/:id/documents/:document', authenticateAdmin, async (req, res) => {
   try {
-    const { document } = z.object({
+    const { id, document } = z.object({
+      id: z.coerce.number().int().positive(),
       document: z.enum(['license_photo', 'license_back_photo']),
     }).parse(req.params);
 
@@ -289,7 +290,7 @@ router.get('/:id/documents/:document', authenticateAdmin, async (req, res) => {
     const { data: application, error } = await db
       .from('applications')
       .select(`id, ${selectColumn}`)
-      .eq('id', req.params.id)
+      .eq('id', id)
       .single();
 
     if (error || !application) {
@@ -840,10 +841,11 @@ router.post('/:id/retry-payment-activation', authenticateAdmin, async (req, res)
 
 router.put('/:id/status', authenticateAdmin, async (req, res) => {
   try {
+    const { id } = z.object({ id: z.coerce.number().int().positive() }).parse(req.params);
     const { data: existingApplication, error: applicationLookupError } = await db
       .from('applications')
       .select('id')
-      .eq('id', req.params.id)
+      .eq('id', id)
       .maybeSingle();
 
     if (applicationLookupError) {
@@ -861,7 +863,7 @@ router.put('/:id/status', authenticateAdmin, async (req, res) => {
           'Use the payment approval flow to approve applications. Paid and Payment Review statuses are set by Stripe processing.',
       });
     }
-    const { error } = await db.from('applications').update({ status }).eq('id', req.params.id);
+    const { error } = await db.from('applications').update({ status }).eq('id', id);
     if (error) throw error;
     res.json({ success: true });
   } catch (error) {

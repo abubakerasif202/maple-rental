@@ -1461,6 +1461,15 @@ describe('Applications API', () => {
     );
   });
 
+  it('GET /api/applications/:id/documents/:document rejects non-numeric ids', async () => {
+    const res = await request(app)
+      .get('/api/applications/not-a-number/documents/license_photo')
+      .set('Authorization', 'Bearer fake-token');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Validation failed');
+  });
+
   it('POST /api/applications supports camel-case Supabase application schemas', async () => {
     mockState.applications[1].status = 'Paid';
     mockState.applications[1].paid_at = '2026-03-07T00:00:00.000Z';
@@ -1677,6 +1686,16 @@ describe('Applications API', () => {
 
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('Application not found');
+  });
+
+  it('PUT /api/applications/:id/status rejects non-numeric ids', async () => {
+    const res = await request(app)
+      .put('/api/applications/not-a-number/status')
+      .set('Authorization', 'Bearer fake-token')
+      .send({ status: 'Rejected' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Validation failed');
   });
 
   it('POST /api/applications blocks public overwrites for rejected applications', async () => {
