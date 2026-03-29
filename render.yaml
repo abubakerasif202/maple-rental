@@ -3,7 +3,6 @@ services:
     name: maple-rentals-v4-frontend
     rootDir: client
     runtime: static
-    plan: starter
     buildCommand: npm ci && npm run build
     staticPublishPath: ./dist
     routes:
@@ -18,7 +17,7 @@ services:
     name: maple-rentals-v4-backend
     rootDir: .
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm ci && npm run lint
     startCommand: node server/index.js
     healthCheckPath: /api/health

@@ -10,7 +10,7 @@
     "dev": "node scripts/dev-maple-v4.mjs",
     "dev:server": "node --watch server/index.js",
     "dev:client": "npm --prefix client run dev",
-    "build": "npm --prefix client run build",
+    "build": "npm --prefix client ci && npm --prefix client run build",
     "lint": "node scripts/check-runtime.mjs",
     "test": "node -e \"console.log('No automated tests configured for Maple Rentals V4 scaffolding.')\"",
     "validate": "npm run lint && npm run build",
