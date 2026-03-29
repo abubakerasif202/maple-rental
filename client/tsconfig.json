@@ -19,6 +19,5 @@
       "@shared/*": ["../shared/*"]
     }
   },
-  "include": ["src", "../shared"],
-  "exclude": ["../shared/**/*.test.ts"]
+  "include": ["src", "../shared/contracts.js"]
 }
