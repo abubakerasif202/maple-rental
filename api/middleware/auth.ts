@@ -176,13 +176,16 @@ const verifySignedSessionToken = (token: string) => {
   }
 
   const expectedSignature = signAdminSessionValue(encodedPayload);
-  const providedBuffer = Buffer.from(providedSignature);
-  const expectedBuffer = Buffer.from(expectedSignature);
-
-  if (
-    providedBuffer.length !== expectedBuffer.length ||
-    !crypto.timingSafeEqual(providedBuffer, expectedBuffer)
-  ) {
+  let signatureValid: boolean;
+  try {
+    signatureValid = crypto.timingSafeEqual(
+      Buffer.from(providedSignature),
+      Buffer.from(expectedSignature)
+    );
+  } catch {
+    signatureValid = false;
+  }
+  if (!signatureValid) {
     return null;
   }
 

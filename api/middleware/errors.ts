@@ -66,5 +66,6 @@ export const errorHandler = (
       status >= 500
         ? 'Internal server error'
         : message || 'Request failed',
+    request_id: requestId !== '-' ? requestId : undefined,
   });
 };

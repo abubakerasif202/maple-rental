@@ -333,6 +333,7 @@ const registerCoreRoutes = (app: express.Express) => {
           'application/csp-report+json',
           'application/json',
         ],
+        limit: '10kb',
       }),
       (req, res) => {
         console.warn('CSP report received:', JSON.stringify(req.body));
