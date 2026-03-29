@@ -1,0 +1,17 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#0B1018"/>
+  <ellipse cx="250" cy="140" rx="260" ry="180" fill="#D4B271" fill-opacity="0.24"/>
+  <ellipse cx="1370" cy="120" rx="280" ry="180" fill="#9CC1FF" fill-opacity="0.16"/>
+  <rect x="0" y="560" width="1600" height="340" fill="#0E1723"/>
+  <path d="M222 620C318 520 468 454 718 440C933 428 1093 456 1267 540L1366 611C1394 631 1408 650 1408 671V720H1193C1171 720 1152 733 1144 754L1127 800H503L485 755C478 733 459 720 438 720H182V677C182 656 195 636 222 620Z" fill="url(#paint0_linear_1_2)"/>
+  <path d="M448 546C526 503 629 477 782 472C945 466 1078 493 1172 551L1238 590H387L448 546Z" fill="#C5CDD9" fill-opacity="0.14"/>
+  <circle cx="476" cy="746" r="74" fill="#0B1018" stroke="#D7E0EF" stroke-opacity="0.25" stroke-width="10"/>
+  <circle cx="1118" cy="746" r="74" fill="#0B1018" stroke="#D7E0EF" stroke-opacity="0.25" stroke-width="10"/>
+  <path d="M517 544H1013C1065 544 1113 564 1147 599L1222 675H356L432 589C455 560 485 544 517 544Z" fill="#F4F6F9" fill-opacity="0.08"/>
+  <defs>
+    <linearGradient id="paint0_linear_1_2" x1="295" y1="469" x2="1299" y2="786" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EBF1FA" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#5A6470" stop-opacity="0.12"/>
+    </linearGradient>
+  </defs>
+</svg>

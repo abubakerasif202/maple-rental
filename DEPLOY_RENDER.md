@@ -1,191 +1,97 @@
-# Deploy Maple Rental to Render
+# Render Deployment Guide
 
-## Goal
+## Services
 
-Deploy the application as a single Render web service where:
+This repo deploys as four Render services:
 
-- Express serves the API under `/api/*`
-- Express serves the built Vite frontend from `dist/`
-- non-API routes fall back to `dist/index.html`
-- Render health checks probe `/api/health`
+1. `maple-rentals-v4-frontend`
+2. `maple-rentals-v4-backend`
+3. `maple-rentals-v4-retry-payments`
+4. `maple-rentals-v4-send-reminders`
 
-## Render blueprint
+The frontend and backend are the primary application services. The cron services support payment recovery and operational reminders.
 
-This repository includes `render.yaml`, so Render can provision the service directly from GitHub.
+## Render build settings
 
-Blueprint link:
-[https://dashboard.render.com/blueprint/new?repo=https://github.com/abubakerasif202/maple-rental](https://dashboard.render.com/blueprint/new?repo=https://github.com/abubakerasif202/maple-rental)
+### Frontend
 
-Supabase SQL files are organized under `supabase/migrations/`, with the base schema in `supabase/migrations/01_schema.sql`.
+- Type: `Static Site`
+- Root directory: `client`
+- Build command: `npm ci && npm run build`
+- Publish directory: `dist`
 
-## Expected service configuration
+### Backend
 
-- Service type: `Web Service`
-- Runtime: `Node`
-- Build command: `npm ci --include=dev && npm run validate && npm run build`
-- Start command: `npm start`
-- Health check path: `/api/health`
+- Type: `Web Service`
+- Root directory: repo root
+- Build command: `npm ci && npm run lint`
+- Start command: `node server/index.js`
+- Health check: `/api/health`
+- Do not set `PORT` manually on Render. Render injects it for web services.
 
-## Runtime model
+### Cron jobs
 
-### Development
+- Root directory: repo root
+- Build command: `npm ci && npm run lint`
+- Retry payments: `node jobs/retryPayments.js`
+- Send reminders: `node jobs/sendReminders.js`
 
-`npm run dev` starts the Express server in development mode and mounts Vite middleware inside the same process.
+## Deploy steps
 
-Default local URL:
-- `http://localhost:3000`
+1. Push this repo to GitHub, GitLab, or Bitbucket.
+2. In Supabase, run [supabase/sql/maple-rentals-v4.sql](supabase/sql/maple-rentals-v4.sql).
+3. In Stripe, create a webhook endpoint pointing to `https://<backend-service>.onrender.com/webhook`.
+4. In Render, create a new Blueprint deployment from this repo so `render.yaml` is applied.
+5. Fill all `sync: false` environment variables for the backend and cron services.
+6. Fill `VITE_API_URL` on the static site with the backend Render URL.
+7. Deploy.
+8. Confirm `/api/health` returns `status: ok` before exposing the frontend. If it returns `degraded`, the Supabase SQL has not been fully applied to the connected project.
 
-### Production
+## Backend environment variables
 
-`npm start` runs the compiled backend from:
-- `server-dist/api/index.js`
-
-That server:
-- binds to `0.0.0.0:$PORT`
-- serves static frontend assets from `dist/`
-- returns `dist/index.html` for SPA routes
-- keeps missing API routes as JSON 404s instead of returning the frontend shell
-
-## Environment variables
-
-### Required
-
-- `APP_URL`
-  - Canonical public app URL, for example `https://www.maplerentals.com.au`
-
-- `ADMIN_EMAIL`
-  - Allowed production admin login email
-
-- `SUPABASE_URL`
-  - Supabase project URL in `https://...supabase.co` format
-
-- `SUPABASE_SERVICE_ROLE_KEY`
-  - Backend service-role key used for privileged database access
-
-- `SUPABASE_ANON_KEY`
-  - Frontend/browser public anon key used by the client app
-
-- `STRIPE_SECRET_KEY`
-  - Stripe server SDK key
-
-- `STRIPE_WEBHOOK_SECRET`
-  - Stripe webhook signing secret
-
-- `CHECKOUT_LINK_SECRET`
-  - HMAC secret used to sign checkout link tokens
-
-- `JWT_SECRET`
-  - Secret used to sign admin session cookies
-
-- `LEASE_OWNER_NAME`
-- `LEASE_OWNER_ADDRESS`
-- `LEASE_OWNER_CONTACT`
-- `LEASE_OWNER_EMAIL`
-  - Registered-owner details inserted into generated lease agreements
-
-### Strongly recommended
-
-- `SUPABASE_DB_URL`
-  - Session-capable Postgres connection string used for transactional payment activation
-  - If omitted, the app stays live but `/api/health` reports `paymentActivationMode: "restricted"`
-
-### Optional
-
-- `RESEND_API_KEY`
-  - Enables outbound transactional email
-
-- `CORS_ORIGIN`
-  - Additional browser origin to allow
-
-- `FRONTEND_URL`
-  - Legacy extra origin override if needed for external clients
-
-- `ADMIN_PASSWORD`
-  - Dev/test fallback only; not required in production
-
-- `JSON_BODY_LIMIT`
-  - Overrides the default JSON payload limit of `100kb` for non-application routes
-
-- `/api/applications`
-  - Uses its own parser budget sized for two 7 MB base64 licence uploads
-
-## Important env rules
-
-- `SUPABASE_URL` must be the HTTPS project URL, not the Postgres connection string.
-- `SUPABASE_DB_URL` must be the Postgres connection string, not the HTTPS project URL.
-- Do not expose `SUPABASE_SERVICE_ROLE_KEY` to the frontend.
-- Do not set `PORT` manually on Render.
-
-## First deploy checklist
-
-1. Connect the GitHub repo in Render.
-2. Use the Blueprint flow so `render.yaml` is applied.
-3. Fill every required environment variable.
-4. Add `SUPABASE_DB_URL` if you want transactional payment activation.
-5. Deploy.
-6. Verify [https://www.maplerentals.com.au/api/health](https://www.maplerentals.com.au/api/health) or your Render URL equivalent.
-
-## Health check expectations
-
-A healthy response should look like:
-
-```json
-{
-  "status": "ok",
-  "database": "ok",
-  "paymentActivationMode": "transactional"
-}
+```env
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_ANON_KEY=
+JWT_SECRET=
+APP_URL=
+CLIENT_URL=
+ADMIN_EMAIL=
+RESEND_API_KEY=
+NOTIFY_FROM_EMAIL=
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASS=
+SMTP_SECURE=false
+SMS_FROM=MAPLE
+PAYMENT_RETRY_LIMIT=3
+PAYMENT_RETRY_DELAY_HOURS=24
 ```
 
-If `paymentActivationMode` is `restricted`, the service is up but the direct Postgres connection is missing.
+## Frontend environment variables
 
-## Local production verification
-
-Use this to simulate the Render runtime locally:
-
-```powershell
-npm ci
-npm run build
-$env:NODE_ENV='production'
-$env:PORT='3000'
-npm start
+```env
+VITE_API_URL=https://your-backend.onrender.com
 ```
 
-Then check:
+## Stripe notes
 
-- `http://localhost:3000/api/health`
-- `http://localhost:3000/`
-- `http://localhost:3000/admin/dashboard`
+- The frontend never sees `STRIPE_SECRET_KEY`.
+- Checkout, direct subscriptions, portal creation, and webhook handling all occur in the backend.
+- Stripe metadata stores `applicationId`, `driverId`, and `vehicleId` to keep webhook reconciliation deterministic.
 
-## Common failures
+## Verification checklist
 
-### Invalid supabaseUrl
-
-Cause:
-- a Postgres URI was pasted into `SUPABASE_URL`
-
-Fix:
-- put the `https://...supabase.co` URL back into `SUPABASE_URL`
-- put the Postgres URI into `SUPABASE_DB_URL`
-
-### Health endpoint shows `restricted`
-
-Cause:
-- `SUPABASE_DB_URL` or `DATABASE_URL` is missing
-
-Fix:
-- add a valid Postgres connection string and redeploy
-
-### Rate-limit proxy warning on Render
-
-Cause:
-- Express was not trusting the Render proxy
-
-Fix:
-- already handled in `api/index.ts` by enabling `trust proxy` in production
-
-## Operational notes
-
-- Static assets under `/assets/*` are served with long-lived cache headers.
-- `index.html` is served with `Cache-Control: no-store` so SPA shells do not go stale.
-- The backend validates critical production environment variables at startup and fails fast when required secrets are missing.
+1. Open the frontend URL and confirm `/vehicles` loads.
+2. Hit `https://<backend>/api/health` and confirm `status: ok`.
+3. If `/api/health` reports `degraded`, apply [supabase/sql/maple-rentals-v4.sql](supabase/sql/maple-rentals-v4.sql) to the exact Supabase project wired into Render.
+4. Submit a test application.
+5. Log in with the created driver account.
+6. Approve the application from `/admin`.
+7. Confirm the contract PDF is generated in Supabase Storage.
+8. Start checkout from `/billing`.
+9. Fire a Stripe test webhook and confirm payment rows and driver status update.
+10. Confirm both cron services complete without runtime errors.

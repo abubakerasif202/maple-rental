@@ -1,41 +1,171 @@
 services:
   - type: web
-    name: maple-rental
+    name: maple-rentals-v4-frontend
+    rootDir: client
+    runtime: static
+    plan: starter
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+
+  - type: web
+    name: maple-rentals-v4-backend
+    rootDir: .
     runtime: node
     plan: starter
-    branch: main
-    autoDeployTrigger: commit
-    buildCommand: npm ci --include=dev && npm run validate && npm run build
-    startCommand: npm start
+    buildCommand: npm ci && npm run lint
+    startCommand: node server/index.js
     healthCheckPath: /api/health
     envVars:
-      - key: NODE_ENV
-        value: production
       - key: APP_URL
+        sync: false
+      - key: CLIENT_URL
         sync: false
       - key: ADMIN_EMAIL
         sync: false
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_ANON_KEY
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: SUPABASE_DB_URL
+      - key: JWT_SECRET
         sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
-      - key: CHECKOUT_LINK_SECRET
+      - key: STRIPE_PRICE_CURRENCY
+        value: aud
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: CONTRACTS_BUCKET
+        value: contracts
+      - key: RESEND_API_KEY
+        sync: false
+      - key: NOTIFY_FROM_EMAIL
+        value: noreply@maplerentals.com.au
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMS_FROM
+        value: MAPLE
+      - key: PAYMENT_RETRY_LIMIT
+        value: "3"
+      - key: PAYMENT_RETRY_DELAY_HOURS
+        value: "24"
+
+  - type: cron
+    name: maple-rentals-v4-retry-payments
+    rootDir: .
+    runtime: node
+    plan: starter
+    schedule: "0 */6 * * *"
+    buildCommand: npm ci && npm run lint
+    startCommand: node jobs/retryPayments.js
+    envVars:
+      - key: APP_URL
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: ADMIN_EMAIL
         sync: false
       - key: JWT_SECRET
         sync: false
-      - key: LEASE_OWNER_NAME
-        value: "Maple Rentals"
-      - key: LEASE_OWNER_ADDRESS
-        value: "13/27-33 Addlestone Rd, Merrylands NSW 2160"
-      - key: LEASE_OWNER_CONTACT
-        value: "0420 550 556"
-      - key: LEASE_OWNER_EMAIL
-        value: "admin@maplerentals.com.au"
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_CURRENCY
+        value: aud
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: CONTRACTS_BUCKET
+        value: contracts
+      - key: RESEND_API_KEY
+        sync: false
+      - key: NOTIFY_FROM_EMAIL
+        value: noreply@maplerentals.com.au
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMS_FROM
+        value: MAPLE
+      - key: PAYMENT_RETRY_LIMIT
+        value: "3"
+      - key: PAYMENT_RETRY_DELAY_HOURS
+        value: "24"
+
+  - type: cron
+    name: maple-rentals-v4-send-reminders
+    rootDir: .
+    runtime: node
+    plan: starter
+    schedule: "0 9 * * *"
+    buildCommand: npm ci && npm run lint
+    startCommand: node jobs/sendReminders.js
+    envVars:
+      - key: APP_URL
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_CURRENCY
+        value: aud
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: CONTRACTS_BUCKET
+        value: contracts
+      - key: RESEND_API_KEY
+        sync: false
+      - key: NOTIFY_FROM_EMAIL
+        value: noreply@maplerentals.com.au
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMS_FROM
+        value: MAPLE
+      - key: PAYMENT_RETRY_LIMIT
+        value: "3"
+      - key: PAYMENT_RETRY_DELAY_HOURS
+        value: "24"
