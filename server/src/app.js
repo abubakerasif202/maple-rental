@@ -33,7 +33,7 @@ export const createServer = () => {
           return;
         }
 
-        callback(new Error('Origin not allowed by CORS'));
+        callback(null, false);
       },
     }),
   );
