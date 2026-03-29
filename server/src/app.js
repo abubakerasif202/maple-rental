@@ -10,7 +10,10 @@ import adminRouter from './routes/admin.js';
 import webhookRouter from './routes/webhook.js';
 import { env } from './config/env.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
-import { getSystemHealth } from './services/systemHealthService.js';
+import {
+  getSystemHealth,
+  warmSystemHealth,
+} from './services/systemHealthService.js';
 
 const allowedOrigins = [
   env.CLIENT_URL,
@@ -36,14 +39,33 @@ export const createServer = () => {
   );
   app.use(helmet());
 
-  app.get('/api/health', async (_request, response, next) => {
+  app.get('/api/health', (_request, response) => {
+    const system = warmSystemHealth();
+
+    response.status(200).json({
+      status: system.pending ? 'starting' : system.ok ? 'ok' : 'degraded',
+      service: 'maple-rentals-v4-api',
+      environment: env.NODE_ENV,
+      checkedAt: system.checkedAt,
+      durationMs: system.durationMs,
+      dependenciesOk: !system.pending && system.ok,
+      checks: system.checks,
+    });
+  });
+
+  app.get('/api/ready', async (_request, response, next) => {
     try {
-      const system = await getSystemHealth();
+      const system = await getSystemHealth({
+        allowStale: false,
+        timeoutMs: 1_500,
+      });
 
       response.status(system.ok ? 200 : 503).json({
         status: system.ok ? 'ok' : 'degraded',
         service: 'maple-rentals-v4-api',
         environment: env.NODE_ENV,
+        checkedAt: system.checkedAt,
+        durationMs: system.durationMs,
         checks: system.checks,
       });
     } catch (error) {
@@ -62,6 +84,8 @@ export const createServer = () => {
 
   app.use(notFoundHandler);
   app.use(errorHandler);
+
+  warmSystemHealth();
 
   return app;
 };
