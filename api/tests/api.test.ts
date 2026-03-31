@@ -1640,6 +1640,34 @@ describe('Applications API', () => {
     expect(res.body.error).toBe('Failed to submit availability inquiry');
   });
 
+  it('POST /api/inquiries returns 202 when only the user confirmation email fails', async () => {
+    process.env.RESEND_API_KEY = 'test-resend';
+    mockResendEmailsSend.mockResolvedValueOnce({
+      data: { id: 'email_admin_123' },
+      error: null,
+      headers: null,
+    });
+    mockResendEmailsSend.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'Provider rejected request' },
+      headers: null,
+    });
+    const startDate = getFutureDateOnly(7);
+    const endDate = getFutureDateOnly(14);
+
+    const res = await request(app).post('/api/inquiries').send({
+      name: 'Jordan Prospect',
+      email: 'jordan.prospect@example.com',
+      phone: '0400 000 111',
+      startDate,
+      endDate,
+      message: 'Looking for a Camry Hybrid for airport work.',
+    });
+
+    expect(res.status).toBe(202);
+    expect(res.body.success).toBe(true);
+  });
+
   it('POST /api/inquiries returns 503 when inquiry delivery is not configured', async () => {
     delete process.env.RESEND_API_KEY;
     const startDate = getFutureDateOnly(7);

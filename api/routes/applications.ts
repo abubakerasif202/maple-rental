@@ -775,7 +775,7 @@ router.post('/:id/approve-payment', authenticateAdmin, async (req, res) => {
       applicationId: payload.application_id,
       carId: payload.assigned_car_id,
       purpose: 'vehicle',
-      version: Number(updatedApplication.payment_link_version || nextVersion),
+      version: nextVersion,
     });
     const checkoutUrl = buildDriverPaymentLink({
       applicationId: payload.application_id,

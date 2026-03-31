@@ -34,7 +34,7 @@ router.post('/', inquirySubmissionLimiter, async (req, res) => {
     const safeMessage = escapeHtml(inquiry.message || 'No additional notes provided.');
     const inquiryNameForSubject = sanitizeEmailHeaderValue(inquiry.name);
 
-    await Promise.all([
+    const [adminEmailResult, userEmailResult] = await Promise.allSettled([
       sendResendEmail(resend, {
         from: 'Maple Rentals <noreply@maplerentals.com.au>',
         to: adminEmail,
@@ -66,6 +66,14 @@ router.post('/', inquirySubmissionLimiter, async (req, res) => {
         `,
       }),
     ]);
+
+    if (adminEmailResult.status === 'rejected') {
+      throw adminEmailResult.reason;
+    }
+
+    if (userEmailResult.status === 'rejected') {
+      console.warn('Failed to send inquiry confirmation to user:', userEmailResult.reason);
+    }
 
     res.status(202).json({ success: true });
   } catch (error) {
