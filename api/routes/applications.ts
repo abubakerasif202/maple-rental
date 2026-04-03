@@ -358,42 +358,47 @@ const uploadApplicationFile = async ({
 };
 
 router.get('/', authenticateAdmin, async (_req, res) => {
-  const selectColumns = await getApplicationSelectColumns();
-  const orderColumn = await getApplicationCreatedAtColumn();
-  const { data, error } = await db
-    .from('applications')
-    .select(selectColumns)
-    .order(orderColumn, { ascending: false });
-  if (error) {
-    return res.status(500).json({ error: 'Failed to fetch applications' });
-  }
+  try {
+    const selectColumns = await getApplicationSelectColumns();
+    const orderColumn = await getApplicationCreatedAtColumn();
+    const { data, error } = await db
+      .from('applications')
+      .select(selectColumns)
+      .order(orderColumn, { ascending: false });
+    if (error) {
+      return res.status(500).json({ error: 'Failed to fetch applications' });
+    }
 
-  const rows = ((data || []) as Array<Record<string, any>>);
-  const applications = await Promise.all(
-    rows.map(async (application, index) => {
-      const {
-        uber_screenshot: _legacyUberScreenshot,
-        uberScreenshot: _legacyUberScreenshotCamel,
-        ...rest
-      } = application;
+    const rows = ((data || []) as Array<Record<string, any>>);
+    const applications = await Promise.all(
+      rows.map(async (application, index) => {
+        const {
+          uber_screenshot: _legacyUberScreenshot,
+          uberScreenshot: _legacyUberScreenshotCamel,
+          ...rest
+        } = application;
 
-      if (!hasAvailableDocumentSigningCapacity(index)) {
+        if (!hasAvailableDocumentSigningCapacity(index)) {
+          return {
+            ...rest,
+            license_photo: null,
+            license_back_photo: null,
+          };
+        }
+
         return {
           ...rest,
-          license_photo: null,
-          license_back_photo: null,
+          license_photo: await createSignedDocumentUrl(application.license_photo),
+          license_back_photo: await createSignedDocumentUrl(getApplicationBackPhotoValue(application)),
         };
-      }
+      })
+    );
 
-      return {
-        ...rest,
-        license_photo: await createSignedDocumentUrl(application.license_photo),
-        license_back_photo: await createSignedDocumentUrl(getApplicationBackPhotoValue(application)),
-      };
-    })
-  );
-
-  res.json(applications);
+    res.json(applications);
+  } catch (error) {
+    console.error('Fetch applications error:', error);
+    res.status(500).json({ error: 'Failed to fetch applications' });
+  }
 });
 
 router.get('/:id/documents/:document', authenticateAdmin, async (req, res) => {

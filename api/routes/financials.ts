@@ -27,7 +27,7 @@ router.get('/weekly', authenticateAdmin, async (_req, res) => {
 
     const rentals = ((activeRentals || []) as Array<Record<string, any>>);
     const projected_gross_weekly = rentals.reduce(
-      (sum, rental) => sum + Number(rental.weekly_price),
+      (sum, rental) => sum + (Number(rental.weekly_price) || 0),
       0
     );
     // Platform charges the weekly account management fee per active rental.
@@ -87,7 +87,7 @@ router.get('/stats', authenticateAdmin, async (_req, res) => {
     const applicationsCount = applications.count || 0;
     const activeRentalsCount = rentalsActive.count || 0;
     const rentalRows = ((incomeRows.data || []) as Array<Record<string, any>>);
-    const totalWeeklyIncome = rentalRows.reduce((sum, row) => sum + Number(row.weekly_price), 0);
+    const totalWeeklyIncome = rentalRows.reduce((sum, row) => sum + (Number(row.weekly_price) || 0), 0);
 
     res.json({
       total_applications: applicationsCount,
