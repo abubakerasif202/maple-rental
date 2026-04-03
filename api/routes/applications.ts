@@ -397,7 +397,7 @@ router.get('/', authenticateAdmin, async (_req, res) => {
     res.json(applications);
   } catch (error) {
     console.error('Fetch applications error:', error);
-    res.status(500).json({ error: 'Failed to fetch applications' });
+    res.status(500).json({ error: 'Failed to process applications' });
   }
 });
 
