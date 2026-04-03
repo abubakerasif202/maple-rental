@@ -1315,6 +1315,122 @@ describe('Cars API', () => {
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('Car not found');
   });
+
+  it('POST /api/cars creates a new car and returns its id', async () => {
+    const res = await request(app)
+      .post('/api/cars')
+      .set('Authorization', 'Bearer fake-token')
+      .send({
+        name: 'Toyota Corolla Hybrid',
+        model_year: 2025,
+        weekly_price: 299,
+        bond: 600,
+        status: 'Available',
+        image: 'https://example.com/corolla.jpg',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBeDefined();
+    expect(mockState.cars).toHaveLength(3);
+    expect(mockState.cars[2].name).toBe('Toyota Corolla Hybrid');
+  });
+
+  it('POST /api/cars returns 400 for invalid car data', async () => {
+    const res = await request(app)
+      .post('/api/cars')
+      .set('Authorization', 'Bearer fake-token')
+      .send({
+        name: '',
+        model_year: 1800,
+        weekly_price: -100,
+        bond: 0,
+        status: 'Unknown',
+        image: 'not-a-valid-url',
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Validation failed');
+    expect(mockState.cars).toHaveLength(2);
+  });
+
+  it('POST /api/cars returns 401 when not authenticated', async () => {
+    const res = await request(app)
+      .post('/api/cars')
+      .send({
+        name: 'Toyota Corolla',
+        model_year: 2025,
+        weekly_price: 299,
+        bond: 600,
+        status: 'Available',
+        image: 'https://example.com/corolla.jpg',
+      });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('PUT /api/cars/:id updates an existing car and returns success', async () => {
+    const res = await request(app)
+      .put('/api/cars/1')
+      .set('Authorization', 'Bearer fake-token')
+      .send({
+        name: 'Toyota Camry Updated',
+        model_year: 2025,
+        weekly_price: 280,
+        bond: 560,
+        status: 'Maintenance',
+        image: 'https://example.com/camry-updated.jpg',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    const updated = mockState.cars.find((c) => c.id === 1);
+    expect(updated?.name).toBe('Toyota Camry Updated');
+    expect(updated?.status).toBe('Maintenance');
+  });
+
+  it('PUT /api/cars/:id returns 400 for invalid update data', async () => {
+    const res = await request(app)
+      .put('/api/cars/1')
+      .set('Authorization', 'Bearer fake-token')
+      .send({
+        name: 'Toyota Camry',
+        model_year: 2025,
+        weekly_price: -50,
+        bond: 0,
+        status: 'Available',
+        image: '/valid.jpg',
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Validation failed');
+  });
+
+  it('DELETE /api/cars/:id deletes a car that has no associated records', async () => {
+    mockState.rentals = [];
+    mockState.lease_agreements = [];
+    mockState.bookings = [];
+    // Reset applications so no app has assigned_car_id = 2
+    mockState.applications = mockState.applications.map((app) => ({
+      ...app,
+      assigned_car_id: null,
+    }));
+
+    const res = await request(app)
+      .delete('/api/cars/2')
+      .set('Authorization', 'Bearer fake-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockState.cars).toHaveLength(1);
+    expect(mockState.cars.find((c) => c.id === 2)).toBeUndefined();
+  });
+
+  it('GET /api/cars/:id returns 404 when the car does not exist', async () => {
+    const res = await request(app).get('/api/cars/999');
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('Car not found');
+  });
 });
 
 describe('Auth API', () => {
@@ -1710,6 +1826,94 @@ describe('Applications API', () => {
 
     expect(res.status).toBe(503);
     expect(res.body.error).toContain('temporarily unavailable');
+  });
+
+  it('POST /api/inquiries returns 400 when required fields are missing', async () => {
+    const res = await request(app).post('/api/inquiries').send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Validation failed');
+    expect(Array.isArray(res.body.details)).toBe(true);
+  });
+
+  it('POST /api/inquiries returns 400 when the email is invalid', async () => {
+    const startDate = getFutureDateOnly(7);
+    const endDate = getFutureDateOnly(14);
+
+    const res = await request(app).post('/api/inquiries').send({
+      name: 'Jordan Prospect',
+      email: 'not-an-email',
+      phone: '0400000111',
+      startDate,
+      endDate,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Validation failed');
+  });
+
+  it('POST /api/inquiries returns 400 when the phone number is not a valid Australian mobile', async () => {
+    const startDate = getFutureDateOnly(7);
+    const endDate = getFutureDateOnly(14);
+
+    const res = await request(app).post('/api/inquiries').send({
+      name: 'Jordan Prospect',
+      email: 'jordan@example.com',
+      phone: '123456',
+      startDate,
+      endDate,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Validation failed');
+  });
+
+  it('POST /api/inquiries returns 400 when end date is before start date', async () => {
+    const startDate = getFutureDateOnly(14);
+    const endDate = getFutureDateOnly(7);
+
+    const res = await request(app).post('/api/inquiries').send({
+      name: 'Jordan Prospect',
+      email: 'jordan@example.com',
+      phone: '0400000111',
+      startDate,
+      endDate,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Validation failed');
+  });
+
+  it('POST /api/inquiries returns 400 when start date is in the past', async () => {
+    const startDate = getPastDateOnly(7);
+    const endDate = getFutureDateOnly(7);
+
+    const res = await request(app).post('/api/inquiries').send({
+      name: 'Jordan Prospect',
+      email: 'jordan@example.com',
+      phone: '0400000111',
+      startDate,
+      endDate,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Validation failed');
+  });
+
+  it('POST /api/inquiries returns 400 when the name is too short', async () => {
+    const startDate = getFutureDateOnly(7);
+    const endDate = getFutureDateOnly(14);
+
+    const res = await request(app).post('/api/inquiries').send({
+      name: 'A',
+      email: 'jordan@example.com',
+      phone: '0400000111',
+      startDate,
+      endDate,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Validation failed');
   });
 
   it('GET /api/applications returns signed document URLs for admins', async () => {
