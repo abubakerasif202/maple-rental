@@ -39,7 +39,7 @@ export default function OverviewTab({
         <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1.1fr_0.9fr] lg:p-10">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.36em] text-brand-gold">
-              Aurora Operations
+              Gala Operations
             </p>
             <h2 className="mt-4 max-w-2xl text-4xl font-serif font-bold leading-tight text-white sm:text-5xl">
               Premium rental control room for applications, fleet, and revenue.

@@ -32,8 +32,8 @@ export default function Contact() {
   return (
     <div className="min-h-screen bg-brand-navy text-white">
       <Seo
-        title="Contact | Aurora Rentals"
-        description="Contact Aurora Rentals for fleet availability, rental questions, or application support."
+        title="Contact | Gala Rentals"
+        description="Contact Gala Rentals for fleet availability, rental questions, or application support."
         canonicalPath="/contact"
       />
 
@@ -45,14 +45,14 @@ export default function Contact() {
               Reach the team directly.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-stone-300">
-              Aurora Rentals keeps enquiries simple: ask about fleet availability,
+              Gala Rentals keeps enquiries simple: ask about fleet availability,
               rental terms, start dates, or application support.
             </p>
 
             <div className="mt-10 space-y-4">
               {[
                 { icon: Phone, title: 'Phone', body: '1300 555 828' },
-                { icon: Mail, title: 'Email', body: 'hello@aurorarentals.com.au' },
+                { icon: Mail, title: 'Email', body: 'hello@galarentals.com.au' },
                 { icon: Clock3, title: 'Business hours', body: 'Mon-Fri, 8:30am to 5:30pm AEST' },
                 { icon: MapPin, title: 'Service area', body: 'Sydney metro and surrounding suburbs' },
               ].map((item) => (

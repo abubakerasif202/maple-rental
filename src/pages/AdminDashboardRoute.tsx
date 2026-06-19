@@ -78,7 +78,7 @@ export default function AdminDashboardRoute() {
         <div className="max-w-lg rounded-3xl border border-amber-500/20 bg-white/5 p-8 text-center">
           <AlertCircle className="mx-auto mb-4 h-8 w-8 text-amber-300" />
           <p className="text-sm font-light text-brand-grey">
-            This signed-in account does not have Aurora Rentals admin access.
+            This signed-in account does not have Gala Rentals admin access.
           </p>
         </div>
       </div>

@@ -18,8 +18,8 @@ export default function Pricing() {
   return (
     <div className="min-h-screen bg-[#F4F6F8] text-brand-navy selection:bg-brand-gold selection:text-black">
       <Seo
-        title="Pricing | Aurora Rentals"
-        description="Compare Aurora Rentals weekly plans, bond requirements, and subscription structure before you apply."
+        title="Pricing | Gala Rentals"
+        description="Compare Gala Rentals weekly plans, bond requirements, and subscription structure before you apply."
         canonicalPath="/pricing"
         keywords={[
           'car rental plans sydney',
@@ -55,7 +55,7 @@ export default function Pricing() {
             className="text-slate-300 text-lg max-w-3xl mx-auto font-light leading-relaxed"
           >
             Compare each plan&apos;s billing cadence, support level, and included services before
-            you apply. Aurora Rentals confirms the approved vehicle, weekly amount, and payment
+            you apply. Gala Rentals confirms the approved vehicle, weekly amount, and payment
             step only after review.
           </motion.p>
         </div>
@@ -123,7 +123,7 @@ export default function Pricing() {
                       </p>
                       <p className="text-2xl font-bold">{plan.cadenceLabel}</p>
                       <p className={`mt-3 text-sm leading-7 ${plan.popular ? 'text-slate-300' : 'text-slate-600'}`}>
-                        Exact pricing and vehicle details are shared privately by Aurora Rentals
+                        Exact pricing and vehicle details are shared privately by Gala Rentals
                         after your application is approved.
                       </p>
                     </div>
@@ -172,7 +172,7 @@ export default function Pricing() {
             {
               icon: Check,
               title: 'Review-first approval',
-              body: 'Aurora Rentals confirms the approved vehicle, onboarding notes, and exact billing amount during review.',
+              body: 'Gala Rentals confirms the approved vehicle, onboarding notes, and exact billing amount during review.',
             },
             {
               icon: Check,

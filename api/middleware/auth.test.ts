@@ -53,16 +53,16 @@ describe('getEffectiveAdminEmail', () => {
     expect(getEffectiveAdminEmail()).toBe('fleet@example.com');
   });
 
-  it('falls back to the Aurora dev admin email when ADMIN_EMAIL is not set (non-production)', () => {
+  it('falls back to the Gala dev admin email when ADMIN_EMAIL is not set (non-production)', () => {
     delete process.env.ADMIN_EMAIL;
     // VITEST=true so isProduction is false → dev fallback is used
-    expect(getEffectiveAdminEmail()).toBe('hello@aurorarentals.com.au');
+    expect(getEffectiveAdminEmail()).toBe('hello@galarentals.com.au');
   });
 
-  it('returns the Aurora dev admin email for an empty ADMIN_EMAIL string when in non-production', () => {
+  it('returns the Gala dev admin email for an empty ADMIN_EMAIL string when in non-production', () => {
     process.env.ADMIN_EMAIL = '';
     // Empty string → configuredAdminEmail is falsy → falls back to dev email
-    expect(getEffectiveAdminEmail()).toBe('hello@aurorarentals.com.au');
+    expect(getEffectiveAdminEmail()).toBe('hello@galarentals.com.au');
   });
 });
 

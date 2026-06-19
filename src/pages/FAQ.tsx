@@ -9,7 +9,7 @@ const faqs = [
   },
   {
     q: 'When do payments start?',
-    a: 'Payments only begin after an approved application is reviewed by the Aurora team and the secure Stripe checkout link is issued.',
+    a: 'Payments only begin after an approved application is reviewed by the Gala team and the secure Stripe checkout link is issued.',
   },
   {
     q: 'Can the subscription start date be controlled by admin?',
@@ -33,7 +33,7 @@ export default function FAQ() {
   return (
     <div className="min-h-screen bg-brand-navy text-white">
       <Seo
-        title="FAQ | Aurora Rentals"
+        title="FAQ | Gala Rentals"
         description="Answers to common questions about documents, payments, insurance, notices, cancellations, and rental start dates."
         canonicalPath="/faq"
       />
@@ -47,7 +47,7 @@ export default function FAQ() {
               Common questions, answered clearly.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-stone-300">
-              Aurora Rentals keeps the process transparent from application through payment,
+              Gala Rentals keeps the process transparent from application through payment,
               notices, and rental handover.
             </p>
           </div>

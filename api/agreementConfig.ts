@@ -1,9 +1,9 @@
 import { LEASE_SETTINGS } from './constants.js';
 
-const DEFAULT_LEASE_OWNER_NAME = 'Aurora Rentals';
+const DEFAULT_LEASE_OWNER_NAME = 'Gala Rentals';
 const DEFAULT_LEASE_OWNER_ADDRESS = 'Sydney NSW';
 const DEFAULT_LEASE_OWNER_CONTACT = '1300 555 828';
-const DEFAULT_LEASE_OWNER_EMAIL = 'hello@aurorarentals.com.au';
+const DEFAULT_LEASE_OWNER_EMAIL = 'hello@galarentals.com.au';
 const DEFAULT_KM_ALLOWANCE = 'As agreed in booking';
 const DEFAULT_RETURN_NOTICE_DAYS = 14;
 const DEFAULT_FUEL_POLICY =

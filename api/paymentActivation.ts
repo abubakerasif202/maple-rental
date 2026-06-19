@@ -665,7 +665,7 @@ export const handleVehicleCheckoutCompletion = async (
         const adminEmail = process.env.ADMIN_EMAIL || FALLBACK_ADMIN_EMAIL;
 
         await sendResendEmail(resend, {
-          from: 'Aurora Rentals <noreply@aurorarentals.com.au>',
+          from: 'Gala Rentals <noreply@galarentals.com.au>',
           to: adminEmail,
           subject: `Activation review required for vehicle checkout ${session.id}`,
           html: `

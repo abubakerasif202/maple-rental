@@ -68,9 +68,9 @@ export const sendDriverPaymentLinkEmail = async ({
 
   try {
     await sendResendEmail(resend, {
-      from: 'Aurora Rentals <noreply@aurorarentals.com.au>',
+      from: 'Gala Rentals <noreply@galarentals.com.au>',
       to: applicantEmail,
-      subject: 'Your Aurora Rentals checkout link is ready',
+      subject: 'Your Gala Rentals checkout link is ready',
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a202c;">
           <h2 style="color: #D4AF37;">Application Ready For Checkout</h2>
@@ -86,7 +86,7 @@ export const sendDriverPaymentLinkEmail = async ({
           }
           <p><strong>Total due now:</strong> ${formatCurrency(upfrontDue)}</p>
           <p>After the upfront payment, Stripe automatically charges ${formatCurrency(approvedWeeklyPrice)} each week.</p>
-          <p>Once Stripe confirms payment, Aurora Rentals finalises onboarding and handover with you directly.</p>
+          <p>Once Stripe confirms payment, Gala Rentals finalises onboarding and handover with you directly.</p>
           <p>
             <a
               href="${safeCheckoutUrl}"
@@ -96,7 +96,7 @@ export const sendDriverPaymentLinkEmail = async ({
             </a>
           </p>
           <p>This link is time-limited for security. If it expires, reply to this email and we will issue a fresh one.</p>
-          <p>Best regards,<br /><strong>The Aurora Rentals Team</strong></p>
+          <p>Best regards,<br /><strong>The Gala Rentals Team</strong></p>
         </div>
       `,
     });

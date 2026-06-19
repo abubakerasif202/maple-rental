@@ -1,8 +1,8 @@
-# Aurora Rentals
+# Gala Rentals
 
-Aurora Rentals is a full-stack rental SaaS for approval-first vehicle subscriptions. One Express process serves both the API and the built React/Vite frontend in production.
+Gala Rentals is a full-stack rental SaaS for approval-first vehicle subscriptions. One Express process serves both the API and the built React/Vite frontend in production.
 
-Deployment handoff notes are documented in [AURORA_DEPLOYMENT.md](AURORA_DEPLOYMENT.md).
+Deployment handoff notes are documented in [GALA_DEPLOYMENT.md](GALA_DEPLOYMENT.md).
 Stripe operational setup and reset steps are documented in [docs/STRIPE_SETUP.md](docs/STRIPE_SETUP.md).
 
 ## Summary
@@ -81,8 +81,8 @@ API:
 ### Prerequisites
 
 - Node.js 20.x
-- A separate Aurora Supabase project
-- A separate Aurora Stripe account or Stripe test workspace/catalog
+- A separate Gala Supabase project
+- A separate Gala Stripe account or Stripe test workspace/catalog
 
 ### Install
 
@@ -92,29 +92,29 @@ npm ci
 
 ### Configure Environment Variables
 
-Copy `.env.example` to `.env.local` and fill in Aurora-only values. The server loads `.env` first and then `.env.local` in non-production environments.
+Copy `.env.example` to `.env.local` and fill in Gala-only values. The server loads `.env` first and then `.env.local` in non-production environments.
 
 Minimum local variables:
 
 ```env
-SUPABASE_URL=https://your-aurora-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your_aurora_service_role_key
-SUPABASE_ANON_KEY=your_aurora_anon_key
-ADMIN_EMAIL=hello@aurorarentals.com.au
+SUPABASE_URL=https://your-gala-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_gala_service_role_key
+SUPABASE_ANON_KEY=your_gala_anon_key
+ADMIN_EMAIL=hello@galarentals.com.au
 CHECKOUT_LINK_SECRET=replace_with_a_long_random_secret
 JWT_SECRET=replace_with_a_long_random_secret
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 APP_URL=http://localhost:3000
 SITE_URL=http://localhost:3000
-LEASE_OWNER_NAME=Aurora Rentals
+LEASE_OWNER_NAME=Gala Rentals
 LEASE_OWNER_ADDRESS=Sydney NSW
 LEASE_OWNER_CONTACT=1300 555 828
-LEASE_OWNER_EMAIL=hello@aurorarentals.com.au
+LEASE_OWNER_EMAIL=hello@galarentals.com.au
 VITE_API_BASE_URL=/api
 VITE_STRIPE_PUBLIC_KEY=pk_test_...
-VITE_SUPABASE_URL=https://your-aurora-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your_aurora_anon_key
+VITE_SUPABASE_URL=https://your-gala-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_gala_anon_key
 VITE_SUPABASE_VEHICLE_IMAGES_BUCKET=vehicle-images
 ```
 
@@ -147,10 +147,10 @@ Print the base schema SQL:
 node scripts/seed-schema.js
 ```
 
-Apply newer SQL files under `supabase/migrations/` before handoff. Aurora requires:
+Apply newer SQL files under `supabase/migrations/` before handoff. Gala requires:
 
 ```text
-supabase/migrations/20260619090000_add_aurora_application_fields.sql
+supabase/migrations/20260619090000_add_gala_application_fields.sql
 ```
 
 Create the private storage bucket used for driver documents:
@@ -162,8 +162,8 @@ npx tsx scripts/setup-bucket.ts
 Create or reset the admin user:
 
 ```bash
-node scripts/seed-admin.js hello@aurorarentals.com.au your-password
-node scripts/reset-admin.js hello@aurorarentals.com.au new-password
+node scripts/seed-admin.js hello@galarentals.com.au your-password
+node scripts/reset-admin.js hello@galarentals.com.au new-password
 ```
 
 ### Start Development
@@ -215,9 +215,9 @@ Command summary:
 Required:
 
 - `NODE_ENV=production`
-- `APP_URL=https://www.aurorarentals.com.au`
-- `SITE_URL=https://www.aurorarentals.com.au`
-- `ADMIN_EMAIL=hello@aurorarentals.com.au`
+- `APP_URL=https://www.galarentals.com.au`
+- `SITE_URL=https://www.galarentals.com.au`
+- `ADMIN_EMAIL=hello@galarentals.com.au`
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
@@ -226,10 +226,10 @@ Required:
 - `JWT_SECRET`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
-- `LEASE_OWNER_NAME=Aurora Rentals`
+- `LEASE_OWNER_NAME=Gala Rentals`
 - `LEASE_OWNER_ADDRESS=Sydney NSW`
 - `LEASE_OWNER_CONTACT=1300 555 828`
-- `LEASE_OWNER_EMAIL=hello@aurorarentals.com.au`
+- `LEASE_OWNER_EMAIL=hello@galarentals.com.au`
 - `VITE_API_BASE_URL=/api`
 - `VITE_STRIPE_PUBLIC_KEY`
 - `VITE_SUPABASE_URL`
@@ -269,15 +269,15 @@ Optional:
 
 ## Render Deployment
 
-Aurora must be deployed as a separate Render service from the Aurora GitHub repo:
+Gala must be deployed as a separate Render service from the Gala GitHub repo:
 
 ```text
-https://github.com/abubakerasif202/aurora-rentals.git
+https://github.com/abubakerasif202/gala-rentals.git
 ```
 
 Render runtime contract:
 
-- Service name: `aurora-rentals`
+- Service name: `gala-rentals`
 - Branch: `main`
 - Build command: `npm run validate && npm run build`
 - Start command: `npm start`
@@ -285,14 +285,14 @@ Render runtime contract:
 
 First deploy checklist:
 
-1. Create a new Render web service named `aurora-rentals`.
-2. Connect `abubakerasif202/aurora-rentals`.
-3. Set Aurora-only environment variables.
+1. Create a new Render web service named `gala-rentals`.
+2. Connect `abubakerasif202/gala-rentals`.
+3. Set Gala-only environment variables.
 4. Use a separate Supabase project/database.
-5. Apply `supabase/migrations/20260619090000_add_aurora_application_fields.sql`.
-6. Create new Stripe products, prices, and webhook endpoint for Aurora.
-7. Set the Stripe webhook URL to `https://<AURORA_RENDER_DOMAIN>/api/stripe/webhook`.
-8. Deploy the Aurora service only.
+5. Apply `supabase/migrations/20260619090000_add_gala_application_fields.sql`.
+6. Create new Stripe products, prices, and webhook endpoint for Gala.
+7. Set the Stripe webhook URL to `https://<GALA_RENDER_DOMAIN>/api/stripe/webhook`.
+8. Deploy the Gala service only.
 9. Verify `/api/live`, `/api/health`, `/`, `/admin/login`, and `/apply`.
 
 Do not reuse another company's production domain, Supabase credentials, Stripe products, Stripe prices, or webhook endpoints.
@@ -319,7 +319,7 @@ Do not reuse another company's production domain, Supabase credentials, Stripe p
 `SUPABASE_URL` must be the HTTPS project URL:
 
 ```env
-SUPABASE_URL=https://your-aurora-project.supabase.co
+SUPABASE_URL=https://your-gala-project.supabase.co
 ```
 
 Do not paste a Postgres connection string into `SUPABASE_URL`.
@@ -332,11 +332,11 @@ Add `DATABASE_URL` with a session-capable direct Postgres connection to enable a
 
 Check:
 
-- `STRIPE_SECRET_KEY` is the expected Aurora key
-- `STRIPE_WEBHOOK_SECRET` is populated from the Aurora webhook endpoint
-- `APP_URL` matches the final Aurora public domain
+- `STRIPE_SECRET_KEY` is the expected Gala key
+- `STRIPE_WEBHOOK_SECRET` is populated from the Gala webhook endpoint
+- `APP_URL` matches the final Gala public domain
 - `/api/stripe/webhook` exists as a live Stripe webhook endpoint
-- `DATABASE_URL` points at the Aurora transactional database
+- `DATABASE_URL` points at the Gala transactional database
 - the database schema includes the latest `stripe_webhook_events` columns
 
 ### Admin login loops back to `/admin/login`

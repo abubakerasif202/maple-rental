@@ -5,7 +5,7 @@ import { createAuthClient } from '../db/index.js';
 const isVitest = process.env.VITEST === 'true';
 const isProduction = process.env.NODE_ENV === 'production' && !isVitest;
 
-const devAdminEmail = 'hello@aurorarentals.com.au';
+const devAdminEmail = 'hello@galarentals.com.au';
 export const MIN_ADMIN_SESSION_SECRET_LENGTH = 32;
 
 const LOCAL_ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;

@@ -44,7 +44,7 @@ const contentByMode: Record<
   delete: {
     title: 'Delete Vehicle',
     description:
-      'Delete permanently removes this vehicle record. This cannot be undone, and the stored image is cleaned up if Aurora Rentals manages it in Supabase Storage.',
+      'Delete permanently removes this vehicle record. This cannot be undone, and the stored image is cleaned up if Gala Rentals manages it in Supabase Storage.',
     helper:
       'Permanent delete is only allowed when no rentals, bookings, agreements, or assigned applications still reference the vehicle.',
   },

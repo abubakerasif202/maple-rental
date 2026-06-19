@@ -1,6 +1,6 @@
 import type Stripe from 'stripe';
 
-export const FALLBACK_ADMIN_EMAIL = 'hello@aurorarentals.com.au';
+export const FALLBACK_ADMIN_EMAIL = 'hello@galarentals.com.au';
 
 export const LEASE_SETTINGS = {
   currency: 'aud',
@@ -24,7 +24,7 @@ export const RENTAL_PLAN_SETUP_FEES_AUD = Number(
 export const STRIPE_API_VERSION = '2025-04-30.basil' as const;
 
 export const STRIPE_CONFIG: Stripe.StripeConfig = {
-  // stripe-node only types the library's latest API version literal. Aurora Rentals
+  // stripe-node only types the library's latest API version literal. Gala Rentals
   // intentionally pins a validated account version until a broader Stripe upgrade.
   apiVersion: STRIPE_API_VERSION as Stripe.LatestApiVersion,
   typescript: true,

@@ -37,7 +37,7 @@ import { normalizeUuid } from '../../shared/uuid.js';
 
 const getStripe = () => getStripeClient();
 const DEFAULT_VEHICLE_IMAGE = '/hero-camry.webp';
-const DEFAULT_APPROVED_VEHICLE_LABEL = 'Approved vehicle to be confirmed by Aurora Rentals';
+const DEFAULT_APPROVED_VEHICLE_LABEL = 'Approved vehicle to be confirmed by Gala Rentals';
 
 type BillingBreakdown = {
   bond: number;

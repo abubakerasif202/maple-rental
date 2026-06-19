@@ -1,6 +1,6 @@
 # Deprecated placeholder.
 #
-# Aurora Rentals does not provision its Stripe account, products, prices, or webhook
+# Gala Rentals does not provision its Stripe account, products, prices, or webhook
 # endpoints through Terraform in this repository.
 #
 # Do not use this directory as the source of truth for client handoff or live

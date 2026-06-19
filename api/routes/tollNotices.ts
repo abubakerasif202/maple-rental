@@ -490,7 +490,7 @@ router.post('/:id/send', authenticateAdmin, async (req, res) => {
           filename: `toll-transfer-notice-${id}.pdf`,
         },
       ],
-      from: 'Aurora Rentals <noreply@aurorarentals.com.au>',
+      from: 'Gala Rentals <noreply@galarentals.com.au>',
       html: `
         <div style="font-family: sans-serif; max-width: 640px; margin: 0 auto; color: #1a202c;">
           <h2 style="color: #D4AF37;">Toll Transfer Notice</h2>
@@ -501,7 +501,7 @@ router.post('/:id/send', authenticateAdmin, async (req, res) => {
             <li><strong>Vehicle registration:</strong> ${safeVehicleRegistration}</li>
             <li><strong>Nominated driver/customer:</strong> ${safeNomineeName}</li>
           </ul>
-          <p>Regards,<br /><strong>Aurora Rentals</strong></p>
+          <p>Regards,<br /><strong>Gala Rentals</strong></p>
         </div>
       `,
       subject: `Toll Transfer Notice ${subjectNoticeNumber}`,

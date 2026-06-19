@@ -734,7 +734,7 @@ router.post(
           );
           const emailResults = await Promise.allSettled([
             sendResendEmail(resend, {
-              from: "Aurora Rentals Notifications <noreply@aurorarentals.com.au>",
+              from: "Gala Rentals Notifications <noreply@galarentals.com.au>",
               to: adminEmail,
               subject: `New Driver Application: ${applicantNameForSubject}`,
               html: `
@@ -755,17 +755,17 @@ router.post(
               `,
             }),
             sendResendEmail(resend, {
-              from: "Aurora Rentals <noreply@aurorarentals.com.au>",
+              from: "Gala Rentals <noreply@galarentals.com.au>",
               to: normalizedApplicationData.email,
-              subject: "We received your Aurora Rentals application",
+              subject: "We received your Gala Rentals application",
               html: `
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a202c;">
                   <h2 style="color: #D4AF37;">Application Received</h2>
                   <p>Hi ${safeApplicantName},</p>
-                  <p>Thanks for applying to drive with Aurora Rentals.</p>
+                  <p>Thanks for applying to drive with Gala Rentals.</p>
                   <p>Our team is reviewing your documents now. If your application is approved, we will email you a secure checkout link with the final pricing and agreement.</p>
                   <p><strong>Application reference:</strong> ${applicationId}</p>
-                  <p>Best regards,<br /><strong>The Aurora Rentals Team</strong></p>
+                  <p>Best regards,<br /><strong>The Gala Rentals Team</strong></p>
                 </div>
               `,
             }),

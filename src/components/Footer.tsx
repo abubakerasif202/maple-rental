@@ -24,7 +24,7 @@ export default function Footer() {
                 </div>
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-[0.45em] text-brand-gold">
-                    Aurora Rentals
+                    Gala Rentals
                   </p>
                   <p className="text-[11px] text-gray-500">Luxury fleet subscriptions</p>
                 </div>
@@ -61,7 +61,7 @@ export default function Footer() {
               </li>
               <li className="flex items-center gap-4">
                 <Mail className="h-4 w-4 text-brand-gold" />
-                <a href="mailto:hello@aurorarentals.com.au" className="text-sm hover:text-brand-gold transition-colors font-light">hello@aurorarentals.com.au</a>
+                <a href="mailto:hello@galarentals.com.au" className="text-sm hover:text-brand-gold transition-colors font-light">hello@galarentals.com.au</a>
               </li>
               <li className="flex items-start gap-4">
                 <MapPin className="h-4 w-4 text-brand-gold mt-0.5" />
@@ -80,7 +80,7 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-white/10 mt-20 pt-8 text-center text-xs text-gray-600 uppercase tracking-widest font-light">
-          &copy; {new Date().getFullYear()} Aurora Rentals. All rights reserved.
+          &copy; {new Date().getFullYear()} Gala Rentals. All rights reserved.
         </div>
       </div>
     </footer>

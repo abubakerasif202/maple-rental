@@ -145,8 +145,8 @@ export default function Success() {
   return (
     <div className="min-h-screen bg-brand-charcoal flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-brand-gold selection:text-brand-charcoal">
       <Seo
-        title="Payment Status | Aurora Rentals"
-        description="Secure payment status page for Aurora Rentals checkout sessions."
+        title="Payment Status | Gala Rentals"
+        description="Secure payment status page for Gala Rentals checkout sessions."
         canonicalPath="/success"
         robots="noindex,nofollow"
       />

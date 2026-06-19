@@ -75,7 +75,7 @@ export const getCheckoutStatusPresentation = ({
 }): CheckoutStatusPresentation => {
   if (isError || !hasVerificationContext || !data) {
     return {
-      body: 'We could not verify this secure checkout session yet. If Stripe charged the payment, Aurora Rentals can recover it from the checkout session.',
+      body: 'We could not verify this secure checkout session yet. If Stripe charged the payment, Gala Rentals can recover it from the checkout session.',
       isFailure: true,
       shouldRefetch: false,
       showSecurePaymentLink: false,
@@ -92,7 +92,7 @@ export const getCheckoutStatusPresentation = ({
 
   if (state === 'complete_paid') {
     return {
-      body: 'Your payment has been confirmed. Weekly payments will now be managed through Stripe, and Aurora Rentals will contact you to complete onboarding and handover details.',
+      body: 'Your payment has been confirmed. Weekly payments will now be managed through Stripe, and Gala Rentals will contact you to complete onboarding and handover details.',
       isFailure: false,
       shouldRefetch: false,
       showSecurePaymentLink: false,
@@ -105,7 +105,7 @@ export const getCheckoutStatusPresentation = ({
 
   if (data.application_status === 'Cancelled') {
     return {
-      body: 'This application has been cancelled by Aurora Rentals. If you believe this is a mistake, contact support before trying the link again.',
+      body: 'This application has been cancelled by Gala Rentals. If you believe this is a mistake, contact support before trying the link again.',
       isFailure: true,
       shouldRefetch: false,
       showSecurePaymentLink: false,
@@ -134,7 +134,7 @@ export const getCheckoutStatusPresentation = ({
   if (state === 'manual_review') {
     return {
       body:
-        'Stripe has already confirmed your payment. We are waiting for Aurora Rentals to complete the final onboarding checks, and this page will keep checking automatically while that finishes. Aurora Rentals will contact you if any manual action is still needed.' +
+        'Stripe has already confirmed your payment. We are waiting for Gala Rentals to complete the final onboarding checks, and this page will keep checking automatically while that finishes. Gala Rentals will contact you if any manual action is still needed.' +
         (pollingTimedOut ? timeoutSuffix : ''),
       isFailure: false,
       shouldRefetch: !pollingTimedOut,
@@ -168,7 +168,7 @@ export const getCheckoutStatusPresentation = ({
   return {
     body: isExpiredOrCanceledCheckout(data)
       ? 'Stripe reported that this checkout did not complete. Return to the secure payment link to try again.'
-      : 'This checkout could not be verified against the secure payment link. Contact Aurora Rentals so the session can be reviewed safely.',
+      : 'This checkout could not be verified against the secure payment link. Contact Gala Rentals so the session can be reviewed safely.',
     isFailure: true,
     shouldRefetch: false,
     showSecurePaymentLink: isExpiredOrCanceledCheckout(data),

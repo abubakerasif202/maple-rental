@@ -5,4 +5,4 @@ Disallow: /api/
 Disallow: /checkout/
 Disallow: /success
 
-Sitemap: https://www.aurorarentals.com.au/sitemap.xml
+Sitemap: https://www.galarentals.com.au/sitemap.xml

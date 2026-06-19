@@ -33,12 +33,12 @@ const stagger: Variants = {
 const homeJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'LocalBusiness',
-  name: 'Aurora Rentals',
+  name: 'Gala Rentals',
   url: buildCanonicalUrl('/'),
   description:
-    'Aurora Rentals provides premium vehicle subscriptions, reviewed approvals, and secure Stripe payment workflows across Sydney.',
+    'Gala Rentals provides premium vehicle subscriptions, reviewed approvals, and secure Stripe payment workflows across Sydney.',
   telephone: '+61 1300 555 828',
-  email: 'hello@aurorarentals.com.au',
+  email: 'hello@galarentals.com.au',
   address: {
     '@type': 'PostalAddress',
     streetAddress: 'Sydney service hub',
@@ -65,7 +65,7 @@ const showcaseVehicles = [
   {
     image: '/car-images/YNU55M.jpeg',
     title: 'Kia Carnival',
-    body: 'Premium people mover option for high-capacity work, approved through Aurora operations.',
+    body: 'Premium people mover option for high-capacity work, approved through Gala operations.',
     price: 'From $520/wk',
     tag: 'People mover',
   },
@@ -100,7 +100,7 @@ const howItWorks = [
   {
     step: '01',
     title: 'Apply as a driver',
-    body: 'Submit your documents, start date, and driver details through Aurora Rentals.',
+    body: 'Submit your documents, start date, and driver details through Gala Rentals.',
   },
   {
     step: '02',
@@ -115,7 +115,7 @@ const howItWorks = [
   {
     step: '04',
     title: 'Onboarding and handover',
-    body: 'After successful payment, Aurora Rentals finalises onboarding, scheduling, and operational handover.',
+    body: 'After successful payment, Gala Rentals finalises onboarding, scheduling, and operational handover.',
   },
 ];
 
@@ -132,15 +132,15 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#061425] text-white selection:bg-brand-gold selection:text-black">
       <Seo
-        title="Aurora Rentals | Premium Car Subscriptions Sydney"
-        description="Apply with Aurora Rentals for a premium, admin-reviewed vehicle subscription program in Sydney with secure Stripe payments and structured onboarding."
+        title="Gala Rentals | Premium Car Subscriptions Sydney"
+        description="Apply with Gala Rentals for a premium, admin-reviewed vehicle subscription program in Sydney with secure Stripe payments and structured onboarding."
         canonicalPath="/"
         keywords={[
           'driver car rentals sydney',
           'uber rental approval sydney',
           'weekly driver rental sydney',
           'stripe car rental payment sydney',
-          'aurora rentals sydney',
+          'gala rentals sydney',
         ]}
         jsonLd={homeJsonLd}
       />
@@ -157,7 +157,7 @@ export default function Home() {
               Premium driver rentals with admin-reviewed approvals and secure Stripe payments.
             </motion.h1>
             <motion.p variants={fadeUp} className="mt-8 max-w-2xl text-lg font-light leading-8 text-stone-300">
-              Aurora Rentals is built for drivers who want a premium process. Apply once,
+              Gala Rentals is built for drivers who want a premium process. Apply once,
               get reviewed by the team, receive a confirmed quote, and pay only when your
               approval is ready.
             </motion.p>
@@ -200,7 +200,7 @@ export default function Home() {
               <div className="aspect-[4/3] overflow-hidden">
                 <img
                   src="/car-images/CNO40S.jpeg"
-                  alt="Premium Aurora Rentals vehicle"
+                  alt="Premium Gala Rentals vehicle"
                   className="h-full w-full object-cover"
                 />
               </div>
@@ -216,7 +216,7 @@ export default function Home() {
                     Premium rentals, approved before payment.
                   </h2>
                   <p className="mt-3 text-sm leading-7 text-slate-300">
-                    Drivers apply with documents, Aurora reviews the profile, then a secure checkout opens with confirmed pricing.
+                    Drivers apply with documents, Gala reviews the profile, then a secure checkout opens with confirmed pricing.
                   </p>
                 </div>
                 <div className="rounded-2xl bg-white p-5 text-brand-navy shadow-2xl">
@@ -297,7 +297,7 @@ export default function Home() {
                 A tighter process from first application to final onboarding.
               </h2>
               <p className="mt-6 max-w-xl text-lg font-light leading-8 text-stone-300">
-                This is not a public inventory marketplace. Aurora Rentals keeps the process controlled,
+                This is not a public inventory marketplace. Gala Rentals keeps the process controlled,
                 clear, and professional so drivers know exactly when review ends and payment begins.
               </p>
             </motion.div>
@@ -398,7 +398,7 @@ export default function Home() {
               Premium fleet cards with clear pricing signals and approval-first checkout.
             </h2>
             <p className="mt-6 text-lg font-light leading-8 text-slate-600">
-              Aurora Rentals uses real vehicle imagery to show standards and presentation while keeping assignment,
+              Gala Rentals uses real vehicle imagery to show standards and presentation while keeping assignment,
               pricing, and operational control inside the approval workflow.
             </p>
           </motion.div>
@@ -452,7 +452,7 @@ export default function Home() {
                   Apply once. Get reviewed properly. Pay only when everything is ready.
                 </h2>
                 <p className="mt-6 max-w-2xl text-lg font-light leading-8 text-stone-300">
-                  Aurora Rentals is designed for real driver onboarding, real admin control, and clear Stripe-backed payment handling.
+                  Gala Rentals is designed for real driver onboarding, real admin control, and clear Stripe-backed payment handling.
                 </p>
               </div>
               <div className="flex flex-col gap-4">

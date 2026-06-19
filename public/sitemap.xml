@@ -1,37 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://www.aurorarentals.com.au/</loc>
+    <loc>https://www.galarentals.com.au/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://www.aurorarentals.com.au/fleet</loc>
+    <loc>https://www.galarentals.com.au/fleet</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://www.aurorarentals.com.au/pricing</loc>
+    <loc>https://www.galarentals.com.au/pricing</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.aurorarentals.com.au/cars</loc>
+    <loc>https://www.galarentals.com.au/cars</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://www.aurorarentals.com.au/apply</loc>
+    <loc>https://www.galarentals.com.au/apply</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://www.aurorarentals.com.au/faq</loc>
+    <loc>https://www.galarentals.com.au/faq</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.aurorarentals.com.au/contact</loc>
+    <loc>https://www.galarentals.com.au/contact</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>

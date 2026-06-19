@@ -5,7 +5,7 @@ const items = [
   {
     icon: CarFront,
     title: 'Approved vehicle',
-    value: 'Aurora selected fleet vehicle',
+    value: 'Gala selected fleet vehicle',
   },
   {
     icon: CalendarDays,
@@ -28,8 +28,8 @@ export default function MyRental() {
   return (
     <div className="min-h-screen bg-brand-navy text-white">
       <Seo
-        title="My Rental | Aurora Rentals"
-        description="Mobile-style customer portal for Aurora Rentals with rental status, support links, and key subscription information."
+        title="My Rental | Gala Rentals"
+        description="Mobile-style customer portal for Gala Rentals with rental status, support links, and key subscription information."
         canonicalPath="/my-rental"
         robots="noindex,nofollow"
       />

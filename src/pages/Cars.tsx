@@ -38,8 +38,8 @@ export default function Cars() {
 
   const pageSeo = (
       <Seo
-      title="Fleet | Aurora Rentals"
-      description="Browse the Aurora Rentals fleet, compare premium vehicle categories, and start an application for approval."
+      title="Fleet | Gala Rentals"
+      description="Browse the Gala Rentals fleet, compare premium vehicle categories, and start an application for approval."
       canonicalPath="/fleet"
       keywords={[
         'sydney car rental fleet',
@@ -78,7 +78,7 @@ export default function Cars() {
               </h1>
               <p className="text-brand-grey text-lg max-w-xl font-light leading-relaxed">
                 Browse premium fleet options for drivers across Sydney. Pricing, approval, and
-                start dates are confirmed by Aurora Rentals after review.
+                start dates are confirmed by Gala Rentals after review.
               </p>
             </motion.div>
 
@@ -146,7 +146,7 @@ export default function Cars() {
                       </p>
                       <p className="text-sm leading-7 text-brand-grey">
                         Vehicle pricing, number plates, and final handover details are confirmed
-                        directly by Aurora Rentals during review.
+                        directly by Gala Rentals during review.
                       </p>
                     </div>
 

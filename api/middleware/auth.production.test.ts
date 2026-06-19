@@ -45,7 +45,7 @@ describe('production trusted admin write origins', () => {
     vi.resetModules();
     process.env = {
       ...ORIGINAL_ENV,
-      APP_URL: 'https://www.aurorarentals.com.au',
+      APP_URL: 'https://www.galarentals.com.au',
       JWT_SECRET: 'x'.repeat(32),
       NODE_ENV: 'production',
       VITEST: 'false',
@@ -65,7 +65,7 @@ describe('production trusted admin write origins', () => {
     requireTrustedAdminWriteOrigin(
       buildRequest({
         host: 'maple-rental.onrender.com',
-        origin: 'https://www.aurorarentals.com.au',
+        origin: 'https://www.galarentals.com.au',
       }),
       response,
       next

@@ -26,7 +26,7 @@ export default function Navbar() {
                 </div>
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-[0.45em] text-brand-gold">
-                    Aurora Rentals
+                    Gala Rentals
                   </p>
                   <p className="text-[11px] text-brand-grey">Premium car subscriptions</p>
                 </div>

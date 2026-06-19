@@ -472,7 +472,7 @@ export default function InvoicesTab({
               Manual Invoices
             </h3>
             <p className="mt-1 text-sm text-brand-grey">
-              Create Aurora Rentals tax invoices for manual admin billing, including
+              Create Gala Rentals tax invoices for manual admin billing, including
               bond tracking outside Stripe.
             </p>
           </div>

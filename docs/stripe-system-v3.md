@@ -1,6 +1,6 @@
 # Stripe System V3
 
-Stripe System V3 is the current Aurora Rentals Stripe architecture. It preserves the V2 correctness guarantees while making checkout orchestration thinner, webhook processing queue-ready, and replay/debug behavior easier to operate under load.
+Stripe System V3 is the current Gala Rentals Stripe architecture. It preserves the V2 correctness guarantees while making checkout orchestration thinner, webhook processing queue-ready, and replay/debug behavior easier to operate under load.
 
 ## Overview
 

@@ -1,22 +1,22 @@
-# Aurora Rentals Production Handoff
+# Gala Rentals Production Handoff
 
-This repository has been prepared for Aurora Rentals as a separate rental SaaS project.
+This repository has been prepared for Gala Rentals as a separate rental SaaS project.
 
-Use [AURORA_DEPLOYMENT.md](AURORA_DEPLOYMENT.md), [README.md](README.md), and [DEPLOY_RENDER.md](DEPLOY_RENDER.md) for current deployment instructions.
+Use [GALA_DEPLOYMENT.md](GALA_DEPLOYMENT.md), [README.md](README.md), and [DEPLOY_RENDER.md](DEPLOY_RENDER.md) for current deployment instructions.
 
 ## Required Production Setup
 
-- Deploy from `https://github.com/abubakerasif202/aurora-rentals.git`.
-- Create a new Render web service named `aurora-rentals`.
+- Deploy from `https://github.com/abubakerasif202/gala-rentals.git`.
+- Create a new Render web service named `gala-rentals`.
 - Use branch `main`.
 - Use build command `npm run validate && npm run build`.
 - Use start command `npm start`.
-- Add only Aurora domains, for example `www.aurorarentals.com.au`.
-- Use Aurora-only environment variables.
+- Add only Gala domains, for example `www.galarentals.com.au`.
+- Use Gala-only environment variables.
 - Use a separate Supabase project/database.
-- Apply `supabase/migrations/20260619090000_add_aurora_application_fields.sql`.
-- Create new Aurora Stripe products, prices, and webhook endpoint.
-- Set the Stripe webhook URL to `https://<AURORA_RENDER_DOMAIN>/api/stripe/webhook`.
+- Apply `supabase/migrations/20260619090000_add_gala_application_fields.sql`.
+- Create new Gala Stripe products, prices, and webhook endpoint.
+- Set the Stripe webhook URL to `https://<GALA_RENDER_DOMAIN>/api/stripe/webhook`.
 
 ## Required Checks Before Live Traffic
 

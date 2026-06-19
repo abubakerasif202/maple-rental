@@ -38,7 +38,7 @@ describe('applicationSchema', () => {
     intended_start_date: '2026-07-01',
   };
 
-  it('accepts the Aurora application payload', () => {
+  it('accepts the Gala application payload', () => {
     expect(() => applicationSchema.parse(validApplication)).not.toThrow();
   });
 

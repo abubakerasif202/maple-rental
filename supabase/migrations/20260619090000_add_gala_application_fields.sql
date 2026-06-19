@@ -1,4 +1,4 @@
--- Aurora Rentals application field expansion
+-- Gala Rentals application field expansion
 -- Adds optional rental-preference and document fields required by the new wizard.
 
 ALTER TABLE applications

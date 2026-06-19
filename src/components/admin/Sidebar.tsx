@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Car, 
-  Calendar, 
+import {
+  LayoutDashboard,
+  Users,
+  Car,
+  Calendar,
   TrendingUp,
   DollarSign,
   LogOut,
@@ -61,7 +61,7 @@ export default function Sidebar({
               <Car className="w-6 h-6 text-brand-navy" />
             </div>
             <div>
-              <h1 className="text-white font-bold tracking-tighter leading-none">AURORA</h1>
+              <h1 className="text-white font-bold tracking-tighter leading-none">GALA</h1>
               <p className="text-[8px] text-brand-gold font-bold tracking-[0.3em] uppercase">Rentals Admin</p>
             </div>
           </Link>

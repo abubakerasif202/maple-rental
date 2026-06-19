@@ -28,8 +28,8 @@ export default function AdminLogin() {
   return (
     <div className="flex items-center justify-center min-h-[80vh] bg-brand-navy py-12 px-4 sm:px-6 lg:px-8">
       <Seo
-        title="Admin Login | Aurora Rentals"
-        description="Administrative login for Aurora Rentals."
+        title="Admin Login | Gala Rentals"
+        description="Administrative login for Gala Rentals."
         canonicalPath="/admin/login"
         robots="noindex,nofollow"
       />
@@ -37,7 +37,7 @@ export default function AdminLogin() {
       <div className="max-w-md w-full space-y-8 bg-brand-navy-light p-10 rounded-xl shadow-2xl border border-white/10">
         <div>
           <h2 className="text-center text-3xl font-serif font-bold text-white tracking-tight">Admin Access</h2>
-          <p className="mt-2 text-center text-xs text-brand-gold font-bold uppercase tracking-[0.3em]">Aurora Rentals Operations</p>
+          <p className="mt-2 text-center text-xs text-brand-gold font-bold uppercase tracking-[0.3em]">Gala Rentals Operations</p>
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
