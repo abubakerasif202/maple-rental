@@ -104,5 +104,5 @@ Run the following end-to-end before each production release or after any change 
 
 ## Notes
 
-- `scripts/stripe_demo.py` is a legacy API demo that intentionally creates test objects. It is not part of the Maple Rental checkout setup.
+- `scripts/stripe_demo.py` is a legacy API demo that intentionally creates test objects. It is not part of the Aurora Rentals checkout setup.
 - If you need a truly pristine Stripe environment, prefer a fresh Stripe sandbox in the Dashboard instead of reusing a polluted long-lived test account.

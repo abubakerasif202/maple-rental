@@ -1,4 +1,4 @@
--- Supabase Schema Migration for Maple Rental (Safe)
+-- Supabase Schema Migration for Aurora Rentals (Safe)
 
 -- UUID Extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

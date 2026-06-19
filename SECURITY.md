@@ -2,14 +2,14 @@
 
 ## Supported Deployments
 
-Maple Rentals supports only the latest deployment from the `main` branch.
+Aurora Rentals supports only the latest deployment from the `main` branch.
 Older branches, forks, local development builds, and superseded deployments are
 not supported for security updates.
 
 ## Reporting a Vulnerability
 
-If you believe you have found a security vulnerability in Maple Rentals, please
-email the details to admin@maplerentals.com.au.
+If you believe you have found a security vulnerability in Aurora Rentals, please
+email the details to hello@aurorarentals.com.au.
 
 Include enough information for us to reproduce and assess the issue, such as:
 

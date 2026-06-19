@@ -1,199 +1,34 @@
-# Deploy Maple Rental to Render
+# Aurora Rentals Render Deployment
 
-## Goal
+Use [AURORA_DEPLOYMENT.md](AURORA_DEPLOYMENT.md) as the primary deployment handoff.
 
-Deploy the application as a single Render web service where:
+Aurora Rentals must be deployed as a separate Render web service from the Aurora GitHub repo:
 
-- Express serves the API under `/api/*`
-- Express serves the built Vite frontend from `dist/`
-- non-API routes fall back to `dist/index.html`
-- Render health checks probe `/api/health`
+```text
+https://github.com/abubakerasif202/aurora-rentals.git
+```
 
-## Render blueprint
+## Render Service
 
-This repository includes `render.yaml`, so Render can provision the service directly from GitHub.
-
-Blueprint link:
-[https://dashboard.render.com/blueprint/new?repo=https://github.com/abubakerasif202/maple-rental](https://dashboard.render.com/blueprint/new?repo=https://github.com/abubakerasif202/maple-rental)
-
-Supabase SQL files are organized under `supabase/migrations/`, with the base schema in `supabase/migrations/01_schema.sql`.
-
-## Expected service configuration
-
-- Service type: `Web Service`
-- Runtime: `Node`
-- Build command: `npm ci --include=dev && npm run validate && npm run build`
+- Service type: Web Service
+- Service name: `aurora-rentals`
+- Repo: `abubakerasif202/aurora-rentals`
+- Branch: `main`
+- Runtime: Node
+- Build command: `npm run validate && npm run build`
 - Start command: `npm start`
 - Health check path: `/api/health`
 
-## Runtime model
+## First Deploy Checklist
 
-### Development
+1. Create a new Render web service named `aurora-rentals`.
+2. Connect the Aurora GitHub repo.
+3. Add Aurora-only environment variables.
+4. Use a separate Supabase project/database.
+5. Apply `supabase/migrations/20260619090000_add_aurora_application_fields.sql`.
+6. Create new Stripe products, prices, and webhook endpoint for Aurora.
+7. Set the Stripe webhook URL to `https://<AURORA_RENDER_DOMAIN>/api/stripe/webhook`.
+8. Add only an Aurora domain, for example `www.aurorarentals.com.au`.
+9. Verify `/api/live`, `/api/health`, the homepage, `/admin/login`, and `/apply`.
 
-`npm run dev` starts the Express server in development mode and mounts Vite middleware inside the same process.
-
-Default local URL:
-- `http://localhost:3000`
-
-### Production
-
-`npm start` runs the compiled backend from:
-- `server-dist/api/index.js`
-
-That server:
-- binds to `0.0.0.0:$PORT`
-- serves static frontend assets from `dist/`
-- returns `dist/index.html` for SPA routes
-- keeps missing API routes as JSON 404s instead of returning the frontend shell
-
-## Environment variables
-
-### Required
-
-- `APP_URL`
-  - Canonical public app URL, for example `https://www.maplerentals.com.au`
-
-- `ADMIN_EMAIL`
-  - Allowed production admin login email
-
-- `SUPABASE_URL`
-  - Supabase project URL in `https://...supabase.co` format
-
-- `SUPABASE_SERVICE_ROLE_KEY`
-  - Backend service-role key used for privileged storage and auth-backed operations
-
-- `SUPABASE_ANON_KEY`
-  - Frontend/browser public anon key used by the client app
-
-- `DATABASE_URL`
-  - Preferred direct PostgreSQL connection string for Render Postgres and transactional Stripe/payment state
-
-- `STRIPE_SECRET_KEY`
-  - Stripe server SDK key
-
-- `STRIPE_WEBHOOK_SECRET`
-  - Stripe webhook signing secret
-
-- `CHECKOUT_LINK_SECRET`
-  - HMAC secret used to sign checkout link tokens
-
-- `JWT_SECRET`
-  - Secret used to sign admin session cookies
-
-- `LEASE_OWNER_NAME`
-- `LEASE_OWNER_ADDRESS`
-- `LEASE_OWNER_CONTACT`
-- `LEASE_OWNER_EMAIL`
-  - Registered-owner details inserted into generated lease agreements
-
-### Fallback only
-
-- `SUPABASE_DB_URL`
-  - Legacy fallback direct Postgres connection string when `DATABASE_URL` is not set
-  - If both are present, the app uses `DATABASE_URL`
-
-### Optional
-
-- `RESEND_API_KEY`
-  - Enables outbound transactional email
-
-- `CORS_ORIGIN`
-  - Additional browser origin to allow
-
-- `FRONTEND_URL`
-  - Legacy extra origin override if needed for external clients
-
-- `ADMIN_PASSWORD`
-  - Dev/test fallback only; not required in production
-
-- `JSON_BODY_LIMIT`
-  - Overrides the default JSON payload limit of `100kb` for non-application routes
-
-- `/api/applications`
-  - Uses its own parser budget sized for two 7 MB base64 licence uploads
-
-## Important env rules
-
-- `SUPABASE_URL` must be the HTTPS project URL, not the Postgres connection string.
-- `DATABASE_URL` should point to Render Postgres in new deployments.
-- `SUPABASE_DB_URL` must be the Postgres connection string, not the HTTPS project URL.
-- Do not expose `SUPABASE_SERVICE_ROLE_KEY` to the frontend.
-- Do not set `PORT` manually on Render.
-
-## First deploy checklist
-
-1. Connect the GitHub repo in Render.
-2. Use the Blueprint flow so `render.yaml` is applied.
-3. Fill every required environment variable.
-4. Create Render Postgres and set its connection string as `DATABASE_URL`.
-5. Keep the Supabase storage/auth variables in place.
-6. Run the payment workflow migrations against `DATABASE_URL`.
-7. Configure Stripe to deliver webhooks to `https://<your-domain>/api/stripe/webhook`.
-8. Deploy.
-9. Verify [https://www.maplerentals.com.au/api/health](https://www.maplerentals.com.au/api/health) or your Render URL equivalent.
-
-## Health check expectations
-
-A healthy response should look like:
-
-```json
-{
-  "status": "ok",
-  "database": "ok",
-  "directDatabase": "ok",
-  "paymentActivationMode": "transactional"
-}
-```
-
-If `paymentActivationMode` is `restricted`, the service is up but the selected direct Postgres connection is missing or not session-capable.
-
-## Local production verification
-
-Use this to simulate the Render runtime locally:
-
-```powershell
-npm ci
-npm run build
-$env:NODE_ENV='production'
-$env:PORT='3000'
-npm start
-```
-
-Then check:
-
-- `http://localhost:3000/api/health`
-- `http://localhost:3000/`
-- `http://localhost:3000/admin/dashboard`
-
-## Common failures
-
-### Invalid supabaseUrl
-
-Cause:
-- a Postgres URI was pasted into `SUPABASE_URL`
-
-Fix:
-- put the `https://...supabase.co` URL back into `SUPABASE_URL`
-- put the Postgres URI into `DATABASE_URL` (preferred) or `SUPABASE_DB_URL`
-
-### Health endpoint shows `restricted`
-
-Cause:
-- `DATABASE_URL` is missing or points at a non-session-capable pooler
-
-Fix:
-- add a valid session-capable `DATABASE_URL` and redeploy
-
-### Rate-limit proxy warning on Render
-
-Cause:
-- Express was not trusting the Render proxy
-
-Fix:
-- already handled in `api/index.ts` by enabling `trust proxy` in production
-
-## Operational notes
-
-- Static assets under `/assets/*` are served with long-lived cache headers.
-- `index.html` is served with `Cache-Control: no-store` so SPA shells do not go stale.
-- The backend validates critical production environment variables at startup and fails fast when required secrets are missing.
+Do not deploy this app to another company's Render service, domain, Supabase project, or Stripe account.

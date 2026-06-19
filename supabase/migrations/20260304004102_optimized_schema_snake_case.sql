@@ -1,4 +1,4 @@
--- Supabase Schema Migration for Maple Rental (Optimized)
+-- Supabase Schema Migration for Aurora Rentals (Optimized)
 
 -- UUID Extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -111,12 +111,12 @@ ALTER TABLE merchants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lease_agreements ENABLE ROW LEVEL SECURITY;
 
 -- Define Admin Policy (Restricts access to the single admin email)
-CREATE POLICY admin_full_access ON cars FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'admin@maplerentals.com.au');
-CREATE POLICY admin_full_access ON applications FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'admin@maplerentals.com.au');
-CREATE POLICY admin_full_access ON rentals FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'admin@maplerentals.com.au');
-CREATE POLICY admin_full_access ON bookings FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'admin@maplerentals.com.au');
-CREATE POLICY admin_full_access ON merchants FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'admin@maplerentals.com.au');
-CREATE POLICY admin_full_access ON lease_agreements FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'admin@maplerentals.com.au');
+CREATE POLICY admin_full_access ON cars FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'hello@aurorarentals.com.au');
+CREATE POLICY admin_full_access ON applications FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'hello@aurorarentals.com.au');
+CREATE POLICY admin_full_access ON rentals FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'hello@aurorarentals.com.au');
+CREATE POLICY admin_full_access ON bookings FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'hello@aurorarentals.com.au');
+CREATE POLICY admin_full_access ON merchants FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'hello@aurorarentals.com.au');
+CREATE POLICY admin_full_access ON lease_agreements FOR ALL TO authenticated USING (auth.jwt() ->> 'email' = 'hello@aurorarentals.com.au');
 
 -- Public Access (Read-only for Cars, Insert for Applications)
 CREATE POLICY public_view_cars ON cars FOR SELECT TO anon USING (status = 'Available');

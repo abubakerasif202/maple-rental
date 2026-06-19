@@ -1,6 +1,6 @@
 # Stripe Handoff Checklist
 
-Use this checklist before handing Maple Rental over to a client or switching from sandbox to production.
+Use this checklist before handing Aurora Rentals over to a client or switching from sandbox to production.
 
 ## Required environment variables
 

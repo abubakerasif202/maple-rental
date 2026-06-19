@@ -4,7 +4,7 @@ This document is the V2 baseline reference. The active operational handoff for t
 
 ## Overview
 
-Stripe System V2 is the vehicle-payment path for Maple Rental. It creates hosted Stripe Checkout Sessions, receives verified Stripe webhooks, and turns a paid checkout into an application, rental, and car state transition.
+Stripe System V2 is the vehicle-payment path for Aurora Rentals. It creates hosted Stripe Checkout Sessions, receives verified Stripe webhooks, and turns a paid checkout into an application, rental, and car state transition.
 
 The key design rule is simple: the success page is informational, but webhook-confirmed state is authoritative for final payment success.
 
