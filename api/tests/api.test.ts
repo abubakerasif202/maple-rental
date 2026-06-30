@@ -1662,6 +1662,17 @@ const { createCheckoutToken, verifyCheckoutToken } =
   });
   mockMutationErrors.applicationsUpdate = null;
 
+  mockStripe.checkoutSessionsCreate.mockReset();
+  mockStripe.checkoutSessionsExpire.mockReset();
+  mockStripe.checkoutSessionsList.mockReset();
+  mockStripe.checkoutSessionsRetrieve.mockReset();
+  mockStripe.invoiceItemsCreate.mockReset();
+  mockStripe.subscriptionsRetrieve.mockReset();
+  mockStripe.subscriptionsUpdate.mockReset();
+  mockStripe.subscriptionsCancel.mockReset();
+  mockStripe.payoutsList.mockReset();
+  mockStripe.webhooksConstructEvent.mockReset();
+
   mockStripe.checkoutSessionsCreate.mockResolvedValue({
     id: "cs_test_123",
     url: "https://checkout.stripe.com/c/pay/cs_test_123",
