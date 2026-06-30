@@ -169,6 +169,13 @@ export const getSchemaCompat = async (): Promise<SchemaCompat> => {
             : coreMode === 'camel'
               ? 'passportOrUberProfileScreenshot'
               : 'passport_or_uber_profile_screenshot';
+        const applicationLicenceStateColumn = hasProperty(applicationsDefinition, 'licenceState')
+          ? 'licenceState'
+          : hasProperty(applicationsDefinition, 'licence_state')
+            ? 'licence_state'
+            : coreMode === 'camel'
+              ? 'licenceState'
+              : 'licence_state';
         const applicationAssignedCarColumn = hasProperty(applicationsDefinition, 'assignedCarId')
           ? 'assignedCarId'
           : hasProperty(applicationsDefinition, 'assigned_car_id')
