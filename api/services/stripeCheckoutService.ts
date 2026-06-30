@@ -41,6 +41,8 @@ const DEFAULT_APPROVED_VEHICLE_LABEL = 'Approved vehicle to be confirmed by Mapl
 
 type BillingBreakdown = {
   bond: number;
+  bondMethod: string;
+  bondStatus: string;
   currency: string;
   initialRental: number;
   recurringAmount: number;
@@ -268,6 +270,8 @@ const buildApprovedBillingBreakdown = (application: StripeApplication): BillingB
 
   return {
     bond: fromCents(approvedBondCents),
+    bondMethod: approvedBondCents > 0 ? 'Not yet collected' : 'Not required',
+    bondStatus: approvedBondCents > 0 ? 'To be collected by admin' : 'Not required',
     currency: LEASE_SETTINGS.currency.toUpperCase(),
     initialRental: fromCents(approvedWeeklyPriceCents),
     recurringAmount: fromCents(approvedWeeklyPriceCents),

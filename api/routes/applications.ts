@@ -23,7 +23,10 @@ import {
   getApplicationSelectColumns,
   toApplicationWritePayload,
 } from "../schemaCompat.js";
-import { FALLBACK_ADMIN_EMAIL } from "../constants.js";
+import {
+  FALLBACK_ADMIN_EMAIL,
+  RENTAL_PLAN_SETUP_FEES_AUD,
+} from "../constants.js";
 import {
   buildDriverPaymentLink,
   sendDriverPaymentLinkEmail,
@@ -890,11 +893,10 @@ router.post("/:id/approve-payment", authenticateAdmin, async (req, res) => {
         applicantEmail: applicationRecord.email,
         applicantName: applicationRecord.name,
         approvedBond: payload.approved_bond,
-        bondPaymentMethod: payload.bond_payment_method ?? null,
-        bondPaymentStatus: payload.bond_payment_status,
         approvedWeeklyPrice: payload.approved_weekly_price,
         approvedVehicle: payload.approved_vehicle.trim(),
         checkoutUrl,
+        setupFees: RENTAL_PLAN_SETUP_FEES_AUD,
       });
     }
 

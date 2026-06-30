@@ -79,8 +79,9 @@ export const sendDriverPaymentLinkEmail = async ({
           <p><strong>Bond:</strong> ${formatCurrency(approvedBond)}</p>
           <p><strong>Weekly payment:</strong> ${formatCurrency(approvedWeeklyPrice)}</p>
           ${hasSetupFees ? `<p><strong>Setup fees:</strong> ${formatCurrency(setupFees)}</p>` : ''}
-          <p><strong>Total due now:</strong> ${formatCurrency(approvedWeeklyPrice)}</p>
+          <p><strong>Amount charged in Stripe Checkout:</strong> ${formatCurrency(approvedWeeklyPrice)}</p>
           <p>Stripe will charge the weekly payment now, then automatically bill ${formatCurrency(approvedWeeklyPrice)} each week.</p>
+          ${hasSetupFees ? `<p><strong>Setup fees:</strong> ${formatCurrency(setupFees)} are listed for reference and collected separately by Maple Rentals.</p>` : ''}
           <p>Once Stripe confirms payment, Maple Rentals finalises onboarding and handover with you directly.</p>
           <p>
             <a
