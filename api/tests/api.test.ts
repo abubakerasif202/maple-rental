@@ -2085,7 +2085,7 @@ describe("Auth API", () => {
     const clearedCookies = Array.isArray(setCookieHeaders)
       ? setCookieHeaders
       : [];
-    expect(clearedCookies).toHaveLength(2);
+    expect(clearedCookies).toHaveLength(3);
     expect(
       clearedCookies.some(
         (cookie) =>

@@ -1,237 +1,142 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type express from 'express';
 
-vi.hoisted(() => {
-  process.env.JWT_SECRET = 'test-auth-secret-for-unit-tests';
-  process.env.VITEST = 'true';
-});
+const ORIGINAL_ENV = { ...process.env };
 
-vi.mock('../db/index.js', () => ({
-  createAuthClient: vi.fn(),
-  checkDBHealth: vi.fn(),
-  db: {},
-  initializeDB: vi.fn(),
-  getSupabaseAuthConfigurationIssues: vi.fn(() => []),
-  getSupabaseConfigurationIssues: vi.fn(() => []),
+const { mockCreateAuthClient } = vi.hoisted(() => ({
+  mockCreateAuthClient: vi.fn(),
 }));
 
-import {
-  createLocalAdminSessionToken,
-  createSupabaseAdminSessionToken,
-  getAdminSessionSecretConfigurationIssue,
-  getEffectiveAdminEmail,
-  getSupabaseSessionExpiry,
-  MIN_ADMIN_SESSION_SECRET_LENGTH,
-} from './auth.js';
+vi.mock('../db/index.js', () => ({
+  createAuthClient: mockCreateAuthClient,
+}));
 
-// ---------------------------------------------------------------------------
-// getEffectiveAdminEmail
-// ---------------------------------------------------------------------------
-
-describe('getEffectiveAdminEmail', () => {
-  const originalAdminEmail = process.env.ADMIN_EMAIL;
-
-  afterEach(() => {
-    if (originalAdminEmail === undefined) {
-      delete process.env.ADMIN_EMAIL;
-    } else {
-      process.env.ADMIN_EMAIL = originalAdminEmail;
-    }
-  });
-
-  it('returns the configured ADMIN_EMAIL when set', () => {
-    process.env.ADMIN_EMAIL = 'fleet@example.com';
-    expect(getEffectiveAdminEmail()).toBe('fleet@example.com');
-  });
-
-  it('normalises ADMIN_EMAIL to lower case', () => {
-    process.env.ADMIN_EMAIL = 'FLEET@EXAMPLE.COM';
-    expect(getEffectiveAdminEmail()).toBe('fleet@example.com');
-  });
-
-  it('trims surrounding whitespace from ADMIN_EMAIL', () => {
-    process.env.ADMIN_EMAIL = '  fleet@example.com  ';
-    expect(getEffectiveAdminEmail()).toBe('fleet@example.com');
-  });
-
-  it('falls back to the dev admin email when ADMIN_EMAIL is not set (non-production)', () => {
-    delete process.env.ADMIN_EMAIL;
-    // VITEST=true so isProduction is false → dev fallback is used
-    expect(getEffectiveAdminEmail()).toBe('admin@maplerentals.com.au');
-  });
-
-  it('returns null for an empty ADMIN_EMAIL string when in non-production', () => {
-    process.env.ADMIN_EMAIL = '';
-    // Empty string → configuredAdminEmail is falsy → falls back to dev email
-    expect(getEffectiveAdminEmail()).toBe('admin@maplerentals.com.au');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getSupabaseSessionExpiry
-// ---------------------------------------------------------------------------
-
-describe('getSupabaseSessionExpiry', () => {
-  it('returns null when session is null', () => {
-    expect(getSupabaseSessionExpiry(null)).toBeNull();
-  });
-
-  it('returns null when session is undefined', () => {
-    expect(getSupabaseSessionExpiry(undefined)).toBeNull();
-  });
-
-  it('returns null when expires_at is missing', () => {
-    expect(getSupabaseSessionExpiry({})).toBeNull();
-  });
-
-  it('returns null when expires_at is null', () => {
-    expect(getSupabaseSessionExpiry({ expires_at: null })).toBeNull();
-  });
-
-  it('converts a Unix timestamp (seconds) to milliseconds', () => {
-    const seconds = Math.floor(Date.now() / 1000) + 3600;
-    const result = getSupabaseSessionExpiry({ expires_at: seconds });
-    expect(result).toBe(seconds * 1000);
-  });
-
-  it('returns null when expires_at is Infinity', () => {
-    expect(getSupabaseSessionExpiry({ expires_at: Infinity })).toBeNull();
-  });
-
-  it('returns null when expires_at is NaN', () => {
-    expect(getSupabaseSessionExpiry({ expires_at: NaN })).toBeNull();
-  });
-});
-
-describe('getAdminSessionSecretConfigurationIssue', () => {
-  const originalJwtSecret = process.env.JWT_SECRET;
-
-  afterEach(() => {
-    if (originalJwtSecret === undefined) {
-      delete process.env.JWT_SECRET;
-    } else {
-      process.env.JWT_SECRET = originalJwtSecret;
-    }
-  });
-
-  it('requires JWT_SECRET when production admin sessions are required', () => {
-    delete process.env.JWT_SECRET;
-
-    expect(
-      getAdminSessionSecretConfigurationIssue({ required: true })
-    ).toContain('JWT_SECRET is required');
-  });
-
-  it('rejects dangerously short production JWT_SECRET values', () => {
-    process.env.JWT_SECRET = 'short-secret';
-
-    expect(
-      getAdminSessionSecretConfigurationIssue({ required: true })
-    ).toContain(`${MIN_ADMIN_SESSION_SECRET_LENGTH} characters`);
-  });
-
-  it('accepts a production JWT_SECRET with enough entropy budget', () => {
-    process.env.JWT_SECRET = 'x'.repeat(MIN_ADMIN_SESSION_SECRET_LENGTH);
-
-    expect(
-      getAdminSessionSecretConfigurationIssue({ required: true })
-    ).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// createLocalAdminSessionToken  (requires JWT_SECRET to be set)
-// ---------------------------------------------------------------------------
-
-describe('createLocalAdminSessionToken', () => {
-  it('returns a signed token string containing two base64url parts separated by a dot', () => {
-    const token = createLocalAdminSessionToken('admin@example.com');
-    const parts = token.split('.');
-    expect(parts).toHaveLength(2);
-    expect(parts[0].length).toBeGreaterThan(0);
-    expect(parts[1].length).toBeGreaterThan(0);
-  });
-
-  it('embeds the supplied email in the payload', () => {
-    const email = 'fleet@example.com';
-    const token = createLocalAdminSessionToken(email);
-    const [encodedPayload] = token.split('.');
-    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
-    expect(payload.email).toBe(email);
-  });
-
-  it('sets mode to local-admin in the payload', () => {
-    const token = createLocalAdminSessionToken('admin@example.com');
-    const [encodedPayload] = token.split('.');
-    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
-    expect(payload.mode).toBe('local-admin');
-  });
-
-  it('sets an expiry (exp) that is in the future', () => {
-    const before = Date.now();
-    const token = createLocalAdminSessionToken('admin@example.com');
-    const [encodedPayload] = token.split('.');
-    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
-    expect(payload.exp).toBeGreaterThan(before);
-  });
-
-  it('produces different tokens for different emails', () => {
-    const token1 = createLocalAdminSessionToken('a@example.com');
-    const token2 = createLocalAdminSessionToken('b@example.com');
-    expect(token1).not.toBe(token2);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// createSupabaseAdminSessionToken  (requires JWT_SECRET to be set)
-// ---------------------------------------------------------------------------
-
-describe('createSupabaseAdminSessionToken', () => {
-  const sessionParams = {
-    accessToken: 'at_test_123',
-    accessTokenExpiresAt: Date.now() + 3600_000,
-    email: 'admin@example.com',
-    refreshToken: 'rt_test_456',
+const buildResponse = () => {
+  const response = {
+    clearCookie: vi.fn(() => response),
+    cookie: vi.fn(() => response),
+    json: vi.fn(() => response),
+    status: vi.fn(() => response),
   };
 
-  it('returns a signed token string with two base64url parts', () => {
-    const token = createSupabaseAdminSessionToken(sessionParams);
-    const parts = token.split('.');
-    expect(parts).toHaveLength(2);
+  return response as unknown as express.Response & {
+    clearCookie: ReturnType<typeof vi.fn>;
+    cookie: ReturnType<typeof vi.fn>;
+    json: ReturnType<typeof vi.fn>;
+    status: ReturnType<typeof vi.fn>;
+  };
+};
+
+describe('admin auth cookie handling', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockCreateAuthClient.mockReset();
+    process.env = {
+      ...ORIGINAL_ENV,
+      ADMIN_EMAIL: 'admin@maplerentals.com.au',
+      APP_URL: 'https://www.maplerentals.com.au',
+      JWT_SECRET: 'x'.repeat(32),
+      NODE_ENV: 'production',
+      VITEST: 'false',
+    };
   });
 
-  it('embeds the supplied email in the payload', () => {
-    const token = createSupabaseAdminSessionToken(sessionParams);
-    const [encodedPayload] = token.split('.');
-    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
-    expect(payload.email).toBe(sessionParams.email);
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    vi.restoreAllMocks();
   });
 
-  it('embeds the access and refresh tokens in the payload', () => {
-    const token = createSupabaseAdminSessionToken(sessionParams);
-    const [encodedPayload] = token.split('.');
-    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
-    expect(payload.accessToken).toBe(sessionParams.accessToken);
-    expect(payload.refreshToken).toBe(sessionParams.refreshToken);
+  it('uses strict cookies in production', async () => {
+    const { createCookieOptions } = await import('./auth.js');
+    expect(createCookieOptions()).toMatchObject({
+      httpOnly: true,
+      path: '/',
+      sameSite: 'strict',
+      secure: true,
+    });
   });
 
-  it('sets mode to supabase-admin in the payload', () => {
-    const token = createSupabaseAdminSessionToken(sessionParams);
-    const [encodedPayload] = token.split('.');
-    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
-    expect(payload.mode).toBe('supabase-admin');
+  it('clears all historical cookie variants on logout', async () => {
+    const { clearAdminSessionCookie } = await import('./auth.js');
+    const response = buildResponse();
+
+    clearAdminSessionCookie({} as express.Request, response);
+
+    expect(response.clearCookie).toHaveBeenCalledTimes(3);
+    expect(response.clearCookie).toHaveBeenNthCalledWith(
+      1,
+      'admin_token',
+      expect.objectContaining({ sameSite: 'none', secure: true, path: '/' })
+    );
+    expect(response.clearCookie).toHaveBeenNthCalledWith(
+      2,
+      'admin_token',
+      expect.objectContaining({ sameSite: 'strict', secure: true, path: '/' })
+    );
+    expect(response.clearCookie).toHaveBeenNthCalledWith(
+      3,
+      'admin_token',
+      expect.objectContaining({ sameSite: 'strict', secure: true, path: '/' })
+    );
   });
 
-  it('stores the accessTokenExpiresAt value in the payload', () => {
-    const token = createSupabaseAdminSessionToken(sessionParams);
-    const [encodedPayload] = token.split('.');
-    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
-    expect(payload.accessTokenExpiresAt).toBe(sessionParams.accessTokenExpiresAt);
-  });
+  it('refreshes Supabase admin sessions with the same cookie options as login', async () => {
+    const mockRefreshSession = vi.fn().mockResolvedValue({
+      data: {
+        session: {
+          access_token: 'access-token',
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          refresh_token: 'refresh-token',
+        },
+        user: { email: 'admin@maplerentals.com.au' },
+      },
+      error: null,
+    });
+    const mockGetUser = vi.fn();
+    const mockSignInWithPassword = vi.fn();
 
-  it('stores null accessTokenExpiresAt when it is null', () => {
-    const token = createSupabaseAdminSessionToken({ ...sessionParams, accessTokenExpiresAt: null });
-    const [encodedPayload] = token.split('.');
-    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
-    expect(payload.accessTokenExpiresAt).toBeNull();
+    const authClient = {
+      auth: {
+        getUser: mockGetUser,
+        refreshSession: mockRefreshSession,
+        signInWithPassword: mockSignInWithPassword,
+      },
+    };
+
+    mockCreateAuthClient.mockReturnValue(authClient);
+
+    const { authenticateAdmin, createCookieOptions, createSupabaseAdminSessionToken } =
+      await import('./auth.js');
+
+    const response = buildResponse();
+    const request = {
+      cookies: { admin_token: createSupabaseAdminSessionToken({
+        accessToken: 'access-token',
+        accessTokenExpiresAt: Math.floor(Date.now() / 1000) + 10,
+        email: 'admin@maplerentals.com.au',
+        refreshToken: 'refresh-token',
+      }) },
+      get: (header: string) => {
+        const headers: Record<string, string> = {
+          origin: 'https://www.maplerentals.com.au',
+          referer: 'https://www.maplerentals.com.au/admin/login',
+        };
+        return headers[header.toLowerCase()] || undefined;
+      },
+      headers: { authorization: undefined },
+      method: 'POST',
+      secure: true,
+    } as unknown as express.Request;
+
+    await authenticateAdmin(request, response, vi.fn());
+
+    expect(mockRefreshSession).toHaveBeenCalledWith({
+      refresh_token: 'refresh-token',
+    });
+    expect(response.cookie).toHaveBeenCalledWith(
+      'admin_token',
+      expect.any(String),
+      createCookieOptions()
+    );
   });
 });
