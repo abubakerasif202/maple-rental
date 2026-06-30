@@ -1,0 +1,46 @@
+import {
+  createDarkTheme,
+  type BrandVariants,
+  type Theme,
+} from '@fluentui/react-components';
+
+const mapleBrandRamp: BrandVariants = {
+  10: '#05080d',
+  20: '#07111d',
+  30: '#0b1a2b',
+  40: '#10243a',
+  50: '#17324f',
+  60: '#204365',
+  70: '#2b567d',
+  80: '#386b96',
+  90: '#4a7fae',
+  100: '#6f93bb',
+  110: '#9aa8b8',
+  120: '#c8a63a',
+  130: '#dfb125',
+  140: '#edc94a',
+  150: '#f6dc7a',
+  160: '#fff1b0',
+};
+
+export const mapleFluentTheme: Theme = {
+  ...createDarkTheme(mapleBrandRamp),
+  colorBrandBackground: '#dfb125',
+  colorBrandBackgroundHover: '#edc94a',
+  colorBrandBackgroundPressed: '#c8a63a',
+  colorBrandForeground1: '#f6dc7a',
+  colorBrandForeground2: '#dfb125',
+  colorBrandStroke1: '#dfb125',
+  colorNeutralBackground1: '#061425',
+  colorNeutralBackground2: '#0b1a2b',
+  colorNeutralBackground3: '#10243a',
+  colorNeutralForeground1: '#ffffff',
+  colorNeutralForeground2: '#d6dde8',
+  colorNeutralForeground3: '#9aa8b8',
+  colorNeutralStroke1: 'rgba(255, 255, 255, 0.12)',
+  colorNeutralStroke2: 'rgba(255, 255, 255, 0.18)',
+  colorNeutralStrokeAccessible: '#dfb125',
+  borderRadiusMedium: '8px',
+  borderRadiusLarge: '8px',
+  borderRadiusXLarge: '8px',
+};

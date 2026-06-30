@@ -234,12 +234,13 @@ const {
     applicationsUpdate: null as Record<string, any> | null,
   },
   mockResendEmailsSend: vi.fn(),
-  mockStripe: {
-    checkoutSessionsCreate: vi.fn(),
-    checkoutSessionsExpire: vi.fn(),
-    checkoutSessionsList: vi.fn(),
-    checkoutSessionsRetrieve: vi.fn(),
-    subscriptionsRetrieve: vi.fn(),
+    mockStripe: {
+      checkoutSessionsCreate: vi.fn(),
+      checkoutSessionsExpire: vi.fn(),
+      checkoutSessionsList: vi.fn(),
+      checkoutSessionsRetrieve: vi.fn(),
+      invoiceItemsCreate: vi.fn(),
+      subscriptionsRetrieve: vi.fn(),
     subscriptionsUpdate: vi.fn(),
     subscriptionsCancel: vi.fn(),
     payoutsList: vi.fn(),
@@ -264,7 +265,7 @@ vi.mock("stripe", () => {
     customers = { create: vi.fn() };
     products = { create: vi.fn() };
     prices = { create: vi.fn() };
-    invoiceItems = { create: vi.fn() };
+    invoiceItems = { create: mockStripe.invoiceItemsCreate };
     subscriptions = {
       create: vi.fn(),
       retrieve: mockStripe.subscriptionsRetrieve,
@@ -337,6 +338,9 @@ vi.mock("../schemaCompat.js", async () => {
         "cancel_reason:cancelReason",
         "assigned_car_id:assignedCarId",
         "approved_bond:approvedBond",
+        "bond_notes:bondNotes",
+        "bond_payment_method:bondPaymentMethod",
+        "bond_payment_status:bondPaymentStatus",
         "approved_weekly_price:approvedWeeklyPrice",
         "payment_link_version:paymentLinkVersion",
         "payment_link_sent_at:paymentLinkSentAt",
@@ -1399,6 +1403,9 @@ const { createCheckoutToken, verifyCheckoutToken } =
       id: PENDING_APPLICATION_ID,
       approved_at: null,
       approved_bond: null,
+      bond_notes: null,
+      bond_payment_method: null,
+      bond_payment_status: null,
       approved_vehicle: null,
       approved_weekly_price: null,
       assigned_car_id: null,
@@ -1431,6 +1438,9 @@ const { createCheckoutToken, verifyCheckoutToken } =
       id: APPROVED_APPLICATION_ID,
       approved_at: "2026-03-05T00:00:00.000Z",
       approved_bond: 500,
+      bond_notes: null,
+      bond_payment_method: null,
+      bond_payment_status: "to_collect",
       approved_vehicle: "Toyota Camry",
       approved_weekly_price: 250,
       assigned_car_id: 1,
@@ -4034,8 +4044,11 @@ describe("Stripe API", () => {
       .post(`/api/applications/${PENDING_APPLICATION_ID}/approve-payment`)
       .send({
         approved_vehicle: "Toyota Camry",
-        approved_bond: 650,
-        approved_weekly_price: 285,
+      approved_bond: 650,
+      bond_notes: "Existing cash receipt recorded by admin",
+      bond_payment_method: "existing_paid",
+      bond_payment_status: "already_paid",
+      approved_weekly_price: 285,
         car_id: 1,
       });
 
@@ -4056,6 +4069,9 @@ describe("Stripe API", () => {
       .send({
         approved_vehicle: "Toyota Camry Hybrid",
         approved_bond: 650,
+        bond_notes: "Existing cash receipt recorded by admin",
+        bond_payment_method: "existing_paid",
+        bond_payment_status: "already_paid",
         approved_weekly_price: 285,
         rental_subscription_start_date: getFutureDateOnly(5),
       });
@@ -4071,6 +4087,9 @@ describe("Stripe API", () => {
 
     expect(mockState.applications[0]).toMatchObject({
       approved_bond: 650,
+      bond_notes: "Existing cash receipt recorded by admin",
+      bond_payment_method: "existing_paid",
+      bond_payment_status: "already_paid",
       approved_vehicle: "Toyota Camry Hybrid",
       approved_weekly_price: 285,
       intended_start_date: getFutureDateOnly(5),
@@ -4509,7 +4528,11 @@ describe("Stripe API", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.billing.bond).toBe(500);
+    expect(res.body.billing.bondStatus).toBe("To be collected by admin");
+    expect(res.body.billing.bondMethod).toBe("Not yet collected");
     expect(res.body.billing.initialRental).toBe(250);
+    expect(res.body.billing.upfrontDue).toBe(250);
+    expect(res.body.billing.setupFees).toBe(0);
     expect(res.body.approved_vehicle).toBe("Toyota Camry");
     expect(res.body.vehicle_image).toBeTruthy();
   });
@@ -4737,7 +4760,11 @@ describe("Stripe API", () => {
     expect(payload.metadata.checkout_kind).toBe("vehicle");
     expect(payload.metadata.application_id).toBe(APPROVED_APPLICATION_ID);
     expect(payload.metadata.approved_vehicle).toBe("Toyota Camry");
-    expect(payload.metadata.approved_bond).toBe("500.00");
+    expect(payload.metadata.approved_bond).toBeUndefined();
+    expect(payload.metadata.manual_bond_amount).toBeUndefined();
+    expect(payload.metadata.manual_bond_status).toBeUndefined();
+    expect(payload.metadata.manual_bond_method).toBeUndefined();
+    expect(payload.metadata.stripe_bond_charge).toBeUndefined();
     expect(payload.metadata.approved_weekly_price).toBe("250.00");
     expect(payload.metadata.applicant_email).toBe("approved@example.com");
     expect(payload.metadata.car_id).toBe("1");
@@ -4760,6 +4787,8 @@ describe("Stripe API", () => {
     expect(recurringItem).toBeTruthy();
     expect(recurringItem.price_data.unit_amount).toBe(25000);
     expect(recurringItem.price_data.product).toBe("prod_weekly_rental");
+    expect(payload.line_items).toEqual([recurringItem]);
+    expect(mockStripe.invoiceItemsCreate).not.toHaveBeenCalled();
     expect(
       payload.line_items.some((item: any) =>
         ["prod_security_bond", "prod_onboarding_setup"].includes(
@@ -4798,6 +4827,34 @@ describe("Stripe API", () => {
     const payload = mockStripe.checkoutSessionsCreate.mock.calls[0][0];
     expect(payload.metadata.car_id).toBeUndefined();
     expect(payload.subscription_data.metadata.car_id).toBeUndefined();
+  });
+
+  it("POST /api/stripe/vehicle-checkout-session keeps existing-driver bond out of Stripe", async () => {
+    mockState.applications[1].bond_payment_status = "already_paid";
+    mockState.applications[1].bond_payment_method = "existing_paid";
+    const token = createCheckoutToken({
+      applicationId: APPROVED_APPLICATION_ID,
+      purpose: "vehicle",
+      version: 1,
+    });
+
+    const res = await request(app)
+      .post("/api/stripe/vehicle-checkout-session")
+      .send({
+        application_id: APPROVED_APPLICATION_ID,
+        checkout_token: token.token,
+      });
+
+    expect(res.status).toBe(200);
+    const payload = mockStripe.checkoutSessionsCreate.mock.calls[0][0];
+    expect(payload.line_items).toHaveLength(1);
+    expect(payload.line_items[0].price_data.unit_amount).toBe(25000);
+    expect(payload.metadata.approved_bond).toBeUndefined();
+    expect(payload.metadata.manual_bond_amount).toBeUndefined();
+    expect(payload.metadata.manual_bond_status).toBeUndefined();
+    expect(payload.metadata.manual_bond_method).toBeUndefined();
+    expect(payload.metadata.stripe_bond_charge).toBeUndefined();
+    expect(mockStripe.invoiceItemsCreate).not.toHaveBeenCalled();
   });
 
   it("POST /api/stripe/vehicle-checkout-session starts subscriptions immediately for past rental start dates", async () => {

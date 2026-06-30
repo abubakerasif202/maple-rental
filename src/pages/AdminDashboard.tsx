@@ -1,4 +1,16 @@
 import React, { useDeferredValue, useEffect, useRef, useState } from 'react';
+import {
+  Badge,
+  Button,
+  Card,
+  Field,
+  Input,
+  Select,
+  Textarea,
+  Toast,
+  ToastTitle,
+  useToastController,
+} from '@fluentui/react-components';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus,
@@ -75,6 +87,26 @@ const createEmptyVehicleForm = (): VehicleFormValues => ({
   status: 'Available',
   image: DEFAULT_VEHICLE_IMAGE,
 });
+const bondStatusLabels = {
+  to_collect: 'To be collected by admin',
+  cash_paid: 'Paid cash',
+  already_paid: 'Already paid / existing driver',
+} as const;
+
+const fluentInputClass =
+  'w-full [&_input]:!text-white [&_input]:placeholder:!text-brand-grey/60 [&_textarea]:!text-white [&_textarea]:placeholder:!text-brand-grey/60 [&_select]:!text-white';
+const getBondMethodForStatus = (
+  status: keyof typeof bondStatusLabels
+): 'cash' | 'existing_paid' | null => {
+  if (status === 'cash_paid') return 'cash';
+  if (status === 'already_paid') return 'existing_paid';
+  return null;
+};
+const getBondMethodLabel = (method: 'cash' | 'existing_paid' | null | undefined) => {
+  if (method === 'cash') return 'Cash';
+  if (method === 'existing_paid') return 'Existing paid';
+  return 'Not yet collected';
+};
 const adminTabLabels: Record<string, string> = {
   agreements: 'Agreements',
   applications: 'Applications',
@@ -138,6 +170,7 @@ export default function AdminDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { dispatchToast } = useToastController('maple-admin-toaster');
   const notificationTimeoutRef = useRef<number | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -164,6 +197,8 @@ export default function AdminDashboard() {
   const [applicationApprovalForm, setApplicationApprovalForm] = useState({
     approved_vehicle: '',
     approved_bond: '',
+    bond_notes: '',
+    bond_payment_status: 'to_collect' as keyof typeof bondStatusLabels,
     approved_weekly_price: '',
     rental_subscription_start_date: '',
   });
@@ -253,6 +288,16 @@ export default function AdminDashboard() {
     if (notificationTimeoutRef.current !== null) {
       window.clearTimeout(notificationTimeoutRef.current);
     }
+
+    dispatchToast(
+      <Toast>
+        <ToastTitle>{message}</ToastTitle>
+      </Toast>,
+      {
+        intent: type,
+        timeout: 4500,
+      }
+    );
 
     setNotification({ message, type });
     notificationTimeoutRef.current = window.setTimeout(() => {
@@ -632,6 +677,9 @@ export default function AdminDashboard() {
       payload: {
         approved_vehicle: string;
         approved_bond: number;
+        bond_notes?: string | null;
+        bond_payment_method?: 'cash' | 'existing_paid' | null;
+        bond_payment_status?: 'to_collect' | 'cash_paid' | 'already_paid';
         approved_weekly_price: number;
         rental_subscription_start_date?: string;
         send_payment_link?: boolean;
@@ -739,6 +787,11 @@ export default function AdminDashboard() {
         vehicleModel: vehicleLabel,
         vehicleYear: agreementForm.vehicleYear || 'Not recorded',
         weeklyRent: `$${Number(selectedApplication.approved_weekly_price ?? 0).toFixed(2)}`,
+        bondAmount: `$${Number(selectedApplication.approved_bond ?? 0).toFixed(2)}`,
+        bondNotes: selectedApplication.bond_notes || '',
+        bondPaymentMethod: getBondMethodLabel(selectedApplication.bond_payment_method),
+        bondPaymentStatus:
+          bondStatusLabels[selectedApplication.bond_payment_status || 'to_collect'],
         rentalStartDate: agreementForm.rentalStartDate,
       };
 
@@ -794,6 +847,9 @@ export default function AdminDashboard() {
     const approvedVehicle = applicationApprovalForm.approved_vehicle.trim();
     const approvedBond = Number(applicationApprovalForm.approved_bond);
     const approvedWeeklyPrice = Number(applicationApprovalForm.approved_weekly_price);
+    const bondPaymentStatus = applicationApprovalForm.bond_payment_status;
+    const bondPaymentMethod = getBondMethodForStatus(bondPaymentStatus);
+    const bondNotes = applicationApprovalForm.bond_notes.trim();
     const rentalSubscriptionStartDate =
       applicationApprovalForm.rental_subscription_start_date.trim();
 
@@ -808,6 +864,9 @@ export default function AdminDashboard() {
         payload: {
           approved_vehicle: approvedVehicle,
           approved_bond: approvedBond,
+          bond_notes: bondNotes || null,
+          bond_payment_method: bondPaymentMethod,
+          bond_payment_status: bondPaymentStatus,
           approved_weekly_price: approvedWeeklyPrice,
           ...(rentalSubscriptionStartDate
             ? { rental_subscription_start_date: rentalSubscriptionStartDate }
@@ -841,6 +900,9 @@ export default function AdminDashboard() {
             payload: {
               approved_vehicle: approvedVehicle,
               approved_bond: approvedBond,
+              bond_notes: bondNotes || null,
+              bond_payment_method: bondPaymentMethod,
+              bond_payment_status: bondPaymentStatus,
               approved_weekly_price: approvedWeeklyPrice,
               ...(rentalSubscriptionStartDate
                 ? { rental_subscription_start_date: rentalSubscriptionStartDate }
@@ -959,6 +1021,8 @@ export default function AdminDashboard() {
       approved_vehicle: selectedApplication.approved_vehicle || '',
       approved_bond:
         selectedApplication.approved_bond != null ? String(selectedApplication.approved_bond) : '',
+      bond_notes: selectedApplication.bond_notes || '',
+      bond_payment_status: selectedApplication.bond_payment_status || 'to_collect',
       approved_weekly_price:
         selectedApplication.approved_weekly_price != null
           ? String(selectedApplication.approved_weekly_price)
@@ -1287,7 +1351,7 @@ export default function AdminDashboard() {
 
               <div className="max-h-[75vh] space-y-8 overflow-y-auto p-4 sm:p-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4">
+                  <Card appearance="filled" className="!rounded-lg !border !border-white/10 !bg-white/5 !p-6">
                     <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Applicant Details</h4>
                     <div className="space-y-4 text-sm">
                       <div className="flex items-center gap-3 text-white"><BadgeCheck className="w-4 h-4 text-brand-gold" /> {selectedApplication.name}</div>
@@ -1295,14 +1359,29 @@ export default function AdminDashboard() {
                       <div className="flex items-center gap-3 text-brand-grey"><Phone className="w-4 h-4 text-brand-gold" /> {selectedApplication.phone}</div>
                       <div className="flex items-start gap-3 text-brand-grey"><MapPin className="w-4 h-4 text-brand-gold mt-0.5" /> <span>{selectedApplication.address}</span></div>
                     </div>
-                  </div>
+                  </Card>
 
-                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4">
+                  <Card appearance="filled" className="!rounded-lg !border !border-white/10 !bg-white/5 !p-6">
                     <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Application Snapshot</h4>
                     <div className="grid grid-cols-1 gap-4 text-xs sm:grid-cols-2">
                       <div>
                         <p className="text-brand-grey uppercase tracking-widest mb-2">Status</p>
-                        <p className="text-white font-bold">{selectedApplication.status}</p>
+                        <Badge
+                          appearance="filled"
+                          color={
+                            selectedApplication.status === 'Paid'
+                              ? 'success'
+                              : selectedApplication.status === 'Payment Review'
+                                ? 'warning'
+                                : selectedApplication.status === 'Rejected' ||
+                                    selectedApplication.status === 'Cancelled'
+                                  ? 'danger'
+                                  : 'brand'
+                          }
+                          shape="rounded"
+                        >
+                          {selectedApplication.status}
+                        </Badge>
                       </div>
                       <div>
                         <p className="text-brand-grey uppercase tracking-widest mb-2">Uber Status</p>
@@ -1325,26 +1404,29 @@ export default function AdminDashboard() {
                         <p className="text-white font-bold">{selectedApplication.license_expiry}</p>
                       </div>
                     </div>
-                  </div>
+                  </Card>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4">
                     <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Licence Front Photo</h4>
                     {selectedApplication.license_photo ? (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenApplicationDocument('license_photo')}
-                        disabled={openingDocument !== null}
-                        className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 bg-brand-gold text-brand-navy font-bold uppercase tracking-widest text-[10px] hover:bg-brand-gold-light transition-all disabled:opacity-50"
-                      >
-                        {openingDocument === 'license_photo' ? (
+                    <Button
+                      type="button"
+                      appearance="primary"
+                      onClick={() => handleOpenApplicationDocument('license_photo')}
+                      disabled={openingDocument !== null}
+                      className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest"
+                      icon={
+                        openingDocument === 'license_photo' ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                           <ExternalLink className="w-4 h-4" />
-                        )}
-                        Open Licence Front Photo
-                      </button>
+                        )
+                      }
+                    >
+                      Open Licence Front Photo
+                    </Button>
                     ) : (
                       <div className="px-6 py-4 border border-white/10 rounded-2xl text-brand-grey text-xs font-light">
                         No licence front photo uploaded.
@@ -1355,19 +1437,22 @@ export default function AdminDashboard() {
                   <div className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4">
                     <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Licence Back Photo</h4>
                     {selectedApplication.license_back_photo ? (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenApplicationDocument('license_back_photo')}
-                        disabled={openingDocument !== null}
-                        className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 bg-white/5 border border-white/10 text-white font-bold uppercase tracking-widest text-[10px] hover:bg-white/10 transition-all disabled:opacity-50"
-                      >
-                        {openingDocument === 'license_back_photo' ? (
+                    <Button
+                      type="button"
+                      appearance="secondary"
+                      onClick={() => handleOpenApplicationDocument('license_back_photo')}
+                      disabled={openingDocument !== null}
+                      className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest"
+                      icon={
+                        openingDocument === 'license_back_photo' ? (
                           <Loader2 className="w-4 h-4 animate-spin text-brand-gold" />
                         ) : (
                           <ExternalLink className="w-4 h-4 text-brand-gold" />
-                        )}
-                        Open Licence Back Photo
-                      </button>
+                        )
+                      }
+                    >
+                      Open Licence Back Photo
+                    </Button>
                     ) : (
                       <div className="px-6 py-4 border border-white/10 rounded-2xl text-brand-grey text-xs font-light">
                         No licence back photo uploaded.
@@ -1382,23 +1467,26 @@ export default function AdminDashboard() {
                       Passport or Uber Profile Screenshot
                     </h4>
                     {selectedApplication.passport_or_uber_profile_screenshot ? (
-                      <button
+                      <Button
                         type="button"
+                        appearance="primary"
                         onClick={() =>
                           handleOpenApplicationDocument(
                             'passport_or_uber_profile_screenshot',
                           )
                         }
                         disabled={openingDocument !== null}
-                        className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 bg-brand-gold text-brand-navy font-bold uppercase tracking-widest text-[10px] hover:bg-brand-gold-light transition-all disabled:opacity-50"
+                        className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest"
+                        icon={
+                          openingDocument === 'passport_or_uber_profile_screenshot' ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <ExternalLink className="w-4 h-4" />
+                          )
+                        }
                       >
-                        {openingDocument === 'passport_or_uber_profile_screenshot' ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <ExternalLink className="w-4 h-4" />
-                        )}
                         Open Passport or Uber Screenshot
-                      </button>
+                      </Button>
                     ) : (
                       <div className="px-6 py-4 border border-white/10 rounded-2xl text-brand-grey text-xs font-light">
                         No passport or Uber screenshot uploaded.
@@ -1492,7 +1580,7 @@ export default function AdminDashboard() {
                           Approval & Payment Quote
                         </h4>
                         <p className="text-sm text-brand-grey font-light mt-3 max-w-2xl">
-                          Confirm the approved vehicle, set the bond and weekly payment, then email a fresh secure Stripe payment link.
+                          Confirm the approved vehicle, record the manual bond, and email a fresh secure Stripe payment link for weekly rent only.
                         </p>
                       </div>
                       {selectedApplication.payment_link_sent_at && (
@@ -1512,13 +1600,14 @@ export default function AdminDashboard() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">
-                          Vehicle / Number Plate
-                        </label>
-                        <input
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                      <Field
+                        label="Vehicle / Number Plate"
+                        className="[&_label]:!text-[10px] [&_label]:!font-bold [&_label]:!uppercase [&_label]:!tracking-widest [&_label]:!text-brand-grey"
+                      >
+                        <Input
                           type="text"
+                          appearance="filled-darker"
                           value={applicationApprovalForm.approved_vehicle}
                           onChange={(e) =>
                             setApplicationApprovalForm((current) => ({
@@ -1526,18 +1615,21 @@ export default function AdminDashboard() {
                               approved_vehicle: e.target.value,
                             }))
                           }
-                          className="w-full bg-brand-navy border border-white/10 rounded-xl px-5 py-4 text-white focus:border-brand-gold outline-none transition-all font-light"
+                          className={fluentInputClass}
                           placeholder="Toyota Camry Hybrid - ABC123"
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">
-                          Approved Bond (AUD)
-                        </label>
-                        <input
+                      </Field>
+                      <Field
+                        label="Approved Bond (AUD)"
+                        hint="Manual admin record only. Not sent to Stripe as a charge."
+                        className="[&_label]:!text-[10px] [&_label]:!font-bold [&_label]:!uppercase [&_label]:!tracking-widest [&_label]:!text-brand-grey [&_.fui-Field__hint]:!text-brand-grey"
+                      >
+                        <Input
                           type="number"
                           min="0"
                           step="0.01"
+                          contentBefore="$"
+                          appearance="filled-darker"
                           value={applicationApprovalForm.approved_bond}
                           onChange={(e) =>
                             setApplicationApprovalForm((current) => ({
@@ -1545,17 +1637,43 @@ export default function AdminDashboard() {
                               approved_bond: e.target.value,
                             }))
                           }
-                          className="w-full bg-brand-navy border border-white/10 rounded-xl px-5 py-4 text-white focus:border-brand-gold outline-none transition-all font-light"
+                          className={fluentInputClass}
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">
-                          Approved Weekly Payment (AUD)
-                        </label>
-                        <input
+                      </Field>
+                      <Field
+                        label="Bond status"
+                        className="[&_label]:!text-[10px] [&_label]:!font-bold [&_label]:!uppercase [&_label]:!tracking-widest [&_label]:!text-brand-grey"
+                      >
+                        <Select
+                          appearance="filled-darker"
+                          value={applicationApprovalForm.bond_payment_status}
+                          onChange={(e) =>
+                            setApplicationApprovalForm((current) => ({
+                              ...current,
+                              bond_payment_status: e.target
+                                .value as keyof typeof bondStatusLabels,
+                            }))
+                          }
+                          className={fluentInputClass}
+                        >
+                          <option value="to_collect">To collect by admin</option>
+                          <option value="cash_paid">Paid cash</option>
+                          <option value="already_paid">
+                            Already paid / existing driver
+                          </option>
+                        </Select>
+                      </Field>
+                      <Field
+                        label="Approved Weekly Payment (AUD)"
+                        hint="This is the only recurring amount charged by Stripe."
+                        className="[&_label]:!text-[10px] [&_label]:!font-bold [&_label]:!uppercase [&_label]:!tracking-widest [&_label]:!text-brand-grey [&_.fui-Field__hint]:!text-brand-grey"
+                      >
+                        <Input
                           type="number"
                           min="0"
                           step="0.01"
+                          contentBefore="$"
+                          appearance="filled-darker"
                           value={applicationApprovalForm.approved_weekly_price}
                           onChange={(e) =>
                             setApplicationApprovalForm((current) => ({
@@ -1563,15 +1681,16 @@ export default function AdminDashboard() {
                               approved_weekly_price: e.target.value,
                             }))
                           }
-                          className="w-full bg-brand-navy border border-white/10 rounded-xl px-5 py-4 text-white focus:border-brand-gold outline-none transition-all font-light"
+                          className={fluentInputClass}
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">
-                          Rental subscription start date
-                        </label>
-                        <input
+                      </Field>
+                      <Field
+                        label="Rental subscription start date"
+                        className="[&_label]:!text-[10px] [&_label]:!font-bold [&_label]:!uppercase [&_label]:!tracking-widest [&_label]:!text-brand-grey"
+                      >
+                        <Input
                           type="date"
+                          appearance="filled-darker"
                           value={applicationApprovalForm.rental_subscription_start_date}
                           onChange={(e) =>
                             setApplicationApprovalForm((current) => ({
@@ -1579,25 +1698,55 @@ export default function AdminDashboard() {
                               rental_subscription_start_date: e.target.value,
                             }))
                           }
-                          className="w-full bg-brand-navy border border-white/10 rounded-xl px-5 py-4 text-white focus:border-brand-gold outline-none transition-all font-light"
+                          className={fluentInputClass}
                         />
-                      </div>
+                      </Field>
+                      <Field
+                        label="Bond notes"
+                        hint="Use this for cash receipt notes or existing-driver proof."
+                        className="md:col-span-2 xl:col-span-4 [&_label]:!text-[10px] [&_label]:!font-bold [&_label]:!uppercase [&_label]:!tracking-widest [&_label]:!text-brand-grey [&_.fui-Field__hint]:!text-brand-grey"
+                      >
+                        <Textarea
+                          appearance="filled-darker"
+                          value={applicationApprovalForm.bond_notes}
+                          onChange={(e) =>
+                            setApplicationApprovalForm((current) => ({
+                              ...current,
+                              bond_notes: e.target.value,
+                            }))
+                          }
+                          className={`${fluentInputClass} [&_textarea]:!min-h-24`}
+                          placeholder="Optional admin note for cash collection or existing bond proof"
+                        />
+                      </Field>
                     </div>
 
                     {applicationApprovalForm.approved_vehicle && (
-                      <div className="rounded-2xl border border-brand-gold/20 bg-brand-gold/5 px-5 py-4">
+                      <div className="rounded-2xl border border-brand-gold/20 bg-brand-gold/5 px-5 py-4 space-y-3">
                         <p className="text-[10px] font-bold uppercase tracking-widest text-brand-gold mb-2">
                           Approved payment summary
                         </p>
                         <p className="text-sm text-brand-grey font-light leading-relaxed">
                           Vehicle: <span className="text-white font-bold">{applicationApprovalForm.approved_vehicle}</span>
+                          {' '}| Stripe weekly charge:{' '}
+                          <span className="text-white font-bold">
+                            ${Number(applicationApprovalForm.approved_weekly_price || 0).toFixed(2)}/week
+                          </span>
                           {' '}| Bond:{' '}
                           <span className="text-white font-bold">
                             ${Number(applicationApprovalForm.approved_bond || 0).toFixed(2)}
                           </span>
-                          {' '}| Weekly payment:{' '}
+                          {' '}manual / not charged by Stripe | Bond status:{' '}
                           <span className="text-white font-bold">
-                            ${Number(applicationApprovalForm.approved_weekly_price || 0).toFixed(2)}
+                            {bondStatusLabels[applicationApprovalForm.bond_payment_status]}
+                          </span>
+                          {' '}| Bond method:{' '}
+                          <span className="text-white font-bold">
+                            {getBondMethodLabel(
+                              getBondMethodForStatus(
+                                applicationApprovalForm.bond_payment_status
+                              )
+                            )}
                           </span>
                           {applicationApprovalForm.rental_subscription_start_date && (
                             <>
@@ -1608,6 +1757,9 @@ export default function AdminDashboard() {
                             </>
                           )}
                         </p>
+                        <p className="text-xs text-brand-grey leading-relaxed">
+                          Stripe will only charge weekly rental payments. Bond is recorded for the agreement and collected manually.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1615,90 +1767,103 @@ export default function AdminDashboard() {
               </div>
 
               <div className="flex flex-col-reverse gap-4 border-t border-white/10 bg-white/5 p-4 sm:flex-row sm:p-8">
-                <button
+                <Button
+                  appearance="secondary"
                   onClick={() => setSelectedApplication(null)}
-                  className="w-full border border-white/10 py-5 text-xs font-bold uppercase tracking-widest text-white transition-all hover:bg-white/5 sm:flex-1"
+                  className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest sm:!flex-1"
                 >
                   Close
-                </button>
+                </Button>
                 {selectedApplication.status !== 'Cancelled' && (
-                  <button
+                  <Button
+                    appearance="outline"
                     onClick={() => {
                       setCancelApplicationReason('');
                       setIsCancelApplicationModalOpen(true);
                     }}
-                    className="w-full border border-red-500/30 py-5 text-xs font-bold uppercase tracking-widest text-red-300 transition-all hover:bg-red-500/10 sm:flex-1"
+                    className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest !text-red-300 sm:!flex-1"
                   >
                     Cancel rental application
-                  </button>
+                  </Button>
                 )}
                 {selectedApplication.status !== 'Paid' &&
                   selectedApplication.status !== 'Payment Review' &&
                   selectedApplication.status !== 'Cancelled' && (
-                  <button
+                  <Button
+                    appearance="outline"
                     onClick={() =>
                       updateStatusMutation.mutate({ id: selectedApplication.id, status: 'Rejected' })
                     }
-                    className="w-full border border-red-500/30 py-5 text-xs font-bold uppercase tracking-widest text-red-400 transition-all hover:bg-red-500/10 sm:flex-1"
+                    className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest !text-red-300 sm:!flex-1"
                   >
                     Reject Application
-                  </button>
+                  </Button>
                 )}
                 {selectedApplication.status !== 'Paid' &&
                   selectedApplication.status !== 'Rejected' &&
                   selectedApplication.status !== 'Payment Review' &&
                   selectedApplication.status !== 'Cancelled' && (
-                  <button
+                  <Button
+                    appearance="primary"
                     onClick={handleApproveSelectedApplication}
                     disabled={approveApplicationPaymentMutation.isPending}
-                    className="flex w-full items-center justify-center gap-3 bg-brand-gold py-5 text-xs font-bold uppercase tracking-widest text-brand-navy shadow-lg transition-all hover:bg-brand-gold-light disabled:opacity-50 sm:flex-[2]"
+                    className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest sm:!flex-[2]"
+                    icon={
+                      approveApplicationPaymentMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <ShieldCheck className="w-4 h-4" />
+                      )
+                    }
                   >
-                    {approveApplicationPaymentMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <ShieldCheck className="w-4 h-4" />
-                    )}
                     {selectedApplication.status === 'Approved'
                       ? 'Update Quote & Resend Payment Link'
                       : 'Approve & Send Payment Link'}
-                  </button>
+                  </Button>
                 )}
                 {selectedApplication.status === 'Paid' && (
                   <>
-                    <button
+                    <Button
+                      appearance="primary"
                       onClick={() => {
                         set_selected_agreement_application_id(selectedApplication.id.toString());
                         setSelectedApplication(null);
                         handleAdminTabChange('agreements');
                       }}
-                      className="flex w-full items-center justify-center gap-3 bg-brand-gold py-5 text-xs font-bold uppercase tracking-widest text-brand-navy shadow-lg transition-all hover:bg-brand-gold-light sm:flex-[2]"
+                      className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest sm:!flex-[2]"
+                      icon={<FileText className="w-4 h-4" />}
                     >
-                      <FileText className="w-4 h-4" /> Continue to Agreement
-                    </button>
-                    <button
+                      Continue to Agreement
+                    </Button>
+                    <Button
+                      appearance="secondary"
                       onClick={() => {
                         openTollNotices(selectedApplication.id.toString());
                         setSelectedApplication(null);
                       }}
-                      className="flex w-full items-center justify-center gap-3 border border-brand-gold/40 bg-white/5 py-5 text-xs font-bold uppercase tracking-widest text-white shadow-lg transition-all hover:bg-white/10 sm:flex-[2]"
+                      className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest sm:!flex-[2]"
+                      icon={<FileText className="w-4 h-4 text-brand-gold" />}
                     >
-                      <FileText className="w-4 h-4 text-brand-gold" /> Create Toll Transfer Notice
-                    </button>
+                      Create Toll Transfer Notice
+                    </Button>
                   </>
                 )}
                 {selectedApplication.status === 'Payment Review' && (
-                  <button
+                  <Button
+                    appearance="primary"
                     onClick={handleRetrySelectedApplicationActivation}
                     disabled={retryPaymentReviewActivationMutation.isPending}
-                    className="flex w-full items-center justify-center gap-3 bg-brand-gold py-5 text-xs font-bold uppercase tracking-widest text-brand-navy shadow-lg transition-all hover:bg-brand-gold-light disabled:opacity-50 sm:flex-[2]"
+                    className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest sm:!flex-[2]"
+                    icon={
+                      retryPaymentReviewActivationMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4" />
+                      )
+                    }
                   >
-                    {retryPaymentReviewActivationMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4" />
-                    )}
                     Retry Payment Finalization
-                  </button>
+                  </Button>
                 )}
               </div>
             </motion.div>

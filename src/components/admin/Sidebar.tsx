@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Car, 
-  Calendar, 
+import { Button, Tab, TabList } from '@fluentui/react-components';
+import {
+  LayoutDashboard,
+  Users,
+  Car,
+  Calendar,
   TrendingUp,
   DollarSign,
   LogOut,
@@ -51,7 +52,7 @@ export default function Sidebar({
       />
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex h-full w-72 max-w-[85vw] flex-col border-r border-white/10 bg-brand-navy transition-transform duration-300 lg:z-20 lg:max-w-none ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-full w-72 max-w-[85vw] flex-col border-r border-white/10 bg-[#061425] shadow-[24px_0_80px_rgba(0,0,0,0.24)] transition-transform duration-300 lg:z-20 lg:max-w-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
       >
@@ -65,47 +66,52 @@ export default function Sidebar({
               <p className="text-[8px] text-brand-gold font-bold tracking-[0.3em] uppercase">Rentals Admin</p>
             </div>
           </Link>
-          <button
+          <Button
+            appearance="subtle"
             type="button"
             onClick={onClose}
-            className="flex h-11 w-11 items-center justify-center rounded-full text-brand-grey transition-all hover:bg-white/5 hover:text-white lg:hidden"
-          >
-            <X className="h-5 w-5" />
-          </button>
+            className="!h-11 !w-11 !min-w-11 lg:!hidden"
+            icon={<X className="h-5 w-5" />}
+            aria-label="Close admin navigation"
+          />
         </div>
 
         <nav className="flex-1 space-y-2 overflow-y-auto p-4 lg:p-6">
-          {menuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => {
-                setActiveTab(item.id);
-                onClose();
-              }}
-              className={`w-full rounded-2xl px-5 py-4 text-left text-sm font-bold uppercase tracking-widest transition-all ${
-                activeTab === item.id
-                  ? 'bg-brand-gold text-brand-navy shadow-lg shadow-brand-gold/10'
-                  : 'text-brand-grey hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <span className="flex items-center gap-4">
-                <item.icon className="w-5 h-5" />
+          <TabList
+            vertical
+            selectedValue={activeTab}
+            onTabSelect={(_, data) => {
+              setActiveTab(String(data.value));
+              onClose();
+            }}
+            className="!flex !w-full !gap-2"
+          >
+            {menuItems.map((item) => (
+              <Tab
+                key={item.id}
+                value={item.id}
+                icon={<item.icon className="w-5 h-5" />}
+                className={`!justify-start !rounded-lg !px-5 !py-4 !text-sm !font-bold !uppercase !tracking-widest ${
+                  activeTab === item.id
+                    ? '!bg-brand-gold !text-brand-navy'
+                    : '!text-brand-grey hover:!bg-white/5 hover:!text-white'
+                }`}
+              >
                 {item.label}
-              </span>
-            </button>
-          ))}
+              </Tab>
+            ))}
+          </TabList>
         </nav>
 
         <div className="border-t border-white/10 p-4 lg:p-6">
-          <button
+          <Button
+            appearance="subtle"
             onClick={handleLogout}
-            className="w-full rounded-2xl px-5 py-4 text-left text-sm font-bold uppercase tracking-widest text-red-500 transition-all hover:bg-red-500/10"
+            className="!w-full !justify-start !rounded-lg !px-5 !py-4 !text-sm !font-bold !uppercase !tracking-widest !text-red-400 hover:!bg-red-500/10"
+            icon={<LogOut className="w-5 h-5" />}
           >
-            <span className="flex items-center gap-4">
-              <LogOut className="w-5 h-5" />
-              Logout
-            </span>
-          </button>
+            Logout
+          </Button>
         </div>
       </aside>
     </>

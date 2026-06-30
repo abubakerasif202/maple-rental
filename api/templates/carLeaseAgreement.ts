@@ -34,6 +34,10 @@ export type CarLeaseAgreementInput = {
   minimumRentalPeriod: string;
   returnPolicy: string;
   fees: LeaseFee[];
+  bondAmount: string;
+  bondNotes: string;
+  bondPaymentMethod: string;
+  bondPaymentStatus: string;
 };
 
 export const buildCarLeaseAgreementFees = (bondAmount = 0): LeaseFee[] => [
@@ -63,6 +67,10 @@ export const buildDefaultCarLeaseAgreement = (): CarLeaseAgreementInput => ({
   vehicleYear: '2024',
   vehicleVin: 'Not recorded',
   weeklyRent: '$250.00 per week',
+  bondAmount: '$0.00',
+  bondNotes: '',
+  bondPaymentMethod: 'Not yet collected',
+  bondPaymentStatus: 'To be collected by admin',
   rentalStartDate: new Date().toISOString().split('T')[0],
   rentalEndDate: 'Open-ended',
   fees: buildCarLeaseAgreementFees(),
@@ -103,7 +111,13 @@ Your invoice is issued weekly and may include:
 
 Rentee agrees to pay:
 - Weekly Rent: {{weeklyRent}}
+- Bond Amount: {{bondAmount}}
+- Bond Status: {{bondPaymentStatus}}
+- Bond Method: {{bondPaymentMethod}}
 - Fuel Policy: {{fuelPolicy}}
+
+Bond is handled manually by Maple Rentals and is not charged through Stripe.
+{{bondNotesLine}}
 
 ### Fee Schedule
 {{feeSchedule}}
@@ -153,6 +167,9 @@ export const renderCarLeaseAgreementTemplate = (
       ])
     ),
     feeSchedule: feeLines,
+    bondNotesLine: agreement.bondNotes
+      ? `Bond Notes: ${agreement.bondNotes}`
+      : '',
   };
 
   return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, key) =>

@@ -33,7 +33,11 @@ type SchemaCompat = {
   applicationBackPhotoColumn: ApplicationBackPhotoColumn;
   applicationAssignedCarColumn: string | null;
   applicationApprovedBondColumn: string;
+  applicationBondNotesColumn: string;
+  applicationBondPaymentMethodColumn: string;
+  applicationBondPaymentStatusColumn: string;
   applicationApprovedWeeklyPriceColumn: string;
+  applicationLicenceStateColumn: string;
   applicationPaidAtColumn: string;
   applicationPaymentLinkSentAtColumn: string;
   applicationPaymentLinkVersionColumn: string;
@@ -61,7 +65,11 @@ const DEFAULT_SCHEMA_COMPAT: SchemaCompat = {
   applicationBackPhotoColumn: 'license_back_photo',
   applicationAssignedCarColumn: null,
   applicationApprovedBondColumn: 'approved_bond',
+  applicationBondNotesColumn: 'bond_notes',
+  applicationBondPaymentMethodColumn: 'bond_payment_method',
+  applicationBondPaymentStatusColumn: 'bond_payment_status',
   applicationApprovedWeeklyPriceColumn: 'approved_weekly_price',
+  applicationLicenceStateColumn: 'licence_state',
   applicationPaidAtColumn: 'paid_at',
   applicationPaymentLinkSentAtColumn: 'payment_link_sent_at',
   applicationPaymentLinkVersionColumn: 'payment_link_version',
@@ -183,6 +191,36 @@ export const getSchemaCompat = async (): Promise<SchemaCompat> => {
             : coreMode === 'camel'
               ? 'approvedWeeklyPrice'
               : 'approved_weekly_price';
+        const applicationBondPaymentStatusColumn = hasProperty(
+          applicationsDefinition,
+          'bondPaymentStatus'
+        )
+          ? 'bondPaymentStatus'
+          : hasProperty(applicationsDefinition, 'bond_payment_status')
+            ? 'bond_payment_status'
+            : coreMode === 'camel'
+              ? 'bondPaymentStatus'
+              : 'bond_payment_status';
+        const applicationBondPaymentMethodColumn = hasProperty(
+          applicationsDefinition,
+          'bondPaymentMethod'
+        )
+          ? 'bondPaymentMethod'
+          : hasProperty(applicationsDefinition, 'bond_payment_method')
+            ? 'bond_payment_method'
+            : coreMode === 'camel'
+              ? 'bondPaymentMethod'
+              : 'bond_payment_method';
+        const applicationBondNotesColumn = hasProperty(
+          applicationsDefinition,
+          'bondNotes'
+        )
+          ? 'bondNotes'
+          : hasProperty(applicationsDefinition, 'bond_notes')
+            ? 'bond_notes'
+            : coreMode === 'camel'
+              ? 'bondNotes'
+              : 'bond_notes';
         const applicationApprovedVehicleColumn = hasProperty(
           applicationsDefinition,
           'approvedVehicle'
@@ -312,7 +350,11 @@ export const getSchemaCompat = async (): Promise<SchemaCompat> => {
           applicationBackPhotoColumn,
           applicationAssignedCarColumn,
           applicationApprovedBondColumn,
+          applicationBondNotesColumn,
+          applicationBondPaymentMethodColumn,
+          applicationBondPaymentStatusColumn,
           applicationApprovedWeeklyPriceColumn,
+          applicationLicenceStateColumn,
           applicationPaidAtColumn,
           applicationPaymentLinkSentAtColumn,
           applicationPaymentLinkVersionColumn,
@@ -412,6 +454,9 @@ export const getApplicationSelectColumns = async () => {
     applicationPassportDocumentColumn,
     applicationAssignedCarColumn,
     applicationApprovedBondColumn,
+    applicationBondNotesColumn,
+    applicationBondPaymentMethodColumn,
+    applicationBondPaymentStatusColumn,
     applicationApprovedVehicleColumn,
     applicationAgreementAcceptedAtColumn,
     applicationAgreementSignatureColumn,
@@ -442,6 +487,18 @@ export const getApplicationSelectColumns = async () => {
     applicationApprovedBondColumn === 'approved_bond'
       ? 'approved_bond'
       : `approved_bond:${applicationApprovedBondColumn}`;
+  const bondPaymentStatusSelect =
+    applicationBondPaymentStatusColumn === 'bond_payment_status'
+      ? 'bond_payment_status'
+      : `bond_payment_status:${applicationBondPaymentStatusColumn}`;
+  const bondPaymentMethodSelect =
+    applicationBondPaymentMethodColumn === 'bond_payment_method'
+      ? 'bond_payment_method'
+      : `bond_payment_method:${applicationBondPaymentMethodColumn}`;
+  const bondNotesSelect =
+    applicationBondNotesColumn === 'bond_notes'
+      ? 'bond_notes'
+      : `bond_notes:${applicationBondNotesColumn}`;
   const approvedVehicleSelect =
     applicationApprovedVehicleColumn === 'approved_vehicle'
       ? 'approved_vehicle'
@@ -509,6 +566,9 @@ export const getApplicationSelectColumns = async () => {
         passportDocumentSelect,
         ...(assignedCarSelect ? [assignedCarSelect] : []),
         approvedBondSelect,
+        bondPaymentStatusSelect,
+        bondPaymentMethodSelect,
+        bondNotesSelect,
         approvedVehicleSelect,
         approvedWeeklyPriceSelect,
         paymentLinkVersionSelect,
@@ -541,6 +601,9 @@ export const getApplicationSelectColumns = async () => {
         passportDocumentSelect,
         ...(assignedCarSelect ? [assignedCarSelect] : []),
         approvedBondSelect,
+        bondPaymentStatusSelect,
+        bondPaymentMethodSelect,
+        bondNotesSelect,
         approvedVehicleSelect,
         approvedWeeklyPriceSelect,
         paymentLinkVersionSelect,
@@ -676,6 +739,9 @@ export const getApplicationAssignedCarColumn = async () => {
 export const toApplicationPaymentWritePayload = async (payload: {
   assigned_car_id?: number | null;
   approved_bond?: number | null;
+  bond_notes?: string | null;
+  bond_payment_method?: string | null;
+  bond_payment_status?: string | null;
   approved_vehicle?: string | null;
   approved_weekly_price?: number | null;
   intended_start_date?: string | null;
@@ -697,6 +763,20 @@ export const toApplicationPaymentWritePayload = async (payload: {
 
   if ('approved_bond' in payload) {
     mappedPayload[compat.applicationApprovedBondColumn] = payload.approved_bond ?? null;
+  }
+
+  if ('bond_payment_status' in payload) {
+    mappedPayload[compat.applicationBondPaymentStatusColumn] =
+      payload.bond_payment_status ?? null;
+  }
+
+  if ('bond_payment_method' in payload) {
+    mappedPayload[compat.applicationBondPaymentMethodColumn] =
+      payload.bond_payment_method ?? null;
+  }
+
+  if ('bond_notes' in payload) {
+    mappedPayload[compat.applicationBondNotesColumn] = payload.bond_notes ?? null;
   }
 
   if ('approved_vehicle' in payload) {
