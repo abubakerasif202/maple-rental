@@ -95,6 +95,8 @@ const getTrustedWriteOrigins = (req: express.Request) =>
 const isSafeMethod = (method: string) =>
   ['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase());
 
+const getCookieSameSite = () => ((isProduction ? 'strict' : 'none') as 'none' | 'strict');
+
 const readAdminSessionSecret = () => (process.env.JWT_SECRET || '').trim();
 
 export const getAdminSessionSecretConfigurationIssue = ({
@@ -142,9 +144,34 @@ export const createCookieOptions = () => {
     httpOnly: true,
     maxAge: LOCAL_ADMIN_SESSION_TTL_MS,
     path: '/',
-    sameSite: (isProduction ? 'strict' : 'none') as 'none' | 'strict',
+    sameSite: getCookieSameSite(),
     secure: true,
   };
+};
+
+const getCookieClearOptions = () => {
+  const cookieBase = {
+    httpOnly: true,
+    path: '/',
+  };
+
+  return [
+    {
+      ...cookieBase,
+      sameSite: 'none' as const,
+      secure: true,
+    },
+    {
+      ...cookieBase,
+      sameSite: 'strict' as const,
+      secure: true,
+    },
+    {
+      ...cookieBase,
+      sameSite: 'strict' as const,
+      secure: isProduction,
+    },
+  ];
 };
 
 export const requireTrustedAdminWriteOrigin = (
@@ -246,18 +273,11 @@ const verifySupabaseAdminSessionToken = (token: string) => {
 };
 
 export const clearAdminSessionCookie = (req: express.Request, res: express.Response) => {
-  res.clearCookie('admin_token', {
-    httpOnly: true,
-    path: '/',
-    sameSite: 'none',
-    secure: true,
-  });
-  res.clearCookie('admin_token', {
-    httpOnly: true,
-    path: '/',
-    sameSite: 'strict',
-    secure: isProduction,
-  });
+  void req;
+
+  for (const options of getCookieClearOptions()) {
+    res.clearCookie('admin_token', options);
+  }
 };
 
 export const getSupabaseSessionExpiry = (
