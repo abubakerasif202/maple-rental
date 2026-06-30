@@ -1,4 +1,5 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
+import { Button, Checkbox, Field, Input } from '@fluentui/react-components';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, ShieldCheck, Upload, User, CarFront, FileText } from 'lucide-react';
 import * as z from 'zod';
@@ -694,11 +695,10 @@ export default function Apply() {
                   </div>
 
                   <label className="flex items-start gap-4 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={Boolean(form.agreement_accepted)}
                       onChange={(event) => setField('agreement_accepted', event.target.checked)}
-                      className="mt-1 h-5 w-5 rounded border-white/20 bg-brand-navy text-brand-gold"
+                      className="mt-1"
                     />
                     <span className="text-sm leading-7 text-white">
                       I have read and agree to the rental agreement and the review process.
@@ -706,13 +706,19 @@ export default function Apply() {
                   </label>
                   <FieldError message={errors.agreement_accepted} />
 
-                  <div className="space-y-2">
-                    <input
+                  <Field
+                    label="Typed signature"
+                    className="[&_label]:!text-[10px] [&_label]:!font-bold [&_label]:!uppercase [&_label]:!tracking-widest [&_label]:!text-brand-grey"
+                  >
+                    <Input
+                      appearance="filled-darker"
                       value={form.agreement_signature}
                       onChange={(event) => setField('agreement_signature', event.target.value)}
                       placeholder="Typed signature"
-                      className={fieldClass}
+                      className="w-full [&_input]:!text-white [&_input]:placeholder:!text-brand-grey/60"
                     />
+                  </Field>
+                  <div className="space-y-2">
                     <FieldError message={errors.agreement_signature} />
                   </div>
                 </div>
@@ -721,36 +727,40 @@ export default function Apply() {
 
             <div className="flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between">
               {step > 1 ? (
-                <button
+                <Button
+                  appearance="secondary"
                   type="button"
                   onClick={() => setStep((current) => Math.max(current - 1, 1))}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-7 py-4 text-xs font-bold uppercase tracking-[0.24em] text-white"
+                  className="!min-h-12 !rounded-full !px-7 !font-bold !uppercase !tracking-[0.24em]"
+                  icon={<ArrowLeft className="h-4 w-4" />}
                 >
-                  <ArrowLeft className="h-4 w-4" />
                   Back
-                </button>
+                </Button>
               ) : (
                 <span />
               )}
 
               {step < 5 ? (
-                <button
+                <Button
+                  appearance="primary"
                   type="button"
                   onClick={handleNext}
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-gold px-7 py-4 text-xs font-bold uppercase tracking-[0.24em] text-brand-navy"
+                  className="!min-h-12 !rounded-full !px-7 !font-bold !uppercase !tracking-[0.24em]"
+                  icon={<ArrowRight className="h-4 w-4" />}
+                  iconPosition="after"
                 >
                   Continue
-                  <ArrowRight className="h-4 w-4" />
-                </button>
+                </Button>
               ) : (
-                <button
+                <Button
+                  appearance="primary"
                   type="submit"
                   disabled={isSubmitting}
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-gold px-7 py-4 text-xs font-bold uppercase tracking-[0.24em] text-brand-navy disabled:opacity-60"
+                  className="!min-h-12 !rounded-full !px-7 !font-bold !uppercase !tracking-[0.24em]"
+                  icon={isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 >
-                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                   {isSubmitting ? 'Submitting' : 'Submit application'}
-                </button>
+                </Button>
               )}
             </div>
           </form>

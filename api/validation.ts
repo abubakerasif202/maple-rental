@@ -144,11 +144,44 @@ export const applicationApprovalSchema = z.object({
   approved_bond: z.coerce.number().nonnegative(),
   approved_weekly_price: z.coerce.number().positive(),
   application_id: uuidSchema,
+  bond_notes: z.string().trim().max(1000).optional().nullable(),
+  bond_payment_method: z.enum(["cash", "existing_paid"]).optional().nullable(),
+  bond_payment_status: z
+    .enum(["to_collect", "cash_paid", "already_paid"])
+    .optional()
+    .default("to_collect"),
   car_id: optionalPositiveIntegerSchema,
   rental_subscription_start_date: optionalDateOnlySchema(
     "Rental subscription start date must be a valid date",
   ),
   send_payment_link: z.boolean().optional().default(true),
+}).superRefine((value, ctx) => {
+  if (value.bond_payment_status === "cash_paid" && value.bond_payment_method !== "cash") {
+    ctx.addIssue({
+      code: "custom",
+      message: "Cash-paid bond status must use the cash bond method.",
+      path: ["bond_payment_method"],
+    });
+  }
+
+  if (
+    value.bond_payment_status === "already_paid" &&
+    value.bond_payment_method !== "existing_paid"
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Existing-driver bond status must use the existing paid method.",
+      path: ["bond_payment_method"],
+    });
+  }
+
+  if (value.bond_payment_status === "to_collect" && value.bond_payment_method) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Bond method must be blank until the manual bond is collected.",
+      path: ["bond_payment_method"],
+    });
+  }
 });
 
 export const vehicleCheckoutLinkSchema = z.object({
@@ -187,6 +220,10 @@ export const leaseAgreementSchema = z.object({
   minimumRentalPeriod: z.string().optional(),
   returnPolicy: z.string().optional(),
   fees: z.array(leaseFeeSchema).optional(),
+  bondAmount: z.string().optional(),
+  bondNotes: z.string().optional(),
+  bondPaymentMethod: z.string().optional(),
+  bondPaymentStatus: z.string().optional(),
 });
 
 export const createLeaseAgreementSchema = z.object({

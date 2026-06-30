@@ -345,6 +345,51 @@ describe('applicationApprovalSchema', () => {
     const result = applicationApprovalSchema.parse({ ...valid, approved_bond: '500' });
     expect(result.approved_bond).toBe(500);
   });
+
+  it('accepts cash-paid and existing-driver manual bond statuses', () => {
+    expect(
+      applicationApprovalSchema.parse({
+        ...valid,
+        bond_payment_method: 'cash',
+        bond_payment_status: 'cash_paid',
+      }).bond_payment_method
+    ).toBe('cash');
+
+    expect(
+      applicationApprovalSchema.parse({
+        ...valid,
+        bond_notes: 'Existing driver receipt checked by admin.',
+        bond_payment_method: 'existing_paid',
+        bond_payment_status: 'already_paid',
+      }).bond_payment_status
+    ).toBe('already_paid');
+  });
+
+  it('rejects bond status and method pairings that could misstate manual collection', () => {
+    expect(() =>
+      applicationApprovalSchema.parse({
+        ...valid,
+        bond_payment_method: 'cash',
+        bond_payment_status: 'already_paid',
+      })
+    ).toThrow();
+
+    expect(() =>
+      applicationApprovalSchema.parse({
+        ...valid,
+        bond_payment_method: 'existing_paid',
+        bond_payment_status: 'cash_paid',
+      })
+    ).toThrow();
+
+    expect(() =>
+      applicationApprovalSchema.parse({
+        ...valid,
+        bond_payment_method: 'cash',
+        bond_payment_status: 'to_collect',
+      })
+    ).toThrow();
+  });
 });
 
 describe('vehicleCheckoutLinkSchema', () => {

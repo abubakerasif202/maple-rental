@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Badge, Button, Input } from '@fluentui/react-components';
 import { motion } from 'motion/react';
 import { Download, FileText, Search, Users } from 'lucide-react';
 import { Application } from '../../../types';
@@ -92,21 +93,22 @@ export default function ApplicationsTab({
         minWidth: '160px',
         sortValue: (app) => app.status,
         cell: (app) => (
-          <span
-            className={`rounded-full border px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest ${
-              app.status === 'Approved'
-                ? 'border-green-500/20 bg-green-500/10 text-green-400'
-                : app.status === 'Paid'
-                  ? 'border-[#dfb125]/20 bg-[#dfb125]/10 text-[#dfb125]'
-                  : app.status === 'Payment Review'
-                    ? 'border-amber-500/20 bg-amber-500/10 text-amber-300'
-                    : app.status === 'Cancelled' || app.status === 'Rejected'
-                      ? 'border-red-500/20 bg-red-500/10 text-red-300'
-                      : 'border-[#1e3a5f] bg-[#061425] text-slate-400'
-            }`}
+          <Badge
+            appearance="filled"
+            color={
+              app.status === 'Paid' || app.status === 'Approved'
+                ? 'success'
+                : app.status === 'Payment Review'
+                  ? 'warning'
+                  : app.status === 'Cancelled' || app.status === 'Rejected'
+                    ? 'danger'
+                    : 'brand'
+            }
+            shape="rounded"
+            className="!font-bold !uppercase !tracking-widest"
           >
             {app.status}
-          </span>
+          </Badge>
         ),
       },
       {
@@ -126,13 +128,13 @@ export default function ApplicationsTab({
         id: 'actions',
         sortable: false,
         cell: (app) => (
-          <button
-            className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-white/5 text-slate-400 transition-all hover:bg-[#dfb125] hover:text-[#061425]"
+          <Button
+            appearance="secondary"
+            icon={<FileText className="h-4 w-4" />}
+            className="!h-11 !w-11"
             title="Review Application"
             onClick={() => setSelectedApplication(app)}
-          >
-            <FileText className="h-4 w-4" />
-          </button>
+          />
         ),
       },
     ],
@@ -157,13 +159,14 @@ export default function ApplicationsTab({
           </p>
         </div>
         <div className="flex w-full gap-4 md:w-auto">
-          <div className="relative w-full md:w-auto">
-            <Search className="w-4 h-4 text-brand-grey absolute left-4 top-1/2 -translate-y-1/2" />
-            <input
+          <div className="w-full md:w-auto">
+            <Input
+              appearance="filled-darker"
+              contentBefore={<Search className="w-4 h-4 text-brand-grey" />}
               value={applicationSearch}
               onChange={(event) => setApplicationSearch(event.target.value)}
               placeholder="Search drivers..."
-              className="w-full rounded-xl border border-white/10 bg-white/5 py-4 pl-12 pr-6 text-sm text-white outline-none transition-all focus:border-brand-gold md:w-64"
+              className="w-full md:!w-64 [&_input]:!text-white [&_input]:placeholder:!text-brand-grey/60"
             />
           </div>
         </div>

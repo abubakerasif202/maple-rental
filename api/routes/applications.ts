@@ -23,10 +23,7 @@ import {
   getApplicationSelectColumns,
   toApplicationWritePayload,
 } from "../schemaCompat.js";
-import {
-  FALLBACK_ADMIN_EMAIL,
-  RENTAL_PLAN_SETUP_FEES_AUD,
-} from "../constants.js";
+import { FALLBACK_ADMIN_EMAIL } from "../constants.js";
 import {
   buildDriverPaymentLink,
   sendDriverPaymentLinkEmail,
@@ -257,6 +254,9 @@ const hasAvailableDocumentSigningCapacity = (index: number) =>
 
 type ApplicationPaymentApprovalRecord = {
   approved_bond?: number | null;
+  bond_notes?: string | null;
+  bond_payment_method?: string | null;
+  bond_payment_status?: string | null;
   approved_vehicle?: string | null;
   approved_weekly_price?: number | null;
   email: string;
@@ -879,6 +879,9 @@ router.post("/:id/approve-payment", authenticateAdmin, async (req, res) => {
         payload: {
           approved_at: nowIso,
           approved_bond: payload.approved_bond,
+          bond_notes: payload.bond_notes?.trim() || null,
+          bond_payment_method: payload.bond_payment_method ?? null,
+          bond_payment_status: payload.bond_payment_status,
           approved_vehicle: payload.approved_vehicle.trim(),
           approved_weekly_price: payload.approved_weekly_price,
           assigned_car_id: null,
@@ -921,10 +924,11 @@ router.post("/:id/approve-payment", authenticateAdmin, async (req, res) => {
         applicantEmail: applicationRecord.email,
         applicantName: applicationRecord.name,
         approvedBond: payload.approved_bond,
+        bondPaymentMethod: payload.bond_payment_method ?? null,
+        bondPaymentStatus: payload.bond_payment_status,
         approvedWeeklyPrice: payload.approved_weekly_price,
         approvedVehicle: payload.approved_vehicle.trim(),
         checkoutUrl,
-        setupFees: RENTAL_PLAN_SETUP_FEES_AUD,
       });
     }
 

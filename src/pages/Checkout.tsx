@@ -180,7 +180,6 @@ export default function Checkout() {
   }
 
   const { approved_vehicle, billing, vehicle_image } = paymentContext;
-  const hasSetupFees = billing.setupFees > 0;
 
   return (
     <>
@@ -209,7 +208,7 @@ export default function Checkout() {
                     Secure <span className="text-brand-gold italic">Stripe Checkout</span>
                   </h1>
                   <p className="text-brand-grey font-light">
-                    Review the approved vehicle and payment breakdown, then continue to Stripe.
+                    Review the approved vehicle and weekly Stripe payment, then continue to Stripe.
                   </p>
                 </div>
 
@@ -224,8 +223,8 @@ export default function Checkout() {
                       </p>
                         <p className="text-sm text-brand-grey font-light leading-relaxed">
                       Payment happens only after Gala Rentals has reviewed your application.
-                        Stripe collects the approved bond, your first weekly payment, and any setup
-                        fees before recurring weekly billing starts.
+                        Stripe only collects the approved weekly rental subscription. Bond is
+                        recorded for your agreement and handled manually by Maple Rentals.
                       </p>
                     </div>
                   </div>
@@ -290,32 +289,37 @@ export default function Checkout() {
 
                   <div className="p-8 space-y-6">
                     <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest border-b border-white/5 pb-4">
-                      Payment breakdown
+                      Stripe and manual bond breakdown
                     </h4>
 
                     <div className="space-y-4 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-brand-grey font-light">Security bond</span>
+                        <span className="text-brand-grey font-light">Stripe weekly charge</span>
+                        <span className="text-white font-bold">{formatCurrency(billing.recurringAmount)}/week</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-brand-grey font-light">Manual bond</span>
                         <span className="text-white font-bold">{formatCurrency(billing.bond)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-brand-grey font-light">First weekly payment</span>
-                        <span className="text-white font-bold">{formatCurrency(billing.initialRental)}</span>
+                        <span className="text-brand-grey font-light">Bond status</span>
+                        <span className="text-white font-bold text-right">{billing.bondStatus}</span>
                       </div>
-                      {hasSetupFees && (
-                        <div className="flex justify-between">
-                          <span className="text-brand-grey font-light">Setup fees</span>
-                          <span className="text-white font-bold">{formatCurrency(billing.setupFees)}</span>
-                        </div>
-                      )}
+                      <div className="flex justify-between">
+                        <span className="text-brand-grey font-light">Bond method</span>
+                        <span className="text-white font-bold">{billing.bondMethod}</span>
+                      </div>
                     </div>
 
                     <div className="pt-6 border-t border-white/10 flex justify-between items-center">
-                      <span className="text-white font-bold uppercase tracking-widest text-xs">Total due now</span>
+                      <span className="text-white font-bold uppercase tracking-widest text-xs">Stripe charges</span>
                       <span className="text-3xl font-bold text-brand-gold">
-                        {formatCurrency(billing.upfrontDue)}
+                        {formatCurrency(billing.recurringAmount)}/week
                       </span>
                     </div>
+                    <p className="text-xs text-brand-grey leading-relaxed">
+                      Bond is handled manually by Maple Rentals and is not charged through Stripe.
+                    </p>
                   </div>
 
                   <div className="bg-brand-navy p-6 flex items-start gap-4">
@@ -323,9 +327,8 @@ export default function Checkout() {
                       <Info className="w-4 h-4 text-brand-gold" />
                     </div>
                     <p className="text-[10px] text-brand-grey leading-relaxed">
-                      After the upfront payment, your recurring rental will be{' '}
-                      <strong>{formatCurrency(billing.recurringAmount)}</strong> {billing.recurringLabel}. Stripe
-                      handles the payment securely and Gala Rentals completes the driver onboarding process after confirmation.
+                      Stripe handles the weekly rental subscription securely. Maple Rentals
+                      completes bond collection and driver onboarding outside Stripe.
                     </p>
                   </div>
                 </div>

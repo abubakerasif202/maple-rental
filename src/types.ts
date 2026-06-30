@@ -12,6 +12,9 @@ export interface Car {
 export interface Application {
   approved_at?: string | null;
   approved_bond?: number | null;
+  bond_notes?: string | null;
+  bond_payment_method?: 'cash' | 'existing_paid' | null;
+  bond_payment_status?: 'to_collect' | 'cash_paid' | 'already_paid' | null;
   approved_vehicle?: string | null;
   approved_weekly_price?: number | null;
   agreement_accepted_at?: string | null;

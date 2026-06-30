@@ -28,7 +28,7 @@ import {
   persistPendingCheckoutSessionIdIfCurrentVersion,
   updateApplicationPaymentStateIfCurrentVersion,
 } from '../applicationPaymentState.js';
-import { LEASE_SETTINGS, RENTAL_PLAN_SETUP_FEES_AUD } from '../constants.js';
+import { LEASE_SETTINGS } from '../constants.js';
 import {
   getTodayInAustralia,
   isValidDateOnly,
@@ -41,6 +41,8 @@ const DEFAULT_APPROVED_VEHICLE_LABEL = 'Approved vehicle to be confirmed by Gala
 
 type BillingBreakdown = {
   bond: number;
+  bondMethod: 'Cash' | 'Existing paid' | 'Not yet collected';
+  bondStatus: 'To be collected by admin' | 'Paid cash' | 'Already paid / existing driver';
   currency: string;
   initialRental: number;
   recurringAmount: number;
@@ -119,6 +121,9 @@ type VerifiedCheckoutSessionContext = {
 type StripeApplication = {
   approved_at?: string | null;
   approved_bond?: number | string | null;
+  bond_notes?: string | null;
+  bond_payment_method?: string | null;
+  bond_payment_status?: string | null;
   approved_vehicle?: string | null;
   approved_weekly_price?: number | string | null;
   email: string;
@@ -261,19 +266,31 @@ const buildApprovedBillingBreakdown = (application: StripeApplication): BillingB
   const approvedWeeklyPriceCents = Math.round(
     Number(application.approved_weekly_price || 0) * 100
   );
-  const setupFeesCents = Math.round(RENTAL_PLAN_SETUP_FEES_AUD * 100);
-  const upfrontDueCents = approvedBondCents + approvedWeeklyPriceCents + setupFeesCents;
+  const bondStatus =
+    application.bond_payment_status === 'cash_paid'
+      ? 'Paid cash'
+      : application.bond_payment_status === 'already_paid'
+        ? 'Already paid / existing driver'
+        : 'To be collected by admin';
+  const bondMethod =
+    application.bond_payment_method === 'cash'
+      ? 'Cash'
+      : application.bond_payment_method === 'existing_paid'
+        ? 'Existing paid'
+        : 'Not yet collected';
 
   return {
     bond: fromCents(approvedBondCents),
+    bondMethod,
+    bondStatus,
     currency: LEASE_SETTINGS.currency.toUpperCase(),
     initialRental: fromCents(approvedWeeklyPriceCents),
     recurringAmount: fromCents(approvedWeeklyPriceCents),
     recurringInterval: LEASE_SETTINGS.recurring_interval,
     recurringIntervalCount: 1,
     recurringLabel: 'per week',
-    setupFees: fromCents(setupFeesCents),
-    upfrontDue: fromCents(upfrontDueCents),
+    setupFees: 0,
+    upfrontDue: fromCents(approvedWeeklyPriceCents),
   };
 };
 
@@ -347,7 +364,6 @@ const createHostedCheckoutSession = async ({
     approved_vehicle: String(application.approved_vehicle || DEFAULT_APPROVED_VEHICLE_LABEL),
     checkout_kind: 'vehicle',
     payment_type: 'vehicle_rental',
-    approved_bond: billingBreakdown.bond.toFixed(2),
     approved_weekly_price: billingBreakdown.recurringAmount.toFixed(2),
     payment_link_version: String(Number(application.payment_link_version || 0)),
   };
