@@ -4,6 +4,7 @@ import { FluentProvider, Toaster } from '@fluentui/react-components';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { mapleFluentTheme } from './theme/mapleFluentTheme';
 
 const Home = lazy(() => import('./pages/Home'));
@@ -32,27 +33,36 @@ function AppShell() {
     <div className="flex min-h-screen flex-col bg-brand-navy">
       {!isAdminRoute && <Navbar />}
       <main className="flex-grow">
-        <Suspense
-          fallback={
-            <div className="min-h-screen flex items-center justify-center bg-brand-navy text-white font-serif italic uppercase tracking-widest text-sm">
-              Loading Experience...
-            </div>
-          }
-        >
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/pricing" element={<Pricing />} />
-            <Route path="/cars" element={<Cars />} />
-            <Route path="/cars/:id" element={<CarDetails />} />
-            <Route path="/checkout/:id" element={<Checkout />} />
-            <Route path="/apply" element={<Apply />} />
-            <Route path="/success" element={<Success />} />
-            <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            <Route path="/admin/agreements" element={<AdminDashboard />} />
-            <Route path="/admin/toll-notices" element={<AdminDashboard />} />
-          </Routes>
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense
+            fallback={
+              <div className="flex min-h-[70vh] items-center justify-center bg-brand-navy px-6 text-center text-white">
+                <div className="space-y-4">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.38em] text-brand-gold">
+                    Loading Experience
+                  </div>
+                  <div className="font-serif text-3xl italic sm:text-4xl">
+                    Preparing Maple Rentals
+                  </div>
+                </div>
+              </div>
+            }
+          >
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/pricing" element={<Pricing />} />
+              <Route path="/cars" element={<Cars />} />
+              <Route path="/cars/:id" element={<CarDetails />} />
+              <Route path="/checkout/:id" element={<Checkout />} />
+              <Route path="/apply" element={<Apply />} />
+              <Route path="/success" element={<Success />} />
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/agreements" element={<AdminDashboard />} />
+              <Route path="/admin/toll-notices" element={<AdminDashboard />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </main>
       {!isAdminRoute && <Footer />}
     </div>

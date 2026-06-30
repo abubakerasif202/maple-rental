@@ -50,6 +50,27 @@ let postgresPoolConnectionString: string | null = null;
 const readConfiguredConnectionString = (key: 'DATABASE_URL' | 'SUPABASE_DB_URL') =>
   (process.env[key] || '').trim();
 
+const readConfiguredPoolSize = () => {
+  const rawValue = (process.env.DB_POOL_SIZE || '').trim();
+  if (!rawValue) {
+    return null;
+  }
+
+  const parsedValue = Number(rawValue);
+  if (
+    !Number.isInteger(parsedValue) ||
+    parsedValue <= 0 ||
+    parsedValue > 100
+  ) {
+    console.warn(
+      'Ignoring invalid DB_POOL_SIZE value; using the default PostgreSQL pool size instead.'
+    );
+    return null;
+  }
+
+  return parsedValue;
+};
+
 export const getDirectDatabaseConfig = (): DirectDatabaseConfig => {
   const databaseUrl = readConfiguredConnectionString('DATABASE_URL');
   const supabaseDbUrl = readConfiguredConnectionString('SUPABASE_DB_URL');
@@ -171,6 +192,7 @@ const checkPaymentActivationSchema = async (client: PoolClient) => {
 
 const getPostgresPool = () => {
   const { connectionString, mode: connectionMode } = getDirectDatabaseConfig();
+  const configuredPoolSize = readConfiguredPoolSize();
 
   if (connectionMode === 'none') {
     throw new Error(
@@ -189,10 +211,13 @@ const getPostgresPool = () => {
   if (!postgresPool) {
     // When using Supabase Transaction Pooler (port 6543), we optimize for high concurrency.
     // Note: Session-based features like pg_advisory_lock() are not reliable in transaction mode.
+    // Session mode holds connections longer, especially around advisory locks, so tune DB_POOL_SIZE
+    // against your Supabase pool limits and Render instance count in production.
     const ssl = getPostgresSslConfig(connectionString);
     postgresPool = new Pool({
       connectionString,
-      max: connectionMode === 'transaction' ? 20 : 5,
+      max:
+        configuredPoolSize ?? (connectionMode === 'transaction' ? 20 : 10),
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
       ...(ssl ? { ssl } : {}),
