@@ -8,6 +8,9 @@ import {
 type ApplicationPaymentWritePayload = {
   approved_at?: string | null;
   approved_bond?: number | null;
+  bond_notes?: string | null;
+  bond_payment_method?: string | null;
+  bond_payment_status?: string | null;
   approved_vehicle?: string | null;
   approved_weekly_price?: number | null;
   assigned_car_id?: number | null;

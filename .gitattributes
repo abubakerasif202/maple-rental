@@ -1,0 +1,6 @@
+# Keep binary assets safe.
+*.jpeg binary
+*.jpg binary
+*.pdf binary
+*.png binary
+*.webp binary

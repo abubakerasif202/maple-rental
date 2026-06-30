@@ -277,6 +277,8 @@ export interface ApprovedPaymentContextResponse {
   approved_vehicle: string;
   billing: {
     bond: number;
+    bondMethod: string;
+    bondStatus: string;
     currency: string;
     initialRental: number;
     recurringAmount: number;
@@ -404,6 +406,10 @@ export interface LeaseAgreementPayload {
   minimumRentalPeriod?: string;
   returnPolicy?: string;
   fees?: LeaseFeePayload[];
+  bondAmount?: string;
+  bondNotes?: string;
+  bondPaymentMethod?: string;
+  bondPaymentStatus?: string;
 }
 
 export const createVehicleCheckoutLink = async (payload: {
@@ -418,6 +424,9 @@ export const approveApplicationForPayment = async (
   payload: {
     approved_vehicle: string;
     approved_bond: number;
+    bond_notes?: string | null;
+    bond_payment_method?: 'cash' | 'existing_paid' | null;
+    bond_payment_status?: 'to_collect' | 'cash_paid' | 'already_paid';
     approved_weekly_price: number;
     rental_subscription_start_date?: string;
     send_payment_link?: boolean;

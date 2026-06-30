@@ -10,6 +10,18 @@ const toOptionalString = (value: unknown) =>
   typeof value === 'string' ? value.trim() : '';
 const toNonEmptyString = (value: unknown, fallback: string) =>
   toOptionalString(value) || fallback;
+const formatBondStatus = (value: unknown) => {
+  const normalized = toOptionalString(value);
+  if (normalized === 'cash_paid') return 'Paid cash';
+  if (normalized === 'already_paid') return 'Already paid / existing driver';
+  return 'To be collected by admin';
+};
+const formatBondMethod = (value: unknown) => {
+  const normalized = toOptionalString(value);
+  if (normalized === 'cash') return 'Cash';
+  if (normalized === 'existing_paid') return 'Existing paid';
+  return 'Not yet collected';
+};
 
 export const buildLeaseAgreementInput = (
   application: Record<string, any>,
@@ -33,6 +45,14 @@ export const buildLeaseAgreementInput = (
   return {
     ...leaseAgreementBusinessDetails,
     agreementDate: toDateOnly(nowIso),
+    bondAmount: `$${Number(approvedBond || 0).toFixed(2)}`,
+    bondNotes: toOptionalString(application.bond_notes ?? application.bondNotes),
+    bondPaymentMethod: formatBondMethod(
+      application.bond_payment_method ?? application.bondPaymentMethod
+    ),
+    bondPaymentStatus: formatBondStatus(
+      application.bond_payment_status ?? application.bondPaymentStatus
+    ),
     fees: buildCarLeaseAgreementFees(approvedBond),
     renteeName: toNonEmptyString(application.name, 'Driver'),
     renteeDob: toNonEmptyString(

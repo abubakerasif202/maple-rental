@@ -308,6 +308,68 @@ describe('applicationApprovalSchema', () => {
     const result = applicationApprovalSchema.parse({ ...valid, approved_bond: '500' });
     expect(result.approved_bond).toBe(500);
   });
+
+  it('accepts a to-collect bond with no payment method', () => {
+    const result = applicationApprovalSchema.parse({
+      ...valid,
+      bond_payment_method: null,
+      bond_payment_status: 'to_collect',
+    });
+
+    expect(result.bond_payment_status).toBe('to_collect');
+    expect(result.bond_payment_method).toBeNull();
+  });
+
+  it('accepts a cash-paid bond with the cash method', () => {
+    expect(
+      applicationApprovalSchema.parse({
+        ...valid,
+        bond_payment_method: 'cash',
+        bond_payment_status: 'cash_paid',
+      }).bond_payment_method
+    ).toBe('cash');
+  });
+
+  it('accepts an already-paid bond with the existing-paid method', () => {
+    expect(
+      applicationApprovalSchema.parse({
+        ...valid,
+        bond_notes: 'Existing driver receipt checked by admin.',
+        bond_payment_method: 'existing_paid',
+        bond_payment_status: 'already_paid',
+      }).bond_payment_status
+    ).toBe('already_paid');
+  });
+
+  it('rejects an already-paid bond paired with cash', () => {
+    expect(() =>
+      applicationApprovalSchema.parse({
+        ...valid,
+        bond_payment_method: 'cash',
+        bond_payment_status: 'already_paid',
+      })
+    ).toThrow();
+  });
+
+  it('rejects a cash-paid bond paired with existing-paid', () => {
+    expect(() =>
+      applicationApprovalSchema.parse({
+        ...valid,
+        bond_payment_method: 'existing_paid',
+        bond_payment_status: 'cash_paid',
+      })
+    ).toThrow();
+  });
+
+  it('rejects a to-collect bond with a paid method', () => {
+    expect(() =>
+      applicationApprovalSchema.parse({
+        ...valid,
+        bond_payment_method: 'cash',
+        bond_payment_status: 'to_collect',
+      })
+    ).toThrow();
+  });
 });
 
 describe('vehicleCheckoutLinkSchema', () => {
