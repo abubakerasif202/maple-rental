@@ -38,20 +38,18 @@ export const sendDriverPaymentLinkEmail = async ({
   applicantEmail,
   applicantName,
   approvedBond,
-  bondPaymentMethod,
-  bondPaymentStatus,
   approvedWeeklyPrice,
   approvedVehicle,
   checkoutUrl,
+  setupFees,
 }: {
   applicantEmail: string;
   applicantName: string;
   approvedBond: number;
-  bondPaymentMethod?: string | null;
-  bondPaymentStatus?: string | null;
   approvedWeeklyPrice: number;
   approvedVehicle: string;
   checkoutUrl: string;
+  setupFees: number;
 }) => {
   if (!process.env.RESEND_API_KEY) {
     return {
@@ -65,18 +63,7 @@ export const sendDriverPaymentLinkEmail = async ({
   const safeApplicantName = escapeHtml(applicantName);
   const safeApprovedVehicle = escapeHtml(approvedVehicle);
   const safeCheckoutUrl = escapeHtml(checkoutUrl);
-  const bondStatusLabel =
-    bondPaymentStatus === 'cash_paid'
-      ? 'Paid cash'
-      : bondPaymentStatus === 'already_paid'
-        ? 'Already paid / existing driver'
-        : 'To be collected by admin';
-  const bondMethodLabel =
-    bondPaymentMethod === 'cash'
-      ? 'Cash'
-      : bondPaymentMethod === 'existing_paid'
-        ? 'Existing paid'
-        : 'Not yet collected';
+  const hasSetupFees = setupFees > 0;
 
   try {
     await sendResendEmail(resend, {
@@ -89,12 +76,11 @@ export const sendDriverPaymentLinkEmail = async ({
           <p>Hi ${safeApplicantName},</p>
           <p>Your application review is complete and your secure checkout link is now ready.</p>
           <p><strong>Approved vehicle:</strong> ${safeApprovedVehicle}</p>
-          <p><strong>Stripe weekly charge:</strong> ${formatCurrency(approvedWeeklyPrice)} per week</p>
-          <p><strong>Bond:</strong> ${formatCurrency(approvedBond)} manual / not charged by Stripe</p>
-          <p><strong>Bond status:</strong> ${escapeHtml(bondStatusLabel)}</p>
-          <p><strong>Bond method:</strong> ${escapeHtml(bondMethodLabel)}</p>
-          <p>Bond is handled manually by Maple Rentals and is not charged through Stripe.</p>
-          <p>Stripe will only charge the approved weekly rental subscription amount.</p>
+          <p><strong>Bond:</strong> ${formatCurrency(approvedBond)}</p>
+          <p><strong>Weekly payment:</strong> ${formatCurrency(approvedWeeklyPrice)}</p>
+          ${hasSetupFees ? `<p><strong>Setup fees:</strong> ${formatCurrency(setupFees)}</p>` : ''}
+          <p><strong>Total due now:</strong> ${formatCurrency(approvedWeeklyPrice)}</p>
+          <p>Stripe will charge the weekly payment now, then automatically bill ${formatCurrency(approvedWeeklyPrice)} each week.</p>
           <p>Once Stripe confirms payment, Maple Rentals finalises onboarding and handover with you directly.</p>
           <p>
             <a

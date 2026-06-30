@@ -28,7 +28,7 @@ import {
   persistPendingCheckoutSessionIdIfCurrentVersion,
   updateApplicationPaymentStateIfCurrentVersion,
 } from '../applicationPaymentState.js';
-import { LEASE_SETTINGS } from '../constants.js';
+import { LEASE_SETTINGS, RENTAL_PLAN_SETUP_FEES_AUD } from '../constants.js';
 import {
   getTodayInAustralia,
   isValidDateOnly,
@@ -41,8 +41,6 @@ const DEFAULT_APPROVED_VEHICLE_LABEL = 'Approved vehicle to be confirmed by Mapl
 
 type BillingBreakdown = {
   bond: number;
-  bondMethod: 'Cash' | 'Existing paid' | 'Not yet collected';
-  bondStatus: 'To be collected by admin' | 'Paid cash' | 'Already paid / existing driver';
   currency: string;
   initialRental: number;
   recurringAmount: number;
@@ -266,30 +264,17 @@ const buildApprovedBillingBreakdown = (application: StripeApplication): BillingB
   const approvedWeeklyPriceCents = Math.round(
     Number(application.approved_weekly_price || 0) * 100
   );
-  const bondStatus =
-    application.bond_payment_status === 'cash_paid'
-      ? 'Paid cash'
-      : application.bond_payment_status === 'already_paid'
-        ? 'Already paid / existing driver'
-        : 'To be collected by admin';
-  const bondMethod =
-    application.bond_payment_method === 'cash'
-      ? 'Cash'
-      : application.bond_payment_method === 'existing_paid'
-        ? 'Existing paid'
-        : 'Not yet collected';
+  const setupFeesCents = Math.round(RENTAL_PLAN_SETUP_FEES_AUD * 100);
 
   return {
     bond: fromCents(approvedBondCents),
-    bondMethod,
-    bondStatus,
     currency: LEASE_SETTINGS.currency.toUpperCase(),
     initialRental: fromCents(approvedWeeklyPriceCents),
     recurringAmount: fromCents(approvedWeeklyPriceCents),
     recurringInterval: LEASE_SETTINGS.recurring_interval,
     recurringIntervalCount: 1,
     recurringLabel: 'per week',
-    setupFees: 0,
+    setupFees: fromCents(setupFeesCents),
     upfrontDue: fromCents(approvedWeeklyPriceCents),
   };
 };
