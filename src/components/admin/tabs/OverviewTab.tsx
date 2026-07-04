@@ -134,11 +134,9 @@ export default function OverviewTab({
                 className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-white/10 transition-all"
               >
                 <div className="flex items-center gap-4">
-                  <img
-                    src={car.image}
-                    alt=""
-                    className="w-12 h-8 object-cover rounded-lg"
-                  />
+                  <div className="flex h-8 w-12 items-center justify-center rounded-lg border border-white/10 bg-brand-navy/70 text-[7px] font-bold uppercase tracking-[0.2em] text-brand-grey">
+                    N/A
+                  </div>
                   <div>
                     <p className="text-sm font-bold text-white">{car.name}</p>
                     <p className="text-[10px] text-brand-grey uppercase tracking-widest">

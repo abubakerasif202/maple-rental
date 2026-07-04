@@ -412,7 +412,6 @@ export const toCarWritePayload = async (car: {
   weekly_price: number;
   bond: number;
   status: string;
-  image: string;
 }) => {
   const { coreMode } = await getSchemaCompat();
   const normalizedBond =
@@ -427,7 +426,7 @@ export const toCarWritePayload = async (car: {
         weeklyPrice: car.weekly_price,
         bond: normalizedBond,
         status: car.status,
-        image: car.image,
+        image: '',
       }
     : {
         name: car.name,
@@ -435,7 +434,7 @@ export const toCarWritePayload = async (car: {
         weekly_price: car.weekly_price,
         bond: normalizedBond,
         status: car.status,
-        image: car.image,
+        image: '',
       };
 };
 

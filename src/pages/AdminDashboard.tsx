@@ -59,7 +59,6 @@ import VehicleActionDialog from '../components/admin/vehicles/VehicleActionDialo
 
 import * as api from '../lib/api';
 import { getApiErrorMessage } from '../lib/errorHandling';
-import { uploadVehicleImage } from '../lib/vehicleImageStorage';
 import {
   Car as CarType,
   Application,
@@ -75,7 +74,6 @@ import { getTodayInAustralia } from '../../shared/applicationSubmission';
 import type { VehicleDialogMode, VehicleFormValues } from '../components/admin/vehicles/types';
 
 const OPERATIONAL_PAGE_SIZE = 25;
-const DEFAULT_VEHICLE_IMAGE = '/hero-camry.webp';
 
 type VehicleFilter = 'active' | 'all' | 'archived';
 
@@ -85,7 +83,6 @@ const createEmptyVehicleForm = (): VehicleFormValues => ({
   weekly_price: 0,
   bond: 500,
   status: 'Available',
-  image: DEFAULT_VEHICLE_IMAGE,
 });
 const bondStatusLabels = {
   to_collect: 'To be collected by admin',
@@ -181,9 +178,6 @@ export default function AdminDashboard() {
   const [vehicleFormErrors, setVehicleFormErrors] = useState<
     Partial<Record<keyof VehicleFormValues, string>>
   >({});
-  const [vehicleImageFile, setVehicleImageFile] = useState<File | null>(null);
-  const [vehicleImagePreview, setVehicleImagePreview] = useState(DEFAULT_VEHICLE_IMAGE);
-  const [isUploadingVehicleImage, setIsUploadingVehicleImage] = useState(false);
   const [vehicleFilter, setVehicleFilter] = useState<VehicleFilter>('all');
   const [vehicleSearch, setVehicleSearch] = useState('');
   const [vehicleDialogMode, setVehicleDialogMode] = useState<VehicleDialogMode | null>(null);
@@ -276,14 +270,6 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (vehicleImagePreview.startsWith('blob:')) {
-        URL.revokeObjectURL(vehicleImagePreview);
-      }
-    };
-  }, [vehicleImagePreview]);
-
   const showNotification = (message: string, type: 'success' | 'error') => {
     if (notificationTimeoutRef.current !== null) {
       window.clearTimeout(notificationTimeoutRef.current);
@@ -312,9 +298,6 @@ export default function AdminDashboard() {
     setVehicleForm(createEmptyVehicleForm());
     setVehicleInitialForm(createEmptyVehicleForm());
     setVehicleFormErrors({});
-    setVehicleImageFile(null);
-    setVehicleImagePreview(DEFAULT_VEHICLE_IMAGE);
-    setIsUploadingVehicleImage(false);
   }
 
   function openAddVehicleModal() {
@@ -324,8 +307,6 @@ export default function AdminDashboard() {
     setVehicleForm(emptyForm);
     setVehicleInitialForm(emptyForm);
     setVehicleFormErrors({});
-    setVehicleImageFile(null);
-    setVehicleImagePreview(DEFAULT_VEHICLE_IMAGE);
     setVehicleDialogMode(null);
     setVehicleActionTarget(null);
   }
@@ -333,7 +314,6 @@ export default function AdminDashboard() {
   function openEditVehicleModal(car: CarType) {
     const nextForm = {
       bond: Number(car.bond || 0),
-      image: car.image || DEFAULT_VEHICLE_IMAGE,
       model_year: Number(car.model_year || new Date().getFullYear()),
       name: car.name || '',
       status: car.status,
@@ -345,8 +325,6 @@ export default function AdminDashboard() {
     setVehicleForm(nextForm);
     setVehicleInitialForm(nextForm);
     setVehicleFormErrors({});
-    setVehicleImageFile(null);
-    setVehicleImagePreview(car.image || DEFAULT_VEHICLE_IMAGE);
     setVehicleDialogMode(null);
     setVehicleActionTarget(null);
   }
@@ -374,31 +352,6 @@ export default function AdminDashboard() {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleVehicleImagePrepared = ({
-    file,
-    previewUrl,
-  }: {
-    file: File;
-    previewUrl: string;
-  }) => {
-    if (vehicleImagePreview.startsWith('blob:')) {
-      URL.revokeObjectURL(vehicleImagePreview);
-    }
-
-    setVehicleImageFile(file);
-    setVehicleImagePreview(previewUrl);
-  };
-
-  const handleRemoveVehicleImage = () => {
-    if (vehicleImagePreview.startsWith('blob:')) {
-      URL.revokeObjectURL(vehicleImagePreview);
-    }
-
-    setVehicleImageFile(null);
-    setVehicleImagePreview(DEFAULT_VEHICLE_IMAGE);
-    setVehicleForm((current) => ({ ...current, image: DEFAULT_VEHICLE_IMAGE }));
-  };
-
   const closeVehicleActionDialog = () => {
     setVehicleDialogMode(null);
     setVehicleActionTarget(null);
@@ -420,21 +373,12 @@ export default function AdminDashboard() {
       return;
     }
 
-    let imageUrl = vehicleForm.image || DEFAULT_VEHICLE_IMAGE;
-    let uploadedImage: { path: string; publicUrl: string } | null = null;
-
     try {
-      if (vehicleImageFile) {
-        setIsUploadingVehicleImage(true);
-        uploadedImage = await uploadVehicleImage(vehicleImageFile);
-        imageUrl = uploadedImage.publicUrl;
-      }
-
       const payload: CarType = {
         id: editingCar?.id ?? 0,
         archived_at: editingCar?.archived_at ?? null,
         bond: Number(vehicleForm.bond),
-        image: imageUrl,
+        image: '',
         model_year: Number(vehicleForm.model_year),
         name: vehicleForm.name.trim(),
         status: vehicleForm.status,
@@ -447,31 +391,11 @@ export default function AdminDashboard() {
         await addCarMutation.mutateAsync(payload);
       }
     } catch (error) {
-      if (uploadedImage?.publicUrl) {
-        try {
-          await api.removeVehicleImageUpload(uploadedImage.publicUrl);
-        } catch (cleanupError) {
-          console.warn('Failed to clean up uploaded vehicle image after save failure:', cleanupError);
-        }
-      }
-
       showNotification(
-        getApiErrorMessage(
-          error,
-          vehicleImageFile
-            ? uploadedImage
-              ? editingCar
-                ? 'Failed to update vehicle'
-                : 'Failed to add vehicle'
-              : 'Failed to upload vehicle image'
-            : editingCar
-              ? 'Failed to update vehicle'
-              : 'Failed to add vehicle'
-        ),
+        getApiErrorMessage(error, editingCar ? 'Failed to update vehicle' : 'Failed to add vehicle'),
         'error'
       );
     } finally {
-      setIsUploadingVehicleImage(false);
     }
   };
 
@@ -1104,12 +1028,11 @@ export default function AdminDashboard() {
   const invoiceTotalPages = invoiceDataset?.totalPages || 1;
   const invoiceTotalItems = invoiceDataset?.totalItems || 0;
   const isVehicleModalOpen = isAddingCar || Boolean(editingCar);
-  const isVehicleSubmitting =
-    isUploadingVehicleImage || addCarMutation.isPending || updateCarMutation.isPending;
+  const isVehicleSubmitting = addCarMutation.isPending || updateCarMutation.isPending;
   const isVehicleActionPending =
     archiveCarMutation.isPending || deleteCarMutation.isPending;
   const hasUnsavedVehicleChanges =
-    vehicleImageFile !== null || JSON.stringify(vehicleForm) !== JSON.stringify(vehicleInitialForm);
+    JSON.stringify(vehicleForm) !== JSON.stringify(vehicleInitialForm);
   const renderLoadingPanel = (message: string) => (
     <div className="bg-white/5 border border-white/10 rounded-3xl p-10 flex items-center gap-4 text-sm text-brand-grey">
       <Loader2 className="w-5 h-5 animate-spin text-brand-gold" />
@@ -1950,10 +1873,8 @@ export default function AdminDashboard() {
         form={vehicleForm}
         formErrors={vehicleFormErrors}
         hasUnsavedChanges={hasUnsavedVehicleChanges}
-        imagePreviewUrl={vehicleImagePreview}
         isOpen={isVehicleModalOpen}
         isSubmitting={isVehicleSubmitting}
-        isUploading={isUploadingVehicleImage}
         onArchiveOrRestore={() => {
           if (!editingCar) {
             return;
@@ -1974,9 +1895,6 @@ export default function AdminDashboard() {
           setVehicleForm((current) => ({ ...current, [field]: value }));
           setVehicleFormErrors((current) => ({ ...current, [field]: undefined }));
         }}
-        onImageNotify={showNotification}
-        onImageReady={handleVehicleImagePrepared}
-        onRemoveImage={handleRemoveVehicleImage}
         onRequestClose={requestCloseVehicleModal}
         onSave={handleSaveVehicle}
         vehicle={editingCar}

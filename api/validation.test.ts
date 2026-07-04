@@ -74,8 +74,8 @@ describe('carSchema', () => {
     expect(() => carSchema.parse({ ...validCar, image: '//cdn.example.com/car.jpg' })).toThrow();
   });
 
-  it('rejects an empty image string', () => {
-    expect(() => carSchema.parse({ ...validCar, image: '' })).toThrow();
+  it('accepts an empty image string', () => {
+    expect(() => carSchema.parse({ ...validCar, image: '' })).not.toThrow();
   });
 
   it('rejects a missing name field', () => {

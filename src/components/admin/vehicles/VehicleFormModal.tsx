@@ -2,7 +2,6 @@ import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertTriangle, Archive, CheckCircle2, Loader2, RotateCcw, Trash2, XCircle } from 'lucide-react';
 import type { Car } from '../../../types';
-import VehicleImageUploader from './VehicleImageUploader';
 import type { VehicleFormValues } from './types';
 
 type VehicleFieldErrors = Partial<Record<keyof VehicleFormValues, string>>;
@@ -11,16 +10,11 @@ interface VehicleFormModalProps {
   form: VehicleFormValues;
   formErrors: VehicleFieldErrors;
   hasUnsavedChanges: boolean;
-  imagePreviewUrl: string;
   isOpen: boolean;
   isSubmitting: boolean;
-  isUploading: boolean;
   onArchiveOrRestore: () => void;
   onDelete: () => void;
   onFieldChange: <K extends keyof VehicleFormValues>(field: K, value: VehicleFormValues[K]) => void;
-  onImageNotify: (message: string, type: 'success' | 'error') => void;
-  onImageReady: (result: { file: File; previewUrl: string }) => void;
-  onRemoveImage: () => void;
   onRequestClose: () => void;
   onSave: () => void;
   vehicle: Car | null;
@@ -50,16 +44,11 @@ export default function VehicleFormModal({
   form,
   formErrors,
   hasUnsavedChanges,
-  imagePreviewUrl,
   isOpen,
   isSubmitting,
-  isUploading,
   onArchiveOrRestore,
   onDelete,
   onFieldChange,
-  onImageNotify,
-  onImageReady,
-  onRemoveImage,
   onRequestClose,
   onSave,
   vehicle,
@@ -70,8 +59,6 @@ export default function VehicleFormModal({
 
   const isEditing = Boolean(vehicle);
   const isArchived = Boolean(vehicle?.archived_at);
-  const hasCustomImage = imagePreviewUrl !== '/hero-camry.webp';
-
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[60] flex items-end justify-center bg-brand-navy/70 backdrop-blur-xl sm:items-center sm:p-6">
@@ -90,8 +77,8 @@ export default function VehicleFormModal({
                 {isEditing ? 'Edit Vehicle' : 'Add Vehicle'}
               </h3>
               <p className="mt-2 max-w-2xl text-sm text-brand-grey">
-                Keep the fleet current with one clean editor for vehicle details, image handling,
-                and status management.
+                Keep the fleet current with one clean editor for vehicle details, rego, and status
+                management.
               </p>
             </div>
             <button
@@ -103,16 +90,7 @@ export default function VehicleFormModal({
             </button>
           </div>
 
-          <div className="grid flex-1 gap-8 overflow-y-auto p-5 lg:grid-cols-[1.15fr_0.85fr] lg:p-8">
-            <VehicleImageUploader
-              currentImageUrl={imagePreviewUrl}
-              hasCustomImage={hasCustomImage}
-              isUploading={isUploading}
-              onFileReady={onImageReady}
-              onNotify={onImageNotify}
-              onRemoveImage={onRemoveImage}
-            />
-
+          <div className="grid flex-1 gap-8 overflow-y-auto p-5 lg:grid-cols-1 lg:p-8">
             <div className="space-y-6">
               <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-5 sm:p-6">
                 <div className="grid gap-5 sm:grid-cols-2">
@@ -180,7 +158,7 @@ export default function VehicleFormModal({
                     <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-brand-grey">
                       Staff Guidance
                     </p>
-                    <p className="mt-2 text-sm leading-7 text-brand-grey">
+                <p className="mt-2 text-sm leading-7 text-brand-grey">
                       Save keeps the vehicle live and up to date. Archive is safer than delete when
                       you want to take a vehicle out of rotation without losing its history.
                     </p>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Archive, Edit2, Eye, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Archive, Edit2, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import type { Car } from '../../../types';
 import VehicleFilters from '../vehicles/VehicleFilters';
 
@@ -198,8 +198,8 @@ export default function FleetTab({
                   className="grid gap-5 px-5 py-5 transition-colors hover:bg-white/[0.04] lg:grid-cols-[minmax(0,2.5fr)_120px_140px_140px_150px_190px] lg:items-center lg:px-6"
                 >
                   <div className="flex min-w-0 items-center gap-4">
-                    <div className="h-20 w-28 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-brand-navy/70">
-                      <img src={car.image} alt={car.name} className="h-full w-full object-cover" />
+                    <div className="flex h-20 w-28 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-brand-navy/70 text-[9px] font-bold uppercase tracking-[0.22em] text-brand-grey">
+                      No image
                     </div>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -213,15 +213,6 @@ export default function FleetTab({
                       <p className="mt-1 text-xs uppercase tracking-[0.22em] text-brand-grey">
                         {car.model_year} model
                       </p>
-                      <a
-                        href={car.image}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-3 inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-brand-gold transition-colors hover:text-brand-gold-light"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        View image
-                      </a>
                     </div>
                   </div>
 

@@ -19,7 +19,6 @@ import { calculateBondFromWeeklyRent } from '../../shared/rentalPricing.js';
 import { syncRealtimeFleet } from '../../scripts/sync-realtime-fleet.js';
 
 const router = express.Router();
-const VEHICLE_IMAGES_BUCKET = (process.env.SUPABASE_VEHICLE_IMAGES_BUCKET || 'vehicle-images').trim();
 
 router.post('/admin/sync', authenticateAdmin, async (_req, res) => {
   try {
@@ -49,10 +48,6 @@ const archiveCarSchema = z.object({
   archived: z.boolean(),
 });
 
-const cleanupVehicleImageSchema = z.object({
-  imageUrl: z.string().url(),
-});
-
 const PUBLIC_REGISTRATION_SUFFIX_PATTERN =
   /\s*(?:\([A-Z0-9-]*\d[A-Z0-9-]*\)|[-|]\s*[A-Z0-9-]*\d[A-Z0-9-]*)\s*$/i;
 
@@ -68,6 +63,7 @@ const toCarResponse = (car: Record<string, any>): CarRecord =>
     ...car,
     archived_at: car.archived_at ?? null,
     bond: toCarBond(car),
+    image: '',
   }) as CarRecord;
 
 const toPublicCarResponse = (car: Record<string, any>): CarRecord => {
@@ -83,58 +79,6 @@ const toPublicCarResponse = (car: Record<string, any>): CarRecord => {
     bond: 0,
     image: '',
   };
-};
-
-const toStorageOrigin = () => {
-  const candidate = process.env.SUPABASE_URL;
-  if (!candidate) {
-    return null;
-  }
-
-  try {
-    return new URL(candidate).origin;
-  } catch {
-    return null;
-  }
-};
-
-const extractManagedVehicleImagePath = (imageUrl: string | null | undefined) => {
-  if (!imageUrl) {
-    return null;
-  }
-
-  try {
-    const parsed = new URL(imageUrl);
-    const storageOrigin = toStorageOrigin();
-
-    if (!storageOrigin || parsed.origin !== storageOrigin) {
-      return null;
-    }
-
-    const publicPrefix = `/storage/v1/object/public/${VEHICLE_IMAGES_BUCKET}/`;
-    if (!parsed.pathname.startsWith(publicPrefix)) {
-      return null;
-    }
-
-    const remainder = parsed.pathname.slice(publicPrefix.length);
-    return remainder ? decodeURIComponent(remainder) : null;
-  } catch {
-    return null;
-  }
-};
-
-const removeUploadedVehicleImage = async (imageUrl: string | null | undefined) => {
-  const storagePath = extractManagedVehicleImagePath(imageUrl);
-
-  if (!storagePath) {
-    return;
-  }
-
-  const { error } = await db.storage.from(VEHICLE_IMAGES_BUCKET).remove([storagePath]);
-
-  if (error) {
-    console.warn(`Failed to clean up vehicle image ${storagePath}:`, error);
-  }
 };
 
 const toPublicSiteOrigin = () => {
@@ -259,21 +203,6 @@ router.get('/admin/all', authenticateAdmin, async (_req, res) => {
   res.json((data || []).map((car) => toCarResponse(car as Record<string, any>)));
 });
 
-router.delete('/image', authenticateAdmin, async (req, res) => {
-  try {
-    const { imageUrl } = cleanupVehicleImageSchema.parse(req.body ?? {});
-    await removeUploadedVehicleImage(imageUrl);
-    res.json({ success: true });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.issues });
-    }
-
-    console.error('Vehicle image cleanup error:', error);
-    res.status(500).json({ error: 'Failed to clean up vehicle image' });
-  }
-});
-
 router.get('/:id', async (req, res) => {
   const data = await fetchCarById(req.params.id);
 
@@ -313,9 +242,6 @@ router.put('/:id', authenticateAdmin, async (req, res) => {
     const { error } = await db.from('cars').update(payload).eq('id', req.params.id);
 
     if (error) throw error;
-    if (existingCar.image && existingCar.image !== data.image) {
-      await removeUploadedVehicleImage(existingCar.image);
-    }
     notifyIndexNowForCarChange(req.params.id, 'updated');
     res.json({ success: true });
   } catch (err) {
@@ -408,7 +334,6 @@ router.delete('/:id', authenticateAdmin, async (req, res) => {
 
     const { error } = await db.from('cars').delete().eq('id', req.params.id);
     if (error) throw error;
-    await removeUploadedVehicleImage(existingCar.image);
     notifyIndexNowForCarChange(req.params.id, 'deleted');
     res.json({ success: true });
   } catch (error) {

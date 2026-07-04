@@ -444,6 +444,11 @@ const registerCoreRoutes = (app: express.Express) => {
   if (cspReportingEnabled && cspReportPath) {
     app.post(
       cspReportPath,
+      rateLimit({
+        windowMs: 60 * 1000,
+        max: 10,
+        message: 'Too many CSP reports.',
+      }),
       express.json({
         type: [
           'application/csp-report',
@@ -466,7 +471,17 @@ const registerCoreRoutes = (app: express.Express) => {
     });
   });
 
-  app.get('/api/health', async (_req, res) => {
+  app.get(
+    '/api/health',
+    rateLimit({
+      windowMs: 60 * 1000,
+      max: 30,
+      message: 'Too many health check requests.',
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      skip: () => process.env.VITEST === 'true',
+    }),
+    async (_req, res) => {
     let database: 'ok' | 'not_configured' | 'unavailable' = 'ok';
     let directDatabase: DirectDatabaseHealthStatus = 'not_configured';
     let directDatabaseSchemaIssues: string[] = [];

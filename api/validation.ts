@@ -29,10 +29,9 @@ const isHttpUrl = (value: string) => {
 const carImageSchema = z
   .string()
   .trim()
-  .min(1)
   .refine(
-    (value) => isRootRelativeAssetPath(value) || isHttpUrl(value),
-    "Image must be a root-relative asset path or an absolute HTTP(S) URL",
+    (value) => value === '' || isRootRelativeAssetPath(value) || isHttpUrl(value),
+    "Image must be blank, a root-relative asset path, or an absolute HTTP(S) URL",
   );
 
 export const adminLoginSchema = z.object({

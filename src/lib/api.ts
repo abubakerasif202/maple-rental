@@ -78,15 +78,6 @@ export const deleteCar = async (id: number): Promise<{ success: boolean }> => {
   return data;
 };
 
-export const removeVehicleImageUpload = async (
-  imageUrl: string
-): Promise<{ success: boolean }> => {
-  const { data } = await api.delete('/cars/image', {
-    data: { imageUrl },
-  });
-  return data;
-};
-
 export const archiveCar = async (
   id: number,
   archived: boolean
