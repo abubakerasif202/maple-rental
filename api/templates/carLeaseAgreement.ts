@@ -143,10 +143,16 @@ export const resolveCarLeaseAgreementInput = (
   input: Partial<CarLeaseAgreementInput> = {}
 ) => {
   const defaultCarLeaseAgreement = buildDefaultCarLeaseAgreement();
+  const bondAmount = Number(
+    String(input.bondAmount ?? defaultCarLeaseAgreement.bondAmount)
+      .replace(/[^0-9.-]/g, '')
+  );
   return {
     ...defaultCarLeaseAgreement,
     ...input,
-    fees: input.fees ?? defaultCarLeaseAgreement.fees,
+    fees:
+      input.fees ??
+      buildCarLeaseAgreementFees(Number.isFinite(bondAmount) ? bondAmount : 0),
   };
 };
 
@@ -157,6 +163,17 @@ export const renderCarLeaseAgreementTemplate = (
   const agreement: CarLeaseAgreementInput = resolveCarLeaseAgreementInput(input);
   const feeLines = agreement.fees
     .map((fee) => `${fee.code} ${fee.title}: ${fee.amount}`)
+    .concat(
+      template.includes('{{bondPaymentStatus}}')
+        ? []
+        : [`Bond Payment Status: ${agreement.bondPaymentStatus}`],
+      template.includes('{{bondPaymentMethod}}')
+        ? []
+        : [`Bond Payment Method: ${agreement.bondPaymentMethod}`],
+      template.includes('{{bondNotesLine}}') || !agreement.bondNotes
+        ? []
+        : [`Bond Notes: ${agreement.bondNotes}`],
+    )
     .join('\n');
 
   const values: Record<string, string> = {

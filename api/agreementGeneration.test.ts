@@ -103,6 +103,7 @@ describe('renderApplicationLeaseAgreement', () => {
 
     expect(agreement).toContain('Weekly Rent: $450.00 per week');
     expect(agreement).toContain('Bond Amount: $900.00');
+    expect(agreement).toContain('4.1 Security Bond: $900.00');
     expect(agreement).toContain('Bond Status: Already paid / existing driver');
     expect(agreement).toContain('Bond Method: Existing paid');
     expect(agreement).toContain(

@@ -22,6 +22,56 @@ type LeaseAgreementRecord = {
   vehicle_label?: string | null;
 };
 
+type DatabaseError = {
+  code?: string;
+  column?: string;
+  constraint?: string;
+  message?: string;
+  table?: string;
+};
+
+const getDatabaseError = (error: unknown): DatabaseError =>
+  error && typeof error === 'object' ? (error as DatabaseError) : {};
+
+const getDatabaseErrorCode = (error: unknown) =>
+  String(getDatabaseError(error).code || '').toUpperCase();
+
+const getDatabaseErrorMessage = (error: unknown) =>
+  String(getDatabaseError(error).message || 'Database operation failed')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 300);
+
+const inferDatabaseErrorValue = (
+  error: unknown,
+  property: 'column' | 'constraint' | 'table',
+) => {
+  const databaseError = getDatabaseError(error);
+  if (databaseError[property]) return String(databaseError[property]);
+
+  const patterns = {
+    column: /column ["']([^"']+)["']/i,
+    constraint: /constraint ["']([^"']+)["']/i,
+    table: /relation ["']([^"']+)["']/i,
+  } as const;
+  return databaseError.message?.match(patterns[property])?.[1] || null;
+};
+
+const logAgreementSaveError = (error: unknown, operation: string) => {
+  console.error('Lease agreement save failed', {
+    code: getDatabaseErrorCode(error) || null,
+    column: inferDatabaseErrorValue(error, 'column'),
+    constraint: inferDatabaseErrorValue(error, 'constraint'),
+    message: getDatabaseErrorMessage(error),
+    operation,
+    table: inferDatabaseErrorValue(error, 'table') || 'lease_agreements',
+  });
+};
+
+const isRequiredColumnError = (error: unknown, column: string) =>
+  getDatabaseErrorCode(error) === '23502' &&
+  getDatabaseErrorMessage(error).toLowerCase().includes(column.toLowerCase());
+
 const isMissingVehicleLabelColumnError = (error: unknown) =>
   Boolean(
     error &&
@@ -34,16 +84,13 @@ const isMissingVehicleLabelColumnError = (error: unknown) =>
   );
 
 const isCarIdRequiredError = (error: unknown) =>
-  Boolean(
-    error &&
-      typeof error === 'object' &&
-      (String((error as { code?: string }).code || '') === '23502' ||
-        String((error as { message?: string }).message || '').toLowerCase().includes('null value')) &&
-      [String((error as { message?: string }).message || ''), String((error as { details?: string }).details || '')]
-        .join(' ')
-        .toLowerCase()
-        .includes('car_id')
-  );
+  isRequiredColumnError(error, 'car_id');
+
+const isLegacyApplicationIdRequiredError = (error: unknown) =>
+  isRequiredColumnError(error, 'legacy_application_id');
+
+const isUniqueViolationError = (error: unknown) =>
+  getDatabaseErrorCode(error) === '23505';
 
 const getAgreementSaveSchemaMessage = (error: unknown) => {
   if (isCarIdRequiredError(error)) {
@@ -52,6 +99,10 @@ const getAgreementSaveSchemaMessage = (error: unknown) => {
 
   if (isMissingVehicleLabelColumnError(error)) {
     return 'Agreement storage is missing manual vehicle support: lease_agreements.vehicle_label is not available. Apply the manual vehicle agreement migration and retry.';
+  }
+
+  if (isLegacyApplicationIdRequiredError(error)) {
+    return 'Agreement storage still requires a retired application ID. Apply the lease agreement idempotency migration and retry.';
   }
 
   return null;
@@ -137,6 +188,7 @@ router.post('/car-lease/render', authenticateAdmin, async (req, res) => {
 });
 
 router.post('/', authenticateAdmin, async (req, res) => {
+  let saveOperation = 'validate';
   try {
     const data = createLeaseAgreementSchema.parse(req.body);
     const applicationSelectColumns = await getApplicationSelectColumns();
@@ -162,37 +214,65 @@ router.post('/', authenticateAdmin, async (req, res) => {
       });
     }
 
-    const insertPayload = {
-      ...data,
-      car_id: data.car_id ?? null,
+    const savePayload = {
+      application_id: data.application_id,
+      car_id: null,
+      content: data.content,
+      status: data.status,
       vehicle_label: data.vehicle_label || null,
     };
-    const existingQuery = db
+    saveOperation = 'find-existing';
+    const findExistingAgreement = () => db
       .from('lease_agreements')
-      .select('id')
+      .select('id, content')
       .eq('application_id', data.application_id)
-      .eq('content', data.content);
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    const { data: existing, error: existingError } =
-      data.vehicle_label
-        ? await existingQuery.eq('vehicle_label', data.vehicle_label).maybeSingle()
-        : await existingQuery.maybeSingle();
+    const updateAgreement = async (id: number | string) => {
+      saveOperation = 'update';
+      let result = await db
+        .from('lease_agreements')
+        .update(savePayload)
+        .eq('id', id)
+        .select('id')
+        .single();
 
-    if (existingError && !isMissingVehicleLabelColumnError(existingError)) {
-      throw existingError;
-    }
+      if (result.error && isMissingVehicleLabelColumnError(result.error)) {
+        const { vehicle_label: _vehicleLabel, ...legacySavePayload } = savePayload;
+        result = await db
+          .from('lease_agreements')
+          .update(legacySavePayload)
+          .eq('id', id)
+          .select('id')
+          .single();
+      }
+
+      return result;
+    };
+
+    const { data: existing, error: existingError } = await findExistingAgreement();
+    if (existingError) throw existingError;
 
     if (existing?.id) {
-      return res.status(200).json({ id: String(existing.id), duplicate: true });
+      const updated = await updateAgreement(existing.id);
+      if (updated.error) throw updated.error;
+      return res.status(200).json({
+        id: String(updated.data.id),
+        duplicate: existing.content === data.content,
+        updated: true,
+      });
     }
 
-    let { data: inserted, error } = await db.from('lease_agreements').insert([insertPayload]).select('id').single();
+    saveOperation = 'insert';
+    let { data: inserted, error } = await db.from('lease_agreements').insert([savePayload]).select('id').single();
 
     if (error && isMissingVehicleLabelColumnError(error)) {
       const {
         vehicle_label: _vehicleLabel,
         ...legacyInsertPayload
-      } = insertPayload;
+      } = savePayload;
       const retry = await db
         .from('lease_agreements')
         .insert([legacyInsertPayload])
@@ -202,24 +282,42 @@ router.post('/', authenticateAdmin, async (req, res) => {
       error = retry.error;
     }
 
-    if (error) {
-      const schemaMessage = getAgreementSaveSchemaMessage(error);
-      if (schemaMessage) {
-        return res.status(503).json({ error: schemaMessage });
+    if (error && isUniqueViolationError(error)) {
+      const racedExisting = await findExistingAgreement();
+      if (racedExisting.error) throw racedExisting.error;
+      if (racedExisting.data?.id) {
+        const updated = await updateAgreement(racedExisting.data.id);
+        if (updated.error) throw updated.error;
+        return res.status(200).json({
+          id: String(updated.data.id),
+          duplicate: racedExisting.data.content === data.content,
+          updated: true,
+        });
       }
-      throw error;
     }
+
+    if (error) throw error;
     res.status(201).json({ id: String(inserted.id) });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: err.issues });
     }
+    logAgreementSaveError(err, saveOperation);
     const schemaMessage = getAgreementSaveSchemaMessage(err);
     if (schemaMessage) {
       return res.status(503).json({ error: schemaMessage });
     }
-    console.error('Lease agreement creation error:', err);
-    res.status(500).json({ error: 'Failed to save lease agreement. Please try again or contact support if it continues.' });
+    const code = getDatabaseErrorCode(err);
+    if (code === '23503') {
+      return res.status(409).json({ error: 'The application is no longer available for agreement saving.' });
+    }
+    if (code === '42501') {
+      return res.status(503).json({ error: 'Agreement storage permissions rejected the save. Contact support.' });
+    }
+    res.status(500).json({
+      error: 'Failed to save lease agreement. Please try again or contact support if it continues.',
+      ...(code ? { code } : {}),
+    });
   }
 });
 

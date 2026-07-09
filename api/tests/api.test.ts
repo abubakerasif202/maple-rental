@@ -217,7 +217,9 @@ const {
     leaseAgreementInsertErrorMode: null as
       | null
       | "missing_vehicle_label"
-      | "car_id_required",
+      | "car_id_required"
+      | "legacy_application_id_required"
+      | "generic_failure",
   },
   mockGetUser: vi.fn(),
   mockRefreshSession: vi.fn(),
@@ -993,6 +995,20 @@ vi.mock("../db/index.js", () => {
               details: "Failing row contains null for car_id",
               message: 'null value in column "car_id" of relation "lease_agreements" violates not-null constraint',
             }
+          : table === "lease_agreements" &&
+              mockState.leaseAgreementInsertErrorMode === "legacy_application_id_required"
+            ? {
+                code: "23502",
+                details: "Failing row contains null for legacy_application_id",
+                message: 'null value in column "legacy_application_id" of relation "lease_agreements" violates not-null constraint',
+              }
+            : table === "lease_agreements" &&
+                mockState.leaseAgreementInsertErrorMode === "generic_failure"
+              ? {
+                  code: "57014",
+                  details: "Statement cancelled",
+                  message: "database statement was cancelled",
+                }
           : null;
 
     if (
@@ -2255,7 +2271,7 @@ describe("Agreements API", () => {
     });
   });
 
-  it("POST /api/agreements does not require matching an available fleet car after payment", async () => {
+  it("POST /api/agreements ignores car_id and saves the manual vehicle label", async () => {
     mockState.applications[1].status = "Paid";
     mockState.cars[1].status = "Maintenance";
 
@@ -2273,7 +2289,7 @@ describe("Agreements API", () => {
     expect(mockState.lease_agreements).toHaveLength(1);
     expect(mockState.lease_agreements[0]).toMatchObject({
       application_id: APPROVED_APPLICATION_ID,
-      car_id: 2,
+      car_id: null,
       vehicle_label: "Maintenance-listed vehicle",
     });
   });
@@ -2294,9 +2310,64 @@ describe("Agreements API", () => {
     expect(mockState.lease_agreements).toHaveLength(1);
     expect(mockState.lease_agreements[0]).toMatchObject({
       application_id: APPROVED_APPLICATION_ID,
-      car_id: 1,
+      car_id: null,
       content: "# Final agreement",
     });
+  });
+
+  it("POST /api/agreements updates an existing agreement for the application", async () => {
+    mockState.applications[1].status = "Paid";
+    mockState.lease_agreements = [{
+      id: 31,
+      application_id: APPROVED_APPLICATION_ID,
+      car_id: 1,
+      content: "# Old agreement",
+      status: "generated",
+      vehicle_label: "OLD01",
+      created_at: "2026-03-08T00:00:00.000Z",
+    }];
+
+    const res = await request(app)
+      .post("/api/agreements")
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        application_id: APPROVED_APPLICATION_ID,
+        content: "# Updated agreement",
+        vehicle_label: "NEW02",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: "31", duplicate: false, updated: true });
+    expect(mockState.lease_agreements).toHaveLength(1);
+    expect(mockState.lease_agreements[0]).toMatchObject({
+      id: 31,
+      car_id: null,
+      content: "# Updated agreement",
+      vehicle_label: "NEW02",
+    });
+  });
+
+  it("POST /api/agreements treats a repeated save as an idempotent update", async () => {
+    mockState.applications[1].status = "Paid";
+    const payload = {
+      application_id: APPROVED_APPLICATION_ID,
+      content: "# Final agreement",
+      vehicle_label: "FZS37Y",
+    };
+
+    const first = await request(app)
+      .post("/api/agreements")
+      .set("Authorization", "Bearer fake-token")
+      .send(payload);
+    const second = await request(app)
+      .post("/api/agreements")
+      .set("Authorization", "Bearer fake-token")
+      .send(payload);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(200);
+    expect(second.body).toMatchObject({ duplicate: true, updated: true });
+    expect(mockState.lease_agreements).toHaveLength(1);
   });
 
   it("POST /api/agreements saves manual vehicle agreements when vehicle_label is missing in legacy storage", async () => {
@@ -2338,6 +2409,82 @@ describe("Agreements API", () => {
     expect(res.status).toBe(503);
     expect(res.body.error).toContain("lease_agreements.car_id must allow blank values");
     expect(mockState.lease_agreements).toHaveLength(0);
+  });
+
+  it("POST /api/agreements identifies the live legacy_application_id schema drift", async () => {
+    mockState.applications[1].status = "Paid";
+    mockState.leaseAgreementInsertErrorMode = "legacy_application_id_required";
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const res = await request(app)
+      .post("/api/agreements")
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        application_id: APPROVED_APPLICATION_ID,
+        content: "# Agreement",
+        vehicle_label: "FZS37Y",
+      });
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toContain("retired application ID");
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Lease agreement save failed",
+      expect.objectContaining({
+        code: "23502",
+        column: "legacy_application_id",
+        constraint: null,
+        operation: "insert",
+        table: "lease_agreements",
+      }),
+    );
+    errorSpy.mockRestore();
+  });
+
+  it("POST /api/agreements returns a safe database error reference", async () => {
+    mockState.applications[1].status = "Paid";
+    mockState.leaseAgreementInsertErrorMode = "generic_failure";
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const res = await request(app)
+      .post("/api/agreements")
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        application_id: APPROVED_APPLICATION_ID,
+        content: "# Agreement",
+        vehicle_label: "FZS37Y",
+      });
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({
+      code: "57014",
+      error: "Failed to save lease agreement. Please try again or contact support if it continues.",
+    });
+    expect(errorSpy.mock.calls[0]?.[1]).not.toHaveProperty("content");
+    errorSpy.mockRestore();
+  });
+
+  it("POST /api/agreements/car-lease/render handles missing DOB and renders manual bond details", async () => {
+    mockState.agreement_templates[0].content = [
+      "# Car Lease Agreement",
+      "DOB: {{renteeDob}}",
+      "{{feeSchedule}}",
+    ].join("\n");
+
+    const res = await request(app)
+      .post("/api/agreements/car-lease/render")
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        bondAmount: "$1.00",
+        bondPaymentMethod: "Not yet collected",
+        bondPaymentStatus: "To be collected by admin",
+        renteeName: "Muhammad Bilal",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.agreement).toContain("DOB: Not provided");
+    expect(res.body.agreement).toContain("4.1 Security Bond: $1.00");
+    expect(res.body.agreement).toContain("Bond Payment Status: To be collected by admin");
+    expect(res.body.agreement).toContain("Bond Payment Method: Not yet collected");
   });
 
   it("GET /api/agreements returns saved agreements without relying on embedded foreign-key relations", async () => {
