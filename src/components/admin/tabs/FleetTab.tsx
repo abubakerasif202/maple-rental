@@ -134,8 +134,8 @@ export default function FleetTab({
             Fleet <span className="italic text-brand-gold">Management</span>
           </h2>
           <p className="max-w-3xl text-sm leading-7 text-brand-grey">
-            A simple, safe workspace for non-technical staff to manage vehicle images, pricing,
-            fleet status, and archive or delete actions with confidence.
+            A simple, safe workspace for staff to maintain internal vehicle records, pricing,
+            status, and archive or delete actions without using public catalogue selection.
           </p>
         </div>
         <button
@@ -162,7 +162,7 @@ export default function FleetTab({
       ) : cars.length === 0 ? (
         <EmptyState
           title="No vehicles yet"
-          body="Add the first fleet vehicle to start managing pricing, images, and availability from one premium admin workflow."
+          body="Add the first internal vehicle record to keep pricing and availability notes available for staff."
           ctaLabel="Add First Vehicle"
           onCta={onAddVehicle}
         />
@@ -198,8 +198,13 @@ export default function FleetTab({
                   className="grid gap-5 px-5 py-5 transition-colors hover:bg-white/[0.04] lg:grid-cols-[minmax(0,2.5fr)_120px_140px_140px_150px_190px] lg:items-center lg:px-6"
                 >
                   <div className="flex min-w-0 items-center gap-4">
-                    <div className="flex h-20 w-28 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-brand-navy/70 text-[9px] font-bold uppercase tracking-[0.22em] text-brand-grey">
-                      No image
+                    <div className="h-20 w-28 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-brand-navy/70">
+                      <img
+                        src="/camry-deep-blue.webp"
+                        alt="Deep blue generic 2026 Toyota Camry"
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
                     </div>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">

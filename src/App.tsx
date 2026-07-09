@@ -1,7 +1,7 @@
 import { Suspense, lazy } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FluentProvider, Toaster } from '@fluentui/react-components';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -9,8 +9,6 @@ import { mapleFluentTheme } from './theme/mapleFluentTheme';
 
 const Home = lazy(() => import('./pages/Home'));
 const Pricing = lazy(() => import('./pages/Pricing'));
-const Cars = lazy(() => import('./pages/Cars'));
-const CarDetails = lazy(() => import('./pages/CarDetails'));
 const Success = lazy(() => import('./pages/Success'));
 const AdminLogin = lazy(() => import('./pages/AdminLogin'));
 const Apply = lazy(() => import('./pages/Apply'));
@@ -51,8 +49,8 @@ function AppShell() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/pricing" element={<Pricing />} />
-              <Route path="/cars" element={<Cars />} />
-              <Route path="/cars/:id" element={<CarDetails />} />
+              <Route path="/cars" element={<Navigate to="/apply" replace />} />
+              <Route path="/cars/:id" element={<Navigate to="/apply" replace />} />
               <Route path="/checkout/:id" element={<Checkout />} />
               <Route path="/apply" element={<Apply />} />
               <Route path="/success" element={<Success />} />

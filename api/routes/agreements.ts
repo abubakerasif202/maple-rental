@@ -22,6 +22,41 @@ type LeaseAgreementRecord = {
   vehicle_label?: string | null;
 };
 
+const isMissingVehicleLabelColumnError = (error: unknown) =>
+  Boolean(
+    error &&
+      typeof error === 'object' &&
+      ['PGRST204', '42703'].includes(String((error as { code?: string }).code || '').toUpperCase()) &&
+      [String((error as { message?: string }).message || ''), String((error as { details?: string }).details || '')]
+        .join(' ')
+        .toLowerCase()
+        .includes('vehicle_label')
+  );
+
+const isCarIdRequiredError = (error: unknown) =>
+  Boolean(
+    error &&
+      typeof error === 'object' &&
+      (String((error as { code?: string }).code || '') === '23502' ||
+        String((error as { message?: string }).message || '').toLowerCase().includes('null value')) &&
+      [String((error as { message?: string }).message || ''), String((error as { details?: string }).details || '')]
+        .join(' ')
+        .toLowerCase()
+        .includes('car_id')
+  );
+
+const getAgreementSaveSchemaMessage = (error: unknown) => {
+  if (isCarIdRequiredError(error)) {
+    return 'Agreement storage is missing manual vehicle support: lease_agreements.car_id must allow blank values. Apply the manual vehicle agreement migration and retry.';
+  }
+
+  if (isMissingVehicleLabelColumnError(error)) {
+    return 'Agreement storage is missing manual vehicle support: lease_agreements.vehicle_label is not available. Apply the manual vehicle agreement migration and retry.';
+  }
+
+  return null;
+};
+
 const enrichLeaseAgreements = async (
   agreements: LeaseAgreementRecord[]
 ) => {
@@ -132,16 +167,59 @@ router.post('/', authenticateAdmin, async (req, res) => {
       car_id: data.car_id ?? null,
       vehicle_label: data.vehicle_label || null,
     };
-    const { data: inserted, error } = await db.from('lease_agreements').insert([insertPayload]).select('id').single();
+    const existingQuery = db
+      .from('lease_agreements')
+      .select('id')
+      .eq('application_id', data.application_id)
+      .eq('content', data.content);
 
-    if (error) throw error;
+    const { data: existing, error: existingError } =
+      data.vehicle_label
+        ? await existingQuery.eq('vehicle_label', data.vehicle_label).maybeSingle()
+        : await existingQuery.maybeSingle();
+
+    if (existingError && !isMissingVehicleLabelColumnError(existingError)) {
+      throw existingError;
+    }
+
+    if (existing?.id) {
+      return res.status(200).json({ id: String(existing.id), duplicate: true });
+    }
+
+    let { data: inserted, error } = await db.from('lease_agreements').insert([insertPayload]).select('id').single();
+
+    if (error && isMissingVehicleLabelColumnError(error)) {
+      const {
+        vehicle_label: _vehicleLabel,
+        ...legacyInsertPayload
+      } = insertPayload;
+      const retry = await db
+        .from('lease_agreements')
+        .insert([legacyInsertPayload])
+        .select('id')
+        .single();
+      inserted = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      const schemaMessage = getAgreementSaveSchemaMessage(error);
+      if (schemaMessage) {
+        return res.status(503).json({ error: schemaMessage });
+      }
+      throw error;
+    }
     res.status(201).json({ id: String(inserted.id) });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: err.issues });
     }
+    const schemaMessage = getAgreementSaveSchemaMessage(err);
+    if (schemaMessage) {
+      return res.status(503).json({ error: schemaMessage });
+    }
     console.error('Lease agreement creation error:', err);
-    res.status(500).json({ error: 'Failed to save lease agreement' });
+    res.status(500).json({ error: 'Failed to save lease agreement. Please try again or contact support if it continues.' });
   }
 });
 

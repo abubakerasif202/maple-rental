@@ -55,19 +55,19 @@ const homeJsonLd = {
 
 const showcaseVehicles = [
   {
-    image: '/car-images/CNO40S.jpeg',
-    title: 'Professional presentation',
-    body: 'Late-model, rideshare-ready vehicles presented for serious working drivers.',
+    image: '/camry-deep-blue.webp',
+    title: 'Deep blue 2026 Toyota Camry',
+    body: 'A generic Camry colour visual for presentation only. Vehicle / Number Plate is confirmed manually after review.',
   },
   {
-    image: '/car-images/YNU55M.jpeg',
-    title: 'Managed weekly program',
-    body: 'Structured onboarding, clear payment steps, and admin-led approvals instead of open marketplace browsing.',
+    image: '/camry-pearl-white.webp',
+    title: 'Pearl white 2026 Toyota Camry',
+    body: 'Maple Rentals records the approved vehicle and number plate as text instead of public fleet selection.',
   },
   {
-    image: '/car-images/YPB83A.jpeg',
-    title: 'Operational confidence',
-    body: 'Vehicle details stay professionally controlled while drivers move through review, payment, and handover.',
+    image: '/camry-red.webp',
+    title: 'Red 2026 Toyota Camry',
+    body: 'Stripe checkout stays tied to the approved application and weekly payment, not a catalogue image.',
   },
 ];
 
@@ -190,11 +190,11 @@ export default function Home() {
           >
             <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#1b1713] shadow-[0_40px_120px_rgba(0,0,0,0.45)]">
               <div className="aspect-[4/3] overflow-hidden">
-                <img
-                  src="/car-images/CNO40S.jpeg"
-                  alt="Premium Maple Rentals vehicle"
-                  className="h-full w-full object-cover"
-                />
+                  <img
+                    src="/camry-deep-blue.webp"
+                    alt="Deep blue generic 2026 Toyota Camry"
+                    className="h-full w-full object-cover"
+                  />
               </div>
               <div className="space-y-5 p-7">
                 <div className="flex items-center justify-between">
@@ -211,10 +211,10 @@ export default function Home() {
                     Payment is requested only after approval and quote review.
                   </div>
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-                    Stripe handles the bond, first weekly payment, and recurring billing securely.
+                    Stripe handles the approved weekly rental subscription securely.
                   </div>
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-                    Maple Rentals then completes onboarding and operational handover directly.
+                    Bond is recorded manually for the agreement and handled by Maple Rentals.
                   </div>
                 </div>
               </div>
@@ -331,7 +331,7 @@ export default function Home() {
               {
                 icon: CreditCard,
                 title: 'At payment',
-                body: 'The Stripe session collects the approved bond, first weekly payment, and any setup fees in one secure, hosted checkout.',
+                body: 'The Stripe session collects the approved weekly rental subscription securely. Bond is recorded separately and handled manually by Maple Rentals.',
               },
               {
                 icon: Sparkles,
@@ -361,20 +361,21 @@ export default function Home() {
       <section className="border-b border-white/10 bg-[#17110d] py-24">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="max-w-3xl">
-            <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-brand-gold">Vehicle Quality</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-brand-gold">Vehicle Visuals</p>
             <h2 className="mt-5 text-4xl font-serif font-bold text-white sm:text-5xl">
-              Real vehicles, shown for trust, not for public fleet shopping.
+              Generic 2026 Toyota Camry colours without public fleet selection.
             </h2>
             <p className="mt-6 text-lg font-light leading-8 text-stone-300">
-              Maple Rentals uses real vehicle imagery to show standards and presentation while keeping assignment,
-              pricing, and operational control inside the approval workflow.
+              Maple Rentals keeps the site visual and premium while avoiding number-plate-specific
+              fleet photos. Actual Vehicle / Number Plate details are entered manually by admin
+              after review.
             </p>
           </motion.div>
 
           <div className="mt-12 grid gap-8 md:grid-cols-3">
             {showcaseVehicles.map((vehicle, index) => (
               <motion.article
-                key={vehicle.image}
+                key={`${vehicle.title}-${index}`}
                 initial={{ opacity: 0, y: 22 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}

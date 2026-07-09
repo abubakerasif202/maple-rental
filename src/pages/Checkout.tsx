@@ -277,17 +277,36 @@ export default function Checkout() {
               >
                 <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
                   <div className="aspect-video relative">
-                    <img src={vehicle_image} alt="Maple Rentals approved vehicle preview" className="w-full h-full object-cover" />
+                    <img
+                      src={vehicle_image}
+                      alt="Deep blue generic 2026 Toyota Camry preview"
+                      className="w-full h-full object-cover"
+                    />
                     <div className="absolute inset-0 bg-gradient-to-t from-brand-navy to-transparent opacity-60" />
                     <div className="absolute bottom-6 left-6">
-                      <h3 className="text-xl font-bold text-white tracking-tight">{approved_vehicle}</h3>
+                      <h3 className="text-xl font-bold text-white tracking-tight">
+                        Deep blue 2026 Toyota Camry
+                      </h3>
                       <p className="text-brand-gold text-[10px] font-bold uppercase tracking-widest">
-                        Reviewed and approved by Maple Rentals
+                        Visual reference only
                       </p>
                     </div>
                   </div>
-
                   <div className="p-8 space-y-6">
+                    <div className="rounded-2xl border border-brand-gold/20 bg-brand-gold/10 p-5">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-brand-gold">
+                        Vehicle / Number Plate
+                      </p>
+                      <h3 className="mt-3 text-xl font-bold text-white tracking-tight">
+                        {approved_vehicle}
+                      </h3>
+                      <p className="mt-3 text-sm leading-7 text-brand-grey">
+                        This is the manual vehicle reference recorded by Maple Rentals for your
+                        agreement. The car image is a generic 2026 Toyota Camry colour visual, not a
+                        selected fleet or number-plate-specific vehicle.
+                      </p>
+                    </div>
+
                     <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest border-b border-white/5 pb-4">
                       Stripe and manual bond breakdown
                     </h4>

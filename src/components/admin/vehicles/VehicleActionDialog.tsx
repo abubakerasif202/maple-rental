@@ -44,7 +44,7 @@ const contentByMode: Record<
   delete: {
     title: 'Delete Vehicle',
     description:
-      'Delete permanently removes this vehicle record. This cannot be undone, and the stored image is cleaned up if Maple Rentals manages it in Supabase Storage.',
+      'Delete permanently removes this internal vehicle record. This cannot be undone.',
     helper:
       'Permanent delete is only allowed when no rentals, bookings, agreements, or assigned applications still reference the vehicle.',
   },

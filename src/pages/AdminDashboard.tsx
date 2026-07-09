@@ -563,7 +563,8 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['applications'] });
       showNotification('Application status updated', 'success');
     },
-    onError: () => showNotification('Failed to update status', 'error'),
+    onError: (error) =>
+      showNotification(getApiErrorMessage(error, 'Failed to update status'), 'error'),
   });
 
   const cancelApplicationMutation = useMutation({
@@ -577,7 +578,8 @@ export default function AdminDashboard() {
       setCancelApplicationReason('');
       showNotification('Application cancelled successfully', 'success');
     },
-    onError: () => showNotification('Failed to cancel application', 'error'),
+    onError: (error) =>
+      showNotification(getApiErrorMessage(error, 'Failed to cancel application'), 'error'),
   });
 
   const saveAgreementMutation = useMutation({
@@ -585,11 +587,13 @@ export default function AdminDashboard() {
       api.saveLeaseAgreement(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agreements'] });
+      queryClient.invalidateQueries({ queryKey: ['applications'] });
       setIsAgreementModalOpen(false);
       setAgreementModalMode('draft');
       showNotification('Agreement saved successfully', 'success');
     },
-    onError: () => showNotification('Failed to save agreement', 'error'),
+    onError: (error) =>
+      showNotification(getApiErrorMessage(error, 'Failed to save agreement'), 'error'),
   });
 
   const approveApplicationPaymentMutation = useMutation({
@@ -667,7 +671,8 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['agreements'] });
       showNotification('Agreement deleted successfully', 'success');
     },
-    onError: () => showNotification('Failed to delete agreement', 'error'),
+    onError: (error) =>
+      showNotification(getApiErrorMessage(error, 'Failed to delete agreement'), 'error'),
   });
 
   const handleLogout = async () => {
@@ -724,7 +729,7 @@ export default function AdminDashboard() {
       setAgreementModalMode('draft');
       setIsAgreementModalOpen(true);
     } catch (err) {
-      showNotification('Failed to generate agreement', 'error');
+      showNotification(getApiErrorMessage(err, 'Failed to generate agreement'), 'error');
     } finally {
       setIsGeneratingAgreement(false);
     }

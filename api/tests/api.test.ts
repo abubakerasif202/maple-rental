@@ -214,6 +214,10 @@ const {
     manual_invoice_items: [] as Array<Record<string, any>>,
     stripe_webhook_events: [] as Array<Record<string, any>>,
     failOnDeleteTable: null as string | null,
+    leaseAgreementInsertErrorMode: null as
+      | null
+      | "missing_vehicle_label"
+      | "car_id_required",
   },
   mockGetUser: vi.fn(),
   mockRefreshSession: vi.fn(),
@@ -972,6 +976,24 @@ vi.mock("../db/index.js", () => {
         ? buildUuidFromSequence(nextSequence)
         : nextSequence;
     const insertedRow: Record<string, any> = { ...records[0], id: nextId };
+    const insertError =
+      table === "lease_agreements" &&
+      mockState.leaseAgreementInsertErrorMode === "missing_vehicle_label" &&
+      Object.prototype.hasOwnProperty.call(insertedRow, "vehicle_label")
+        ? {
+            code: "PGRST204",
+            details: "Column lease_agreements.vehicle_label does not exist",
+            message: "Could not find the vehicle_label column of lease_agreements in the schema cache",
+          }
+        : table === "lease_agreements" &&
+            mockState.leaseAgreementInsertErrorMode === "car_id_required" &&
+            insertedRow.car_id == null
+          ? {
+              code: "23502",
+              details: "Failing row contains null for car_id",
+              message: 'null value in column "car_id" of relation "lease_agreements" violates not-null constraint',
+            }
+          : null;
 
     if (
       table === "stripe_webhook_events" &&
@@ -1000,23 +1022,23 @@ vi.mock("../db/index.js", () => {
       insertedRow.updated_at = new Date().toISOString();
     }
 
-    if (table === "cars") {
+    if (!insertError && table === "cars") {
       mockState.cars = [...mockState.cars, insertedRow];
     }
 
-    if (table === "applications") {
+    if (!insertError && table === "applications") {
       mockState.applications = [...mockState.applications, insertedRow];
     }
 
-    if (table === "rentals") {
+    if (!insertError && table === "rentals") {
       mockState.rentals = [...mockState.rentals, insertedRow];
     }
 
-    if (table === "lease_agreements") {
+    if (!insertError && table === "lease_agreements") {
       mockState.lease_agreements = [...mockState.lease_agreements, insertedRow];
     }
 
-    if (table === "agreement_templates") {
+    if (!insertError && table === "agreement_templates") {
       mockState.agreement_templates = [
         ...mockState.agreement_templates,
         {
@@ -1089,11 +1111,11 @@ vi.mock("../db/index.js", () => {
     }
 
     return {
-      error: null,
+      error: insertError,
       select: vi.fn(() => ({
         single: vi.fn(async () => ({
-          data: { id: insertedRow.id },
-          error: null,
+          data: insertError ? null : { id: insertedRow.id },
+          error: insertError,
         })),
       })),
     };
@@ -1382,7 +1404,7 @@ const { createCheckoutToken, verifyCheckoutToken } =
       weekly_price: 250,
       bond: 500,
       status: "Available",
-      image: "https://example.com/camry.jpg",
+      image: "/camry-deep-blue.webp",
       created_at: "2026-03-01T00:00:00.000Z",
     },
     {
@@ -1393,7 +1415,7 @@ const { createCheckoutToken, verifyCheckoutToken } =
       weekly_price: 275,
       bond: 600,
       status: "Rented",
-      image: "https://example.com/prius.jpg",
+      image: "/camry-pearl-white.webp",
       created_at: "2026-03-02T00:00:00.000Z",
     },
   ];
@@ -1475,6 +1497,7 @@ const { createCheckoutToken, verifyCheckoutToken } =
 
   mockState.rentals = [];
   mockState.lease_agreements = [];
+  mockState.leaseAgreementInsertErrorMode = null;
   mockState.agreement_templates = [
     {
       active: true,
@@ -2274,6 +2297,47 @@ describe("Agreements API", () => {
       car_id: 1,
       content: "# Final agreement",
     });
+  });
+
+  it("POST /api/agreements saves manual vehicle agreements when vehicle_label is missing in legacy storage", async () => {
+    mockState.applications[1].status = "Paid";
+    mockState.leaseAgreementInsertErrorMode = "missing_vehicle_label";
+
+    const res = await request(app)
+      .post("/api/agreements")
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        application_id: APPROVED_APPLICATION_ID,
+        content: "# Agreement\nVehicle / Number Plate: Toyota Camry - ABC12D",
+        vehicle_label: "Toyota Camry - ABC12D",
+      });
+
+    expect(res.status).toBe(201);
+    expect(mockState.lease_agreements).toHaveLength(1);
+    expect(mockState.lease_agreements[0]).toMatchObject({
+      application_id: APPROVED_APPLICATION_ID,
+      car_id: null,
+      content: "# Agreement\nVehicle / Number Plate: Toyota Camry - ABC12D",
+    });
+    expect(mockState.lease_agreements[0]).not.toHaveProperty("vehicle_label");
+  });
+
+  it("POST /api/agreements returns a useful safe schema error when car_id is still required", async () => {
+    mockState.applications[1].status = "Paid";
+    mockState.leaseAgreementInsertErrorMode = "car_id_required";
+
+    const res = await request(app)
+      .post("/api/agreements")
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        application_id: APPROVED_APPLICATION_ID,
+        content: "# Agreement\nVehicle / Number Plate: Toyota Camry - ABC12D",
+        vehicle_label: "Toyota Camry - ABC12D",
+      });
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toContain("lease_agreements.car_id must allow blank values");
+    expect(mockState.lease_agreements).toHaveLength(0);
   });
 
   it("GET /api/agreements returns saved agreements without relying on embedded foreign-key relations", async () => {
@@ -4508,7 +4572,7 @@ describe("Stripe API", () => {
     expect(res.body.billing.upfrontDue).toBe(250);
     expect(res.body.billing.setupFees).toBe(0);
     expect(res.body.approved_vehicle).toBe("Toyota Camry");
-    expect(res.body.vehicle_image).toBeTruthy();
+    expect(res.body.vehicle_image).toBe("/camry-deep-blue.webp");
   });
 
   it("GET /api/stripe/payment-context returns the approved quote without a car id", async () => {
@@ -4526,6 +4590,7 @@ describe("Stripe API", () => {
     expect(res.status).toBe(200);
     expect(res.body.car_id).toBeNull();
     expect(res.body.approved_vehicle).toBe("Toyota Camry");
+    expect(res.body.vehicle_image).toBe("/camry-deep-blue.webp");
   });
 
   it("GET /api/stripe/payment-context returns 409 when payment was already received", async () => {

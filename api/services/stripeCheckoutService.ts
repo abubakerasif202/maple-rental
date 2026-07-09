@@ -36,7 +36,7 @@ import {
 import { normalizeUuid } from '../../shared/uuid.js';
 
 const getStripe = () => getStripeClient();
-const DEFAULT_VEHICLE_IMAGE = '/hero-camry.webp';
+const DEFAULT_VEHICLE_IMAGE = '/camry-deep-blue.webp';
 const DEFAULT_APPROVED_VEHICLE_LABEL = 'Approved vehicle to be confirmed by Maple Rentals';
 
 type BillingBreakdown = {

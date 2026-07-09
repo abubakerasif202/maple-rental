@@ -1,0 +1,4 @@
+-- Placeholder migration to match remote Supabase migration history.
+-- Remote database already records migration version 20260619090000 as applied.
+-- This file prevents "Remote migration versions not found in local migrations directory".
+-- Do not remove unless Supabase migration history is intentionally repaired.
