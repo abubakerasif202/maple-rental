@@ -19,9 +19,70 @@
 }
 
 @layer base {
+  :root {
+    color-scheme: dark;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  * {
+    @apply border-brand-border;
+  }
+
   html,
   body {
     @apply bg-brand-navy text-white;
     overflow-x: hidden;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    min-width: 320px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 focus-visible:ring-offset-brand-navy;
+  }
+
+  ::selection {
+    @apply bg-brand-gold text-brand-charcoal;
+  }
+}
+
+@layer components {
+  .maple-container {
+    @apply mx-auto w-full max-w-7xl px-5 sm:px-6 lg:px-8;
+  }
+
+  .maple-eyebrow {
+    @apply text-[10px] font-bold uppercase tracking-[0.38em] text-brand-gold;
+  }
+
+  .maple-card {
+    @apply border border-white/10 bg-white/[0.035] shadow-[0_24px_80px_rgba(2,12,27,0.18)];
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
