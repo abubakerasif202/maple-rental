@@ -98,6 +98,36 @@ const ensureCatalogFromStripe = async (stripe: Stripe): Promise<ResolvedStripeCa
   return Object.fromEntries(resolvedEntries) as ResolvedStripeCatalog;
 };
 
+export const inspectStripeCatalog = async (
+  stripe: Stripe
+): Promise<ResolvedStripeCatalog> => {
+  const envCatalog = readEnvCatalog();
+  if (envCatalog) {
+    return envCatalog;
+  }
+
+  const activeProducts: Stripe.Product[] = [];
+  for await (const product of stripe.products.list({ active: true, limit: 100 })) {
+    activeProducts.push(product);
+  }
+
+  const entries = stripeCatalogEntries.map(([key, definition]) => {
+    const product = activeProducts.find((candidate) =>
+      matchesCatalogDefinition(candidate, definition)
+    );
+
+    if (!product) {
+      throw new Error(
+        `Stripe catalog is missing the active ${definition.name} product. Run npm run stripe:setup in a controlled environment before handoff.`
+      );
+    }
+
+    return [key, { productId: product.id, source: 'existing' as const }];
+  });
+
+  return Object.fromEntries(entries) as ResolvedStripeCatalog;
+};
+
 export const ensureStripeCatalog = async (stripe: Stripe): Promise<ResolvedStripeCatalog> => {
   const envCatalog = readEnvCatalog();
   if (envCatalog) {

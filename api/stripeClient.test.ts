@@ -36,7 +36,7 @@ describe('stripeClient', () => {
     expect(mockStripeConstructor).toHaveBeenCalledWith(
       'sk_test_cached',
       expect.objectContaining({
-        apiVersion: '2025-04-30.basil',
+        apiVersion: '2026-04-22.dahlia',
         typescript: true,
       })
     );

@@ -59,7 +59,7 @@
     "react-simple-code-editor": "^0.14.1",
     "recharts": "^3.8.1",
     "resend": "^6.9.3",
-    "stripe": "^20.4.1",
+    "stripe": "^22.3.1",
     "tailwind-merge": "^3.5.0",
     "zod": "^4.3.6"
   },
@@ -85,6 +85,7 @@
     "node": "20.x"
   },
   "overrides": {
+    "esbuild": "^0.28.1",
     "uuid": "^14.0.0"
   }
 }

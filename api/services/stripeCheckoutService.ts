@@ -1055,7 +1055,7 @@ const getConfirmedRentalStatus = async ({
 
   if (error) {
     throw new Error(
-      `Failed to inspect local rental activation state: ${error.message || 'Unknown error'}`
+      `Failed to inspect local rental state: ${error.message || 'Unknown error'}`
     );
   }
 

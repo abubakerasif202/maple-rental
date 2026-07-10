@@ -10,7 +10,7 @@ vi.mock('./db/postgres.js', () => ({
 
 import {
   ADMIN_PAYMENTS_RESTRICTED_MESSAGE,
-  AUTOMATIC_PAYMENT_ACTIVATION_RESTRICTED_REASON,
+  TRANSACTIONAL_PAYMENT_RECORDING_RESTRICTED_REASON,
   PUBLIC_PAYMENTS_UNAVAILABLE_MESSAGE,
   assertTransactionalPaymentProcessing,
   createPaymentProcessingRestrictedError,
@@ -34,9 +34,9 @@ describe('paymentProcessing', () => {
       expect(ADMIN_PAYMENTS_RESTRICTED_MESSAGE.length).toBeGreaterThan(0);
     });
 
-    it('exports a non-empty automatic activation restricted reason', () => {
-      expect(typeof AUTOMATIC_PAYMENT_ACTIVATION_RESTRICTED_REASON).toBe('string');
-      expect(AUTOMATIC_PAYMENT_ACTIVATION_RESTRICTED_REASON.length).toBeGreaterThan(0);
+    it('exports a non-empty transactional payment recording restricted reason', () => {
+      expect(typeof TRANSACTIONAL_PAYMENT_RECORDING_RESTRICTED_REASON).toBe('string');
+      expect(TRANSACTIONAL_PAYMENT_RECORDING_RESTRICTED_REASON.length).toBeGreaterThan(0);
     });
   });
 

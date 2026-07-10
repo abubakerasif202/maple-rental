@@ -12,7 +12,7 @@ Use this checklist before handing Maple Rental over to a client or switching fro
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_ANON_KEY`
 
-Recommended for automatic activation:
+Recommended for transactional payment recording:
 
 - `SUPABASE_DB_URL` or `DATABASE_URL`
 
@@ -20,9 +20,9 @@ Recommended for automatic activation:
 
 - Checkout runs in `subscription` mode.
 - The app creates hosted Checkout Sessions on the server.
-- Rental activation depends on Stripe webhooks hitting `POST /api/stripe/webhook`.
-- Automatic activation requires a session-capable Postgres connection on port `5432`.
-- Without that direct Postgres connection, successful payments fall back to `Payment Review` instead of automatic rental activation.
+- Stripe webhooks hit `POST /api/stripe/webhook` and mark the application `Paid` only.
+- Checkout completion never creates rental rows or changes vehicle status, including for legacy Stripe metadata containing `car_id`.
+- A session-capable Postgres connection on port `5432` provides transactional payment recording and replay protection.
 
 ## Pre-handover commands
 
@@ -38,7 +38,7 @@ Expected results:
 
 - `npm run validate` passes.
 - `npm run verify:schema-contract` passes with no missing columns.
-- `npm run stripe:handoff` returns `overallStatus: "pass"` for full automatic activation, or `overallStatus: "warn"` if manual-review mode is the only remaining non-live issue.
+- `npm run stripe:handoff` is read-only and returns `overallStatus: "pass"` when production-critical checks pass.
 
 If the schema check fails because `stripe_webhook_events` is missing `status` or `received_at`, run:
 
@@ -57,13 +57,15 @@ npm run migrate:stripe-webhook-ledger
   - `checkout.session.async_payment_succeeded`
   - `checkout.session.async_payment_failed`
   - `checkout.session.expired`
+  - `customer.subscription.created`
   - `invoice.payment_failed`
+  - `invoice.payment_succeeded`
   - `customer.subscription.updated`
   - `customer.subscription.deleted`
 - Confirm the reusable catalog exists:
-  - `Security Bond`
-  - `Onboarding setup fees`
   - `Weekly vehicle rental`
+- Confirm the webhook endpoint API version matches `2026-04-22.dahlia`.
+- Review any secondary webhook endpoint receiving the same payment events and confirm it cannot duplicate Maple business side effects.
 
 ## App-level checks
 
@@ -77,11 +79,12 @@ npm run migrate:stripe-webhook-ledger
 }
 ```
 
-If the deployment intentionally runs without a session-capable Postgres connection, expect `paymentActivationMode: "restricted"` and verify the team is prepared to process paid applications from `Payment Review`.
+If the deployment intentionally runs without a session-capable Postgres connection, expect `paymentActivationMode: "restricted"`; payment-only completion remains available but loses transactional locking.
 
-- Payment links open the correct public `/checkout/:carId` URL.
+- Payment links open the correct public `/checkout/:applicationId#checkout_token=...` URL.
 - Successful Checkout redirects back to `/success` on the same domain.
-- A successful payment creates or updates the rental and stores Stripe customer and subscription IDs.
+- A successful Checkout marks the application `Paid` only and clears `pending_checkout_session_id`.
+- No Checkout completion creates or updates rentals or cars.
 - Failed recurring invoices move rentals to `Overdue`.
 - Subscription deletion updates the rental state and releases the vehicle when appropriate.
 
@@ -89,8 +92,8 @@ If the deployment intentionally runs without a session-capable Postgres connecti
 
 - Complete one successful sandbox Checkout flow.
 - Confirm the webhook is received and processed once.
-- Confirm replayed webhook deliveries do not duplicate activation.
-- Confirm the rental moves to `Active`.
+- Confirm replayed webhook deliveries do not duplicate payment writes or mutate rentals/cars.
+- Confirm the application moves to `Paid` without creating a rental or changing vehicle status.
 - Confirm the customer receives the expected email if `RESEND_API_KEY` is configured.
 - Confirm admin financials can load Stripe payouts if that feature is expected in the handoff.
 

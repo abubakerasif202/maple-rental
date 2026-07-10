@@ -260,6 +260,7 @@ type ApplicationPaymentApprovalRecord = {
   approved_weekly_price?: number | null;
   email: string;
   id: string;
+  intended_start_date?: string | null;
   name: string;
   payment_link_version?: number | null;
   pending_checkout_session_id?: string | null;
@@ -896,6 +897,10 @@ router.post("/:id/approve-payment", authenticateAdmin, async (req, res) => {
         approvedWeeklyPrice: payload.approved_weekly_price,
         approvedVehicle: payload.approved_vehicle.trim(),
         checkoutUrl,
+        rentalSubscriptionStartDate:
+          payload.rental_subscription_start_date ||
+          applicationRecord.intended_start_date ||
+          null,
         setupFees: RENTAL_PLAN_SETUP_FEES_AUD,
       });
     }

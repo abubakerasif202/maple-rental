@@ -1,8 +1,41 @@
 import { escapeHtml, sendResendEmail } from './email.js';
+import {
+  getTodayInAustralia,
+  isValidDateOnly,
+} from '../shared/applicationSubmission.js';
 
 const DEFAULT_APP_URL = 'http://localhost:3000';
 
 const formatCurrency = (value: number) => `$${value.toFixed(2)}`;
+
+export const buildDriverPaymentTiming = ({
+  approvedWeeklyPrice,
+  rentalSubscriptionStartDate,
+}: {
+  approvedWeeklyPrice: number;
+  rentalSubscriptionStartDate?: string | null;
+}) => {
+  const startDate = String(rentalSubscriptionStartDate || '').trim();
+  const startsInFuture =
+    isValidDateOnly(startDate) && startDate > getTodayInAustralia();
+
+  if (startsInFuture) {
+    return {
+      amountChargedAtCheckout: 0,
+      message:
+        `Stripe Checkout will securely confirm your payment method now. ` +
+        `Your first weekly payment of ${formatCurrency(approvedWeeklyPrice)} ` +
+        `is scheduled for ${startDate}, then weekly after that.`,
+    };
+  }
+
+  return {
+    amountChargedAtCheckout: approvedWeeklyPrice,
+    message:
+      `Stripe will charge the weekly payment now, then automatically bill ` +
+      `${formatCurrency(approvedWeeklyPrice)} each week.`,
+  };
+};
 
 export const appendCheckoutTokenHash = (url: URL, token: string) => {
   url.hash = new URLSearchParams({ checkout_token: token }).toString();
@@ -41,6 +74,7 @@ export const sendDriverPaymentLinkEmail = async ({
   approvedWeeklyPrice,
   approvedVehicle,
   checkoutUrl,
+  rentalSubscriptionStartDate,
   setupFees,
 }: {
   applicantEmail: string;
@@ -49,6 +83,7 @@ export const sendDriverPaymentLinkEmail = async ({
   approvedWeeklyPrice: number;
   approvedVehicle: string;
   checkoutUrl: string;
+  rentalSubscriptionStartDate?: string | null;
   setupFees: number;
 }) => {
   if (!process.env.RESEND_API_KEY) {
@@ -64,6 +99,10 @@ export const sendDriverPaymentLinkEmail = async ({
   const safeApprovedVehicle = escapeHtml(approvedVehicle);
   const safeCheckoutUrl = escapeHtml(checkoutUrl);
   const hasSetupFees = setupFees > 0;
+  const paymentTiming = buildDriverPaymentTiming({
+    approvedWeeklyPrice,
+    rentalSubscriptionStartDate,
+  });
 
   try {
     await sendResendEmail(resend, {
@@ -79,8 +118,8 @@ export const sendDriverPaymentLinkEmail = async ({
           <p><strong>Bond:</strong> ${formatCurrency(approvedBond)}</p>
           <p><strong>Weekly payment:</strong> ${formatCurrency(approvedWeeklyPrice)}</p>
           ${hasSetupFees ? `<p><strong>Setup fees:</strong> ${formatCurrency(setupFees)}</p>` : ''}
-          <p><strong>Amount charged in Stripe Checkout:</strong> ${formatCurrency(approvedWeeklyPrice)}</p>
-          <p>Stripe will charge the weekly payment now, then automatically bill ${formatCurrency(approvedWeeklyPrice)} each week.</p>
+          <p><strong>Amount charged in Stripe Checkout:</strong> ${formatCurrency(paymentTiming.amountChargedAtCheckout)}</p>
+          <p>${paymentTiming.message}</p>
           ${hasSetupFees ? `<p><strong>Setup fees:</strong> ${formatCurrency(setupFees)} are listed for reference and collected separately by Maple Rentals.</p>` : ''}
           <p>Once Stripe confirms payment, Maple Rentals finalises onboarding and handover with you directly.</p>
           <p>

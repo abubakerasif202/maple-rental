@@ -137,7 +137,7 @@ RESEND_API_KEY=re_...
 
 `SUPABASE_DB_URL=postgresql://...` remains supported as a fallback for legacy environments, but `DATABASE_URL` is preferred for local parity and Render deployments.
 
-Stripe payment links and hosted checkout session creation work with the standard Supabase HTTP credentials. Automatic rental activation still requires `DATABASE_URL` or `SUPABASE_DB_URL` to point to a session-capable Postgres connection; otherwise paid checkouts fall back to `Payment Review`.
+Stripe payment links and hosted Checkout session creation require a session-capable Postgres connection through `DATABASE_URL` or `SUPABASE_DB_URL`. Verified Checkout completion records the application as `Paid` transactionally; it never changes vehicle status or creates a rental row.
 
 Optional local-only admin shortcut:
 
@@ -294,7 +294,7 @@ What each command does:
 `paymentActivationMode` will be:
 
 - `transactional` when the selected direct database (`DATABASE_URL` first, then `SUPABASE_DB_URL`) is session-capable
-- `restricted` when the app is running without a session-capable direct Postgres connection; payment links still work but automatic activation falls back to manual review
+- `restricted` when the app is running without a session-capable direct Postgres connection; payment links and payment-only completion still work, but transactional locking is unavailable
 
 ## Security and Operational Notes
 

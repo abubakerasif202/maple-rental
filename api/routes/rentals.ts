@@ -137,7 +137,11 @@ router.post('/:rentalId/cancel-subscription', authenticateAdmin, async (req, res
               },
               { idempotencyKey }
             )
-          : await stripe.subscriptions.cancel(stripeSubscriptionId, { idempotencyKey });
+          : await stripe.subscriptions.cancel(
+              stripeSubscriptionId,
+              {},
+              { idempotencyKey }
+            );
 
     if (!cancelAtPeriodEnd || existingSubscription.status === 'canceled') {
       const compat = await getSchemaCompat();

@@ -3,18 +3,6 @@ export const STRIPE_CATALOG_KIND_METADATA_KEY = 'maple_rental_catalog_kind';
 export const STRIPE_CATALOG_APP_METADATA_VALUE = 'maple-rental';
 
 export const stripeCatalogDefinitions = {
-  securityBond: {
-    description: 'Refundable bond collected before activation.',
-    envVar: 'STRIPE_SECURITY_BOND_PRODUCT_ID',
-    kind: 'security_bond',
-    name: 'Security Bond',
-  },
-  onboardingSetup: {
-    description: 'Account and direct debit setup.',
-    envVar: 'STRIPE_ONBOARDING_SETUP_PRODUCT_ID',
-    kind: 'onboarding_setup_fees',
-    name: 'Onboarding setup fees',
-  },
   weeklyRental: {
     description: 'Recurring weekly rental subscription.',
     envVar: 'STRIPE_WEEKLY_RENTAL_PRODUCT_ID',

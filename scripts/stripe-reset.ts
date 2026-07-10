@@ -82,7 +82,7 @@ const run = async (
   }
 };
 
-const account = await stripe.accounts.retrieve();
+const account = await stripe.accounts.retrieveCurrent();
 
 console.log(
   JSON.stringify(

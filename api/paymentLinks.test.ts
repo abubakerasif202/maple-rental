@@ -39,4 +39,37 @@ describe('paymentLinks', () => {
       })
     ).toContain('http://localhost:3000/checkout/11111111-1111-4111-8111-111111111111');
   });
+
+  it('discloses zero due today when a future rental start uses scheduled billing', async () => {
+    const { buildDriverPaymentTiming } = await import('./paymentLinks.js');
+    const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+
+    expect(
+      buildDriverPaymentTiming({
+        approvedWeeklyPrice: 300,
+        rentalSubscriptionStartDate: futureDate,
+      })
+    ).toEqual({
+      amountChargedAtCheckout: 0,
+      message: expect.stringContaining(
+        `first weekly payment of $300.00 is scheduled for ${futureDate}`
+      ),
+    });
+  });
+
+  it('discloses the weekly charge for immediate subscriptions', async () => {
+    const { buildDriverPaymentTiming } = await import('./paymentLinks.js');
+
+    expect(
+      buildDriverPaymentTiming({
+        approvedWeeklyPrice: 300,
+        rentalSubscriptionStartDate: null,
+      })
+    ).toEqual({
+      amountChargedAtCheckout: 300,
+      message: expect.stringContaining('charge the weekly payment now'),
+    });
+  });
 });

@@ -10,7 +10,11 @@ import {
 } from '../api/db/postgres.js';
 import { getPaymentProcessingMode } from '../api/paymentProcessing.js';
 import { verifyProductionSchemaContract } from '../api/schemaContract.js';
-import { clearStripeCatalogCache, ensureStripeCatalog } from '../api/stripeCatalog.js';
+import {
+  clearStripeCatalogCache,
+  ensureStripeCatalog,
+  inspectStripeCatalog,
+} from '../api/stripeCatalog.js';
 import { createStripeClient, readStripeSecretKey } from '../api/stripeClient.js';
 
 const args = new Set(process.argv.slice(2));
@@ -194,7 +198,7 @@ const verifyLocalRuntimeDependencies = async () => {
     addCheck(
       'payment_activation_mode',
       'warn',
-      'Automatic payment activation is in manual-review mode because no session-capable Postgres connection is configured.',
+      'Payment-only completion is available, but transactional locking is disabled because no session-capable Postgres connection is configured.',
       paymentActivationDetails
     );
   } else {
@@ -206,8 +210,8 @@ const verifyLocalRuntimeDependencies = async () => {
         'payment_activation_mode',
         paymentActivationMode === 'transactional' ? 'pass' : 'warn',
         paymentActivationMode === 'transactional'
-          ? 'Automatic payment activation is enabled.'
-          : 'Payment workflows can still run, but automatic activation is not fully transactional.',
+          ? 'Transactional payment-only completion is enabled.'
+          : 'Payment-only completion is available but is not fully transactional.',
         {
           ...paymentActivationDetails,
           connectionVerified: true,
@@ -236,7 +240,7 @@ const verifyLocalRuntimeDependencies = async () => {
     addCheck(
       'schema_contract',
       'pass',
-      'The production schema contract required by Stripe activation is satisfied.'
+      'The production schema contract required by Stripe payment processing is satisfied.'
     );
   } catch (error) {
     addCheck(
@@ -279,14 +283,16 @@ const verifyStripeAccountConfiguration = async (
   const stripe = createStripeClient(secretKey);
 
   try {
-    const account = await stripe.accounts.retrieve();
+    const account = await stripe.accounts.retrieveCurrent();
     const catalog = await (async () => {
       clearStripeCatalogCache();
-      return ensureStripeCatalog(stripe);
+      return requireLiveKey
+        ? inspectStripeCatalog(stripe)
+        : ensureStripeCatalog(stripe);
     })();
-    const webhookEndpoints = expectedWebhookUrl
-      ? await collectAll(stripe.webhookEndpoints.list({ limit: 100 }))
-      : [];
+    const webhookEndpoints = await collectAll(
+      stripe.webhookEndpoints.list({ limit: 100 })
+    );
     const matchingWebhookEndpoints = webhookEndpoints.filter(
       (endpoint) => normalizeUrl(endpoint.url) === normalizeUrl(expectedWebhookUrl || '')
     );
@@ -300,6 +306,42 @@ const verifyStripeAccountConfiguration = async (
         displayName: account.settings?.dashboard?.display_name || account.business_profile?.name || null,
         keyMode,
       }
+    );
+
+    const accountRequirements = account.requirements;
+    const accountReady =
+      account.charges_enabled &&
+      account.payouts_enabled &&
+      account.details_submitted &&
+      (accountRequirements?.currently_due?.length || 0) === 0 &&
+      (accountRequirements?.past_due?.length || 0) === 0;
+    addCheck(
+      'stripe_account_readiness',
+      accountReady ? 'pass' : statusForReadinessCheck(false),
+      accountReady
+        ? 'Stripe account can accept charges and payouts with no overdue requirements.'
+        : 'Stripe account is not fully ready for charges, payouts, or verification handoff.',
+      {
+        chargesEnabled: account.charges_enabled,
+        detailsSubmitted: account.details_submitted,
+        payoutsEnabled: account.payouts_enabled,
+        requirementsCurrentlyDue: accountRequirements?.currently_due?.length || 0,
+        requirementsPastDue: accountRequirements?.past_due?.length || 0,
+      }
+    );
+
+    const missingSupportFields = [
+      !account.business_profile?.support_email ? 'support_email' : null,
+      !account.business_profile?.support_address ? 'support_address' : null,
+      !account.business_profile?.support_url ? 'support_url' : null,
+    ].filter((field): field is string => Boolean(field));
+    addCheck(
+      'stripe_support_profile',
+      missingSupportFields.length === 0 ? 'pass' : 'warn',
+      missingSupportFields.length === 0
+        ? 'Stripe customer support profile is complete.'
+        : 'Stripe customer support profile is incomplete.',
+      { missingFields: missingSupportFields }
     );
 
     if (requireLiveKey) {
@@ -356,7 +398,47 @@ const verifyStripeAccountConfiguration = async (
           webhookStatus: 'status' in enabledEndpoint ? enabledEndpoint.status || null : null,
         }
       );
+
+      const webhookApiVersion = enabledEndpoint.api_version || null;
+      addCheck(
+        'stripe_webhook_api_version',
+        webhookApiVersion === STRIPE_API_VERSION
+          ? 'pass'
+          : statusForReadinessCheck(false),
+        webhookApiVersion === STRIPE_API_VERSION
+          ? 'Stripe webhook endpoint API version matches the application.'
+          : 'Stripe webhook endpoint API version does not match the application.',
+        {
+          applicationApiVersion: STRIPE_API_VERSION,
+          webhookApiVersion,
+        }
+      );
     }
+
+    const overlappingWebhookEndpoints = webhookEndpoints
+      .filter(
+        (endpoint) =>
+          normalizeUrl(endpoint.url) !== normalizeUrl(expectedWebhookUrl || '') &&
+          (!('status' in endpoint) || endpoint.status === 'enabled')
+      )
+      .filter((endpoint) => {
+        const enabledEvents = endpoint.enabled_events || [];
+        return (
+          enabledEvents.includes('*') ||
+          EXPECTED_WEBHOOK_EVENTS.some((eventName) =>
+            enabledEvents.includes(eventName)
+          )
+        );
+      })
+      .map((endpoint) => ({ id: endpoint.id, url: endpoint.url }));
+    addCheck(
+      'stripe_overlapping_webhooks',
+      overlappingWebhookEndpoints.length === 0 ? 'pass' : 'warn',
+      overlappingWebhookEndpoints.length === 0
+        ? 'No secondary webhook endpoint overlaps Maple payment events.'
+        : 'Secondary webhook endpoints also receive Maple payment events; confirm they are intentional and side-effect safe.',
+      { endpoints: overlappingWebhookEndpoints }
+    );
 
     addCheck('stripe_catalog', 'pass', 'Reusable Stripe catalog is available.', {
       catalog,

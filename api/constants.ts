@@ -21,7 +21,7 @@ export const RENTAL_PLAN_SETUP_FEES_AUD = Number(
   ).toFixed(2)
 );
 
-export const STRIPE_API_VERSION = '2025-04-30.basil' as const;
+export const STRIPE_API_VERSION = '2026-04-22.dahlia' as const;
 
 export const STRIPE_CONFIG: Stripe.StripeConfig = {
   // stripe-node only types the library's latest API version literal. Maple Rental
