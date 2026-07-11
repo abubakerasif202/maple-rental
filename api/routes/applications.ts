@@ -54,6 +54,7 @@ import {
 } from "../email.js";
 import { normalizeUuid } from "../../shared/uuid.js";
 import { isImportedApplicationRecord } from "../importedDataFilters.js";
+import { recordAdminAuditEvent } from "../adminAudit.js";
 
 const router = express.Router();
 const APPLICATIONS_BUCKET = "applications";
@@ -904,6 +905,20 @@ router.post("/:id/approve-payment", authenticateAdmin, async (req, res) => {
       });
     }
 
+    await recordAdminAuditEvent({
+      action: "application_payment_approved",
+      actor: req.admin?.email || null,
+      metadata: {
+        paymentLinkVersion: nextVersion,
+        paymentLinkSent: payload.send_payment_link,
+        rentalSubscriptionStartDate: payload.rental_subscription_start_date || null,
+        vehicleRegistration: payload.approved_vehicle.trim(),
+        weeklyPrice: payload.approved_weekly_price,
+      },
+      targetId: payload.application_id,
+      targetType: "application",
+    });
+
     res.json({
       success: true,
       checkout_token: checkoutToken.token,
@@ -1101,6 +1116,14 @@ router.post("/:id/cancel", authenticateAdmin, async (req, res) => {
       throw result.error;
     }
 
+    await recordAdminAuditEvent({
+      action: "application_cancelled",
+      actor: req.admin?.email || null,
+      metadata: { reason: cancel_reason || null },
+      targetId: id,
+      targetType: "application",
+    });
+
     res.json(result);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -1155,6 +1178,13 @@ router.put("/:id/status", authenticateAdmin, async (req, res) => {
       .update({ status })
       .eq("id", id);
     if (error) throw error;
+    await recordAdminAuditEvent({
+      action: "application_status_changed",
+      actor: req.admin?.email || null,
+      metadata: { status },
+      targetId: id,
+      targetType: "application",
+    });
     res.json({ success: true });
   } catch (error) {
     if (error instanceof z.ZodError) {

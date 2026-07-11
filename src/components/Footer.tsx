@@ -26,7 +26,7 @@ export default function Footer() {
 
         <div className="grid grid-cols-1 gap-12 md:grid-cols-[1.2fr_0.7fr_1fr] lg:gap-16">
           <div>
-            <Link to="/" className="flex items-center mb-8 group">
+            <Link to="/" aria-label="Maple Rentals home" className="flex items-center mb-8 group">
               <img
                 src="/maple-logo.webp"
                 alt="Maple Rentals Sydney car rentals logo"

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { Loader2, RefreshCw, ExternalLink, FileText, Trash2, Save, Eye, CheckCircle2, AlertCircle, Power } from 'lucide-react';
+import { Loader2, RefreshCw, ExternalLink, FileText, Save, Eye, CheckCircle2, AlertCircle, Power } from 'lucide-react';
 import { UseMutationResult, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Application } from '../../../types';
 import * as api from '../../../lib/api';
@@ -26,7 +26,6 @@ interface AgreementsTabProps {
   setAgreementModalMode: (mode: 'draft' | 'saved') => void;
   setAgreementContent: (content: string) => void;
   setIsAgreementModalOpen: (val: boolean) => void;
-  deleteAgreementMutation: UseMutationResult<any, Error, number, unknown>;
 }
 
 export default function AgreementsTab({
@@ -43,7 +42,6 @@ export default function AgreementsTab({
   setAgreementModalMode,
   setAgreementContent,
   setIsAgreementModalOpen,
-  deleteAgreementMutation,
 }: AgreementsTabProps) {
   const queryClient = useQueryClient();
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
@@ -474,16 +472,6 @@ export default function AgreementsTab({
                 >
                   <FileText className="h-4 w-4" />
                 </button>
-                <button
-                  className="flex min-h-11 items-center justify-center rounded-lg bg-white/5 px-4 text-red-500 transition-all hover:bg-red-500 hover:text-white"
-                  onClick={() => {
-                    if (window.confirm('Delete this agreement?')) {
-                      deleteAgreementMutation.mutate(agreement.id);
-                    }
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
               </div>
             </article>
           ))}
@@ -547,16 +535,6 @@ export default function AgreementsTab({
                       }}
                     >
                       <FileText className="w-4 h-4" />
-                    </button>
-                    <button
-                      className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/5 text-red-500 transition-all hover:bg-red-500 hover:text-white"
-                      onClick={() => {
-                        if (window.confirm('Delete this agreement?')) {
-                          deleteAgreementMutation.mutate(agreement.id);
-                        }
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </td>

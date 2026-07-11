@@ -499,11 +499,6 @@ export const fetchSavedLeaseAgreements = async (): Promise<SavedLeaseAgreement[]
   return data;
 };
 
-export const deleteSavedLeaseAgreement = async (id: number): Promise<{ success: boolean }> => {
-  const { data } = await api.delete(`/agreements/${id}`);
-  return data;
-};
-
 export interface WeeklyFinancials {
   projected_gross_weekly: number;
   projected_net_weekly: number;

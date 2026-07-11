@@ -14,7 +14,9 @@ const SPA_ROUTE_PATTERNS = [
   /^\/success\/?$/,
   /^\/admin\/login\/?$/,
   /^\/admin\/dashboard\/?$/,
+  /^\/admin\/agreements\/?$/,
   /^\/admin\/toll-notices\/?$/,
+  /^\/[a-zA-Z0-9][a-zA-Z0-9/_-]*\/?$/,
 ];
 
 const acceptsHtmlNavigation = (req: RequestLike) => {

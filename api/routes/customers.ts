@@ -5,10 +5,7 @@ import {
   isMissingOperationalHistoryTableError,
   OPERATIONAL_HISTORY_UNAVAILABLE_MESSAGE,
 } from '../operationalHistory.js';
-import {
-  filterRealOperationalCustomers,
-  filterRealOperationalInvoices,
-} from '../importedDataFilters.js';
+import { filterRealOperationalInvoices } from '../importedDataFilters.js';
 
 const router = express.Router();
 const DEFAULT_PAGE_SIZE = 25;
@@ -54,35 +51,20 @@ const applyCustomerSearch = (query: any, searchTerm: string) => {
   );
 };
 
-const customerMatchesSearch = (customer: Record<string, any>, searchTerm: string) => {
-  if (!searchTerm) {
-    return true;
-  }
-
-  const normalized = searchTerm.toLowerCase();
-  return [
-    customer.full_name,
-    customer.email,
-    customer.phone,
-    customer.company_name,
-    customer.staff_number,
-    customer.external_id,
-  ].some((field) => String(field || '').toLowerCase().includes(normalized));
-};
-
 router.get('/', authenticateAdmin, async (req, res) => {
   const requestedPage = parsePositiveInt(req.query.page, 1);
   const pageSize = Math.min(parsePositiveInt(req.query.pageSize, DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
   const searchTerm = normalizeSearchTerm(req.query.search);
 
   try {
-    const { data: customerRows, error: customerRowsError } = await db
-      .from('customers')
-      .select('*')
-      .order('full_name', { ascending: true });
+    const countQuery = applyCustomerSearch(
+      db.from('customers').select('id', { count: 'exact', head: true }).eq('is_imported', false),
+      searchTerm,
+    );
+    const { count, error: countError } = await countQuery;
 
-    if (customerRowsError) {
-      if (isMissingOperationalHistoryTableError(customerRowsError)) {
+    if (countError) {
+      if (isMissingOperationalHistoryTableError(countError)) {
         return res.json({
           available: false,
           items: [],
@@ -94,18 +76,22 @@ router.get('/', authenticateAdmin, async (req, res) => {
         });
       }
 
-      throw customerRowsError;
+      throw countError;
     }
 
-    const filteredCustomers = filterRealOperationalCustomers(
-      (customerRows || []) as Array<Record<string, any>>,
-    ).filter((customer) => customerMatchesSearch(customer, searchTerm));
-    const totalItems = filteredCustomers.length;
+    const totalItems = count || 0;
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const page = Math.min(requestedPage, totalPages);
     const rangeStart = (page - 1) * pageSize;
     const rangeEnd = rangeStart + pageSize - 1;
-    const customers = filteredCustomers.slice(rangeStart, rangeEnd + 1);
+    const customerQuery = applyCustomerSearch(
+      db.from('customers').select('*').eq('is_imported', false),
+      searchTerm,
+    );
+    const { data: customers, error: customerRowsError } = await customerQuery
+      .order('full_name', { ascending: true })
+      .range(rangeStart, rangeEnd);
+    if (customerRowsError) throw customerRowsError;
 
     const customerIds = (customers || [])
       .map((customer: any) => Number(customer.id))

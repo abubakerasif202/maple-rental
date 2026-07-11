@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useDeferredValue, useEffect, useRef, useState } from 'react';
 import {
   Badge,
   Button,
@@ -35,15 +35,6 @@ import {
   Menu,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import OverviewTab from '../components/admin/tabs/OverviewTab';
-import ApplicationsTab from '../components/admin/tabs/ApplicationsTab';
-import RentalsTab from '../components/admin/tabs/RentalsTab';
-import FinancialsTab from '../components/admin/tabs/FinancialsTab';
-import CustomersTab from '../components/admin/tabs/CustomersTab';
-import InvoicesTab from '../components/admin/tabs/InvoicesTab';
-import AgreementsTab from '../components/admin/tabs/AgreementsTab';
-import TollStatDecTab from '../components/admin/tabs/TollStatDecTab';
-import MaintenanceTab from '../components/admin/tabs/MaintenanceTab';
 import {
   getDateRangeForPreset,
   type DateRangeValue,
@@ -62,6 +53,16 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Sidebar from '../components/admin/Sidebar';
 import { getTodayInAustralia } from '../../shared/applicationSubmission';
+
+const OverviewTab = lazy(() => import('../components/admin/tabs/OverviewTab'));
+const ApplicationsTab = lazy(() => import('../components/admin/tabs/ApplicationsTab'));
+const RentalsTab = lazy(() => import('../components/admin/tabs/RentalsTab'));
+const FinancialsTab = lazy(() => import('../components/admin/tabs/FinancialsTab'));
+const CustomersTab = lazy(() => import('../components/admin/tabs/CustomersTab'));
+const InvoicesTab = lazy(() => import('../components/admin/tabs/InvoicesTab'));
+const AgreementsTab = lazy(() => import('../components/admin/tabs/AgreementsTab'));
+const TollStatDecTab = lazy(() => import('../components/admin/tabs/TollStatDecTab'));
+const MaintenanceTab = lazy(() => import('../components/admin/tabs/MaintenanceTab'));
 
 const OPERATIONAL_PAGE_SIZE = 25;
 
@@ -434,16 +435,6 @@ export default function AdminDashboard() {
         getApiErrorMessage(error, 'Failed to cancel Stripe subscription'),
         'error'
       ),
-  });
-
-  const deleteAgreementMutation = useMutation({
-    mutationFn: (id: number) => api.deleteSavedLeaseAgreement(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agreements'] });
-      showNotification('Agreement deleted successfully', 'success');
-    },
-    onError: (error) =>
-      showNotification(getApiErrorMessage(error, 'Failed to delete agreement'), 'error'),
   });
 
   const handleLogout = async () => {
@@ -845,6 +836,7 @@ export default function AdminDashboard() {
           </button>
         </div>
 
+        <Suspense fallback={renderLoadingPanel('Loading admin workspace...')}>
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && (
             <OverviewTab
@@ -947,7 +939,6 @@ export default function AdminDashboard() {
               setAgreementModalMode={setAgreementModalMode}
               setAgreementContent={setAgreementContent}
               setIsAgreementModalOpen={setIsAgreementModalOpen}
-              deleteAgreementMutation={deleteAgreementMutation}
             />
           )}
 
@@ -959,6 +950,7 @@ export default function AdminDashboard() {
             <MaintenanceTab />
           )}
         </AnimatePresence>
+        </Suspense>
       </div>
 
       {/* Notifications */}

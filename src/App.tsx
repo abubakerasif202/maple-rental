@@ -14,6 +14,7 @@ const AdminLogin = lazy(() => import('./pages/AdminLogin'));
 const Apply = lazy(() => import('./pages/Apply'));
 const Checkout = lazy(() => import('./pages/Checkout'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboardRoute'));
+const NotFound = lazy(() => import('./pages/NotFound'));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -29,8 +30,14 @@ function AppShell() {
 
   return (
     <div className="flex min-h-screen flex-col bg-brand-navy">
+      <a
+        href="#main-content"
+        className="sr-only z-[100] rounded-br-xl bg-brand-gold px-5 py-3 font-bold text-brand-charcoal focus:not-sr-only focus:fixed focus:left-0 focus:top-0"
+      >
+        Skip to main content
+      </a>
       {!isAdminRoute && <Navbar />}
-      <main className="flex-grow">
+      <main id="main-content" tabIndex={-1} className="flex-grow">
         <ErrorBoundary>
           <Suspense
             fallback={
@@ -58,6 +65,7 @@ function AppShell() {
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin/agreements" element={<AdminDashboard />} />
               <Route path="/admin/toll-notices" element={<AdminDashboard />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
         </ErrorBoundary>

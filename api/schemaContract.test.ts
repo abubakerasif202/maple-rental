@@ -1,6 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ORIGINAL_ENV = { ...process.env };
+const HARDENING_DEFINITIONS = {
+  admin_audit_events: {
+    properties: {
+      action: { type: 'string' },
+      target_type: { type: 'string' },
+      metadata: { type: 'object' },
+    },
+  },
+  customers: { properties: { is_imported: { type: 'boolean' } } },
+  document_retention_holds: {
+    properties: {
+      storage_path: { type: 'string' },
+      released_at: { type: 'string' },
+    },
+  },
+  invoices: { properties: { is_imported: { type: 'boolean' } } },
+};
 
 describe('schemaContract', () => {
   beforeEach(() => {
@@ -28,6 +45,7 @@ describe('schemaContract', () => {
         statusText: 'OK',
         json: async () => ({
           definitions: {
+            ...HARDENING_DEFINITIONS,
             applications: {
               properties: {
                 approved_at: { type: 'string' },
@@ -86,6 +104,7 @@ describe('schemaContract', () => {
         statusText: 'OK',
         json: async () => ({
           definitions: {
+            ...HARDENING_DEFINITIONS,
             applications: {
               properties: {
                 approvedAt: { type: 'string' },

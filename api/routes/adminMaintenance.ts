@@ -9,13 +9,18 @@ import {
   getResetExportPayload,
   resetImportedDataAndFinancials,
 } from '../adminMaintenanceReset.js';
+import {
+  createMaintenanceResetToken,
+  verifyMaintenanceResetToken,
+} from '../maintenanceResetTokens.js';
+import { recordAdminAuditEvent } from '../adminAudit.js';
 
 const router = express.Router();
 const CONFIRMATION_PHRASE = IMPORTED_DATA_RESET_CONFIRMATION_PHRASE;
 
 const requestSchema = z.object({
   confirm: z.string(),
-  dryRunToken: z.string().optional(),
+  dryRunToken: z.string().min(1).optional(),
   reason: z.string().trim().max(500).optional(),
 });
 
@@ -56,9 +61,10 @@ const sendDryRun = async (
       criteria: plan.criteria,
       counts: plan.counts,
       preserved: plan.preserved,
-      dryRunToken: Buffer.from(
-        JSON.stringify({ at: new Date().toISOString(), email: req.admin?.email || null }),
-      ).toString('base64url'),
+      dryRunToken: createMaintenanceResetToken({
+        adminEmail: req.admin?.email || '',
+        plan,
+      }),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to run dry-run';
@@ -80,9 +86,21 @@ const performReset = async (req: express.Request, res: express.Response) => {
   }
   try {
     requireConfirmation(parsed.data.confirm);
+    const plan = await getImportedDataResetPlan();
+    verifyMaintenanceResetToken({
+      adminEmail: req.admin?.email || '',
+      plan,
+      token: parsed.data.dryRunToken || '',
+    });
     const result = await resetImportedDataAndFinancials({
       adminEmail: req.admin?.email || null,
       reason: parsed.data.reason || null,
+    });
+    await recordAdminAuditEvent({
+      action: 'imported_data_reset_completed',
+      actor: req.admin?.email || null,
+      metadata: { counts: result.counts, reason: parsed.data.reason || null },
+      targetType: 'maintenance_reset',
     });
     console.info('Admin maintenance reset executed', {
       adminEmail: req.admin?.email || null,
@@ -123,6 +141,9 @@ const performReset = async (req: express.Request, res: express.Response) => {
     }
     if (message.includes(CONFIRMATION_PHRASE)) {
       return res.status(400).json({ error: message });
+    }
+    if (/dry-run token|reset plan/i.test(message)) {
+      return res.status(409).json({ error: message });
     }
     if (message.includes('No reliable imported markers')) {
       return res.status(400).json({ error: message });

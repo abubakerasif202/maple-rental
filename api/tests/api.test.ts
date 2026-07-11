@@ -498,11 +498,17 @@ vi.mock("../db/index.js", () => {
     rows.filter((row) =>
       filters.every((filter) => {
         if (filter.type === "eq") {
+          const rowValue = filter.column === "is_imported" && row[filter.column] == null
+            ? ["demo", "imported", "legacy", "legacy-import", "test"].includes(
+                String(row.source || "").toLowerCase(),
+              ) || String(row.email || "").toLowerCase().endsWith("@example.invalid") ||
+                String(row.phone || "") === "0000000000"
+            : row[filter.column];
           if (filter.value == null) {
-            return row[filter.column] == null;
+            return rowValue == null;
           }
 
-          return String(row[filter.column]) === String(filter.value);
+          return String(rowValue) === String(filter.value);
         }
 
         if (filter.type === "gte") {
@@ -1389,6 +1395,7 @@ vi.mock("../db/postgres.js", () => {
 process.env.NODE_ENV = "test";
 process.env.CHECKOUT_LINK_SECRET = "test-checkout-secret";
 process.env.JWT_SECRET = "test-jwt-secret";
+process.env.MAINTENANCE_RESET_TOKEN_SECRET = "test-maintenance-reset-secret-32-characters";
 process.env.STRIPE_SECRET_KEY = "sk_test_123";
 process.env.STRIPE_WEBHOOK_SECRET = "test-webhook-secret";
 process.env.STRIPE_WEEKLY_RENTAL_PRODUCT_ID = "prod_weekly_rental";
@@ -2314,13 +2321,12 @@ describe("Agreements API", () => {
     expect(res.body.error).toBe("Validation failed");
   });
 
-  it("DELETE /api/agreements/:id rejects malformed agreement ids", async () => {
+  it("does not expose a lease agreement deletion endpoint", async () => {
     const res = await request(app)
       .delete("/api/agreements/not-a-number")
       .set("Authorization", "Bearer fake-token");
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("Validation failed");
+    expect(res.status).toBe(404);
   });
 });
 
@@ -3481,6 +3487,16 @@ describe("Operational history API", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST /api/admin/maintenance/imported-data-reset requires a signed dry-run token", async () => {
+    const res = await request(app)
+      .post("/api/admin/maintenance/imported-data-reset")
+      .set("Authorization", "Bearer fake-token")
+      .send({ confirm: "RESET IMPORTED DATA AND FINANCIALS" });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/dry-run token/i);
+  });
+
   it("GET /api/admin/maintenance/imported-data-reset/dry-run rejects non-admin users", async () => {
     mockGetUser.mockResolvedValueOnce({
       data: { user: { email: "driver@example.com" } },
@@ -3584,10 +3600,17 @@ describe("Operational history API", () => {
     mockState.manual_invoice_items = [{ id: "i1", invoice_id: "m1" }];
     mockState.failOnDeleteTable = null;
 
+    const dryRun = await request(app)
+      .get("/api/admin/maintenance/imported-data-reset/dry-run")
+      .set("Authorization", "Bearer fake-token");
+
     const res = await request(app)
       .post("/api/admin/maintenance/reset-imported-data")
       .set("Authorization", "Bearer fake-token")
-      .send({ confirm: "RESET IMPORTED DATA AND FINANCIALS" });
+      .send({
+        confirm: "RESET IMPORTED DATA AND FINANCIALS",
+        dryRunToken: dryRun.body.dryRunToken,
+      });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -3608,10 +3631,17 @@ describe("Operational history API", () => {
     mockState.applications[0].legacy_id = 101;
     mockState.failOnDeleteTable = "invoices";
 
+    const dryRun = await request(app)
+      .get("/api/admin/maintenance/imported-data-reset/dry-run")
+      .set("Authorization", "Bearer fake-token");
+
     const res = await request(app)
       .post("/api/admin/maintenance/reset-imported-data")
       .set("Authorization", "Bearer fake-token")
-      .send({ confirm: "RESET IMPORTED DATA AND FINANCIALS" });
+      .send({
+        confirm: "RESET IMPORTED DATA AND FINANCIALS",
+        dryRunToken: dryRun.body.dryRunToken,
+      });
 
     expect(res.status).toBe(500);
     expect(res.body).toMatchObject({
@@ -4719,10 +4749,9 @@ describe("Stripe API", () => {
     expect(payload.subscription_data.metadata.rental_subscription_start_date).toBe(
       mockState.applications[1].intended_start_date,
     );
-    expect(
-      payload.subscription_data.trial_end ||
-        payload.subscription_data.billing_cycle_anchor,
-    ).toEqual(expect.any(Number));
+    expect(payload.subscription_data.trial_end).toBeUndefined();
+    expect(payload.subscription_data.billing_cycle_anchor).toEqual(expect.any(Number));
+    expect(payload.subscription_data.proration_behavior).toBe('none');
 
     const recurringItem = payload.line_items.find(
       (item: any) => item.price_data.recurring,

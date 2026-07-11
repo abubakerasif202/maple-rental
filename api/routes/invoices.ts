@@ -5,11 +5,6 @@ import {
   isMissingOperationalHistoryTableError,
   OPERATIONAL_HISTORY_UNAVAILABLE_MESSAGE,
 } from '../operationalHistory.js';
-import {
-  filterRealOperationalInvoices,
-  getRecordIdSet,
-  isImportedOperationalCustomerRecord,
-} from '../importedDataFilters.js';
 
 const router = express.Router();
 const DEFAULT_PAGE_SIZE = 25;
@@ -54,84 +49,46 @@ const applyInvoiceSearch = (query: any, searchTerm: string) => {
   );
 };
 
-const invoiceMatchesSearch = (invoice: Record<string, any>, searchTerm: string) => {
-  if (!searchTerm) {
-    return true;
-  }
-
-  const normalized = searchTerm.toLowerCase();
-  return [
-    invoice.external_invoice_number,
-    invoice.customer_name,
-    invoice.car_registration,
-    invoice.due_label,
-    invoice.transaction_summary,
-  ].some((field) => String(field || '').toLowerCase().includes(normalized));
-};
-
 router.get('/', authenticateAdmin, async (req, res) => {
   const requestedPage = parsePositiveInt(req.query.page, 1);
   const pageSize = Math.min(parsePositiveInt(req.query.pageSize, DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
   const searchTerm = normalizeSearchTerm(req.query.search);
 
   try {
-    const invoiceQuery = db
-      .from('invoices')
-      .select('*')
-      .order('invoice_date', { ascending: false });
-
-    const { data: invoiceRows, error: invoicesError } = await invoiceQuery;
-    if (invoicesError) {
-      if (isMissingOperationalHistoryTableError(invoicesError)) {
-        return res.json({
-          available: false,
-          items: [],
-          message: OPERATIONAL_HISTORY_UNAVAILABLE_MESSAGE,
-          page: 1,
-          pageSize,
-          totalItems: 0,
-          totalPages: 1,
-        });
-      }
-
-      throw invoicesError;
-    }
-
-    const { data: allCustomers, error: allCustomersError } = await db
-      .from('customers')
-      .select('*');
-
-    if (allCustomersError) {
-      if (isMissingOperationalHistoryTableError(allCustomersError)) {
-        return res.json({
-          available: false,
-          items: [],
-          message: OPERATIONAL_HISTORY_UNAVAILABLE_MESSAGE,
-          page: 1,
-          pageSize,
-          totalItems: 0,
-          totalPages: 1,
-        });
-      }
-
-      throw allCustomersError;
-    }
-
-    const importedCustomerIds = getRecordIdSet(
-      ((allCustomers || []) as Array<Record<string, any>>).filter((customer) =>
-        isImportedOperationalCustomerRecord(customer),
-      ),
+    const countQuery = applyInvoiceSearch(
+      db.from('invoices').select('id', { count: 'exact', head: true }).eq('is_imported', false),
+      searchTerm,
     );
-    const filteredInvoices = filterRealOperationalInvoices(
-      (invoiceRows || []) as Array<Record<string, any>>,
-      importedCustomerIds,
-    ).filter((invoice) => invoiceMatchesSearch(invoice, searchTerm));
-    const totalItems = filteredInvoices.length;
+    const { count, error: countError } = await countQuery;
+    if (countError) {
+      if (isMissingOperationalHistoryTableError(countError)) {
+        return res.json({
+          available: false,
+          items: [],
+          message: OPERATIONAL_HISTORY_UNAVAILABLE_MESSAGE,
+          page: 1,
+          pageSize,
+          totalItems: 0,
+          totalPages: 1,
+        });
+      }
+
+      throw countError;
+    }
+
+    const totalItems = count || 0;
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const page = Math.min(requestedPage, totalPages);
     const rangeStart = (page - 1) * pageSize;
     const rangeEnd = rangeStart + pageSize - 1;
-    const invoices = filteredInvoices.slice(rangeStart, rangeEnd + 1);
+    const invoiceQuery = applyInvoiceSearch(
+      db.from('invoices').select('*').eq('is_imported', false),
+      searchTerm,
+    );
+    const { data: invoices, error: invoicesError } = await invoiceQuery
+      .order('invoice_date', { ascending: false })
+      .range(rangeStart, rangeEnd);
+    if (invoicesError) throw invoicesError;
 
     const customerIds = (invoices || [])
       .map((invoice: any) => Number(invoice.customer_id))
