@@ -10,6 +10,8 @@ describe('migration safety guards', () => {
     );
 
     expect(resetMigration).toContain('app.allow_destructive_local_reset');
+    expect(resetMigration).toContain("to_regclass('public.applications')");
+    expect(resetMigration).toContain('WHERE table_oid IS NOT NULL');
     expect(resetMigration).toContain('RAISE EXCEPTION');
     expect(resetMigration).toContain('DROP TABLE IF EXISTS');
   });
