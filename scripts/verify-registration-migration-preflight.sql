@@ -116,7 +116,7 @@ SELECT
   NULL AS schema_name,
   pg_describe_object(dependency.classid, dependency.objid, dependency.objsubid) AS object_name,
   NULL AS dependency_name,
-  'dependency type ' || dependency.deptype AS definition
+  'dependency type ' || dependency.deptype::TEXT AS definition
 FROM pg_depend AS dependency
 WHERE dependency.refclassid = 'pg_class'::regclass
   AND dependency.refobjid = to_regclass('public.cars')
