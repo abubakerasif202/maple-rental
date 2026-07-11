@@ -30,6 +30,10 @@ describe('shouldServeSpaEntry', () => {
     expect(
       shouldServeSpaEntry(createRequest({ path: '/admin/toll-notices' }))
     ).toBe(true);
+    expect(
+      shouldServeSpaEntry(createRequest({ path: '/admin/agreements' }))
+    ).toBe(true);
+    expect(shouldServeSpaEntry(createRequest({ path: '/missing-page' }))).toBe(true);
   });
 
   it('allows root path regardless of accept header', () => {

@@ -10,6 +10,8 @@ describe('migration safety guards', () => {
     );
 
     expect(resetMigration).toContain('app.allow_destructive_local_reset');
+    expect(resetMigration).toContain("to_regclass('public.applications')");
+    expect(resetMigration).toContain('WHERE table_oid IS NOT NULL');
     expect(resetMigration).toContain('RAISE EXCEPTION');
     expect(resetMigration).toContain('DROP TABLE IF EXISTS');
   });
@@ -45,5 +47,23 @@ describe('migration safety guards', () => {
     expect(followUpMigration).toContain('IF NOT EXISTS');
     expect(followUpMigration).toContain('NOT VALID');
     expect(followUpMigration).toContain('applications_bond_payment_state_method_check');
+  });
+
+  it('enforces append-only agreements and least-privilege hardening', () => {
+    const hardeningMigration = fs.readFileSync(
+      path.resolve(
+        process.cwd(),
+        'supabase/migrations/20260711215014_production_hardening_audit.sql'
+      ),
+      'utf8'
+    );
+
+    expect(hardeningMigration).toContain('lease_agreements_append_only');
+    expect(hardeningMigration).toContain('BEFORE UPDATE OR DELETE');
+    expect(hardeningMigration).toContain('admin_audit_events');
+    expect(hardeningMigration).toContain('document_retention_holds');
+    expect(hardeningMigration).toContain('idx_toll_transfer_notices_customer_id');
+    expect(hardeningMigration).toContain('REVOKE ALL');
+    expect(hardeningMigration).not.toContain('DROP FUNCTION IF EXISTS public.is_admin() CASCADE');
   });
 });

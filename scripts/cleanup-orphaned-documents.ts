@@ -1,118 +1,210 @@
 import './load-env.js';
-import { createClient } from '@supabase/supabase-js';
+import { pathToFileURL } from 'node:url';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const APPLICATIONS_BUCKET = 'applications';
+const PAGE_SIZE = 1000;
+const DELETE_BATCH_SIZE = 100;
+const DEFAULT_GRACE_DAYS = 30;
+const DOCUMENT_FIELDS = [
+  'license_photo',
+  'licensePhoto',
+  'license_back_photo',
+  'licenseBackPhoto',
+  'uber_screenshot',
+  'uberScreenshot',
+  'passport_or_uber_profile_screenshot',
+  'passportOrUberProfileScreenshot',
+] as const;
 
-const runCleanup = async () => {
+type StorageFile = {
+  created_at?: string | null;
+  name: string;
+  updated_at?: string | null;
+};
+
+export const extractStoragePath = (urlOrPath: unknown) => {
+  if (typeof urlOrPath !== 'string' || !urlOrPath.trim()) return null;
+  const value = urlOrPath.trim();
+
+  try {
+    if (/^https?:\/\//i.test(value)) {
+      const url = new URL(value);
+      const marker = `/applications/`;
+      const markerIndex = url.pathname.indexOf(marker);
+      return decodeURIComponent(
+        markerIndex >= 0 ? url.pathname.slice(markerIndex + marker.length) : url.pathname.split('/').pop() || '',
+      );
+    }
+  } catch {
+    return value;
+  }
+
+  return value.replace(/^\/+/, '');
+};
+
+export const collectReferencedPaths = (applications: Array<Record<string, unknown>>) => {
+  const referencedPaths = new Set<string>();
+  for (const application of applications) {
+    for (const field of DOCUMENT_FIELDS) {
+      const path = extractStoragePath(application[field]);
+      if (path) referencedPaths.add(path);
+    }
+  }
+  return referencedPaths;
+};
+
+export const selectEligibleOrphans = ({
+  files,
+  heldPaths,
+  now = new Date(),
+  referencedPaths,
+  graceDays = DEFAULT_GRACE_DAYS,
+}: {
+  files: StorageFile[];
+  heldPaths: Set<string>;
+  now?: Date;
+  referencedPaths: Set<string>;
+  graceDays?: number;
+}) => {
+  const cutoff = now.getTime() - graceDays * 24 * 60 * 60 * 1000;
+  return files
+    .filter((file) => file.name !== '.emptyFolderPlaceholder')
+    .filter((file) => !referencedPaths.has(file.name) && !heldPaths.has(file.name))
+    .filter((file) => {
+      const timestamp = file.updated_at || file.created_at;
+      if (!timestamp) return false;
+      const parsed = Date.parse(timestamp);
+      return Number.isFinite(parsed) && parsed <= cutoff;
+    })
+    .map((file) => file.name);
+};
+
+const fetchAllApplications = async (supabase: SupabaseClient) => {
+  const rows: Array<Record<string, unknown>> = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('applications')
+      .select('*')
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (error) throw new Error(`Failed to fetch applications: ${error.message}`);
+    rows.push(...((data || []) as Array<Record<string, unknown>>));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return rows;
+};
+
+const fetchAllStorageFiles = async (supabase: SupabaseClient) => {
+  const files: StorageFile[] = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const { data, error } = await supabase.storage
+      .from(APPLICATIONS_BUCKET)
+      .list('', { limit: PAGE_SIZE, offset, sortBy: { column: 'name', order: 'asc' } });
+    if (error) throw new Error(`Failed to list application documents: ${error.message}`);
+    files.push(...((data || []) as StorageFile[]));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return files;
+};
+
+const fetchActiveHolds = async (supabase: SupabaseClient) => {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('document_retention_holds')
+    .select('storage_path, held_until, released_at')
+    .is('released_at', null);
+  if (error) throw new Error(`Document retention holds are unavailable: ${error.message}`);
+
+  return new Set(
+    (data || [])
+      .filter((hold) => !hold.held_until || String(hold.held_until) > nowIso)
+      .map((hold) => String(hold.storage_path || '').trim())
+      .filter(Boolean),
+  );
+};
+
+const writeAudit = async (
+  supabase: SupabaseClient,
+  action: string,
+  metadata: Record<string, unknown>,
+) => {
+  const { error } = await supabase.from('admin_audit_events').insert([{
+    action,
+    actor: 'document-cleanup-script',
+    target_type: 'storage_bucket',
+    target_id: APPLICATIONS_BUCKET,
+    metadata,
+  }]);
+  if (error) throw new Error(`Failed to write cleanup audit event: ${error.message}`);
+};
+
+export const runCleanup = async ({ apply = false, graceDays = DEFAULT_GRACE_DAYS } = {}) => {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
   if (!supabaseUrl || !serviceRoleKey) {
-    console.error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.');
-    process.exit(1);
+    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.');
+  }
+  if (!Number.isInteger(graceDays) || graceDays < DEFAULT_GRACE_DAYS) {
+    throw new Error(`Grace period must be at least ${DEFAULT_GRACE_DAYS} days.`);
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });
-
-  console.log(`Starting cleanup of orphaned files in bucket: ${APPLICATIONS_BUCKET}`);
-
-  // 1. Fetch all files from the bucket
-  const { data: files, error: listError } = await supabase.storage
-    .from(APPLICATIONS_BUCKET)
-    .list('', { limit: 10000 });
-
-  if (listError) {
-    console.error('Failed to list files in bucket:', listError);
-    process.exit(1);
-  }
-
-  if (!files || files.length === 0) {
-    console.log('No files found in the bucket. Nothing to clean up.');
-    return;
-  }
-
-  console.log(`Found ${files.length} total files in bucket.`);
-
-  // 2. Fetch all referenced file paths from applications
-  // Need to account for various schema formats (snake/camel case)
-  const { data: applications, error: dbError } = await supabase
-    .from('applications')
-    .select('license_photo, license_back_photo, licensePhoto, licenseBackPhoto, uber_screenshot, uberScreenshot');
-
-  if (dbError) {
-    console.error('Failed to fetch applications:', dbError);
-    process.exit(1);
-  }
-
-  const referencedPaths = new Set<string>();
-
-  const extractPath = (urlOrPath: string | null | undefined) => {
-    if (!urlOrPath) return null;
-    try {
-      if (urlOrPath.startsWith('http')) {
-        const url = new URL(urlOrPath);
-        // Extract the filename from the end of the URL
-        const parts = url.pathname.split('/');
-        return decodeURIComponent(parts[parts.length - 1]);
-      }
-      return urlOrPath; // Already a relative path/filename
-    } catch {
-      return urlOrPath;
-    }
+  const [files, applications, heldPaths] = await Promise.all([
+    fetchAllStorageFiles(supabase),
+    fetchAllApplications(supabase),
+    fetchActiveHolds(supabase),
+  ]);
+  const referencedPaths = collectReferencedPaths(applications);
+  const orphanedFiles = selectEligibleOrphans({ files, heldPaths, referencedPaths, graceDays });
+  const summary = {
+    apply,
+    filesScanned: files.length,
+    graceDays,
+    heldFiles: heldPaths.size,
+    orphanedFiles,
+    referencedFiles: referencedPaths.size,
   };
 
-  for (const app of (applications || [])) {
-    const photo1 = extractPath(app.license_photo || app.licensePhoto);
-    if (photo1) referencedPaths.add(photo1);
+  console.log(JSON.stringify(summary, null, 2));
+  await writeAudit(supabase, apply ? 'document_cleanup_apply_started' : 'document_cleanup_dry_run', {
+    ...summary,
+    orphanedFiles: orphanedFiles.length,
+  });
 
-    const photo2 = extractPath(
-      app.license_back_photo ||
-        app.licenseBackPhoto ||
-        app.uber_screenshot ||
-        app.uberScreenshot
-    );
-    if (photo2) referencedPaths.add(photo2);
+  if (!apply || orphanedFiles.length === 0) {
+    console.log(apply ? 'No eligible orphaned files found.' : 'Dry run only. Re-run with --apply to delete eligible files.');
+    return summary;
   }
 
-  console.log(`Found ${referencedPaths.size} referenced files in the database.`);
-
-  // 3. Identify orphans
-  const orphanedFiles = files
-    .filter(file => file.name !== '.emptyFolderPlaceholder' && !referencedPaths.has(file.name))
-    .map(file => file.name);
-
-  if (orphanedFiles.length === 0) {
-    console.log('No orphaned files found. Cleanup complete.');
-    return;
-  }
-
-  console.log(`Found ${orphanedFiles.length} orphaned files to delete.`);
-
-  // 4. Delete orphans in batches to avoid URL length/payload limits
-  const batchSize = 100;
   let deletedCount = 0;
-
-  for (let i = 0; i < orphanedFiles.length; i += batchSize) {
-    const batch = orphanedFiles.slice(i, i + batchSize);
-    console.log(`Deleting batch ${i / batchSize + 1}...`);
-    
-    const { data: deleteData, error: deleteError } = await supabase.storage
-      .from(APPLICATIONS_BUCKET)
-      .remove(batch);
-
-    if (deleteError) {
-      console.error(`Failed to delete batch ${i / batchSize + 1}:`, deleteError);
-    } else {
-      deletedCount += deleteData?.length || 0;
-    }
+  for (let index = 0; index < orphanedFiles.length; index += DELETE_BATCH_SIZE) {
+    const batch = orphanedFiles.slice(index, index + DELETE_BATCH_SIZE);
+    const { data, error } = await supabase.storage.from(APPLICATIONS_BUCKET).remove(batch);
+    if (error) throw new Error(`Failed to delete document batch: ${error.message}`);
+    deletedCount += data?.length || 0;
   }
 
-  console.log(`Cleanup complete. Successfully deleted ${deletedCount} orphaned files.`);
+  await writeAudit(supabase, 'document_cleanup_applied', {
+    deletedCount,
+    graceDays,
+    requestedCount: orphanedFiles.length,
+  });
+  console.log(`Deleted ${deletedCount} eligible orphaned files.`);
+  return { ...summary, deletedCount };
 };
 
-runCleanup().catch((err) => {
-  console.error('Unexpected error during cleanup:', err);
-  process.exit(1);
-});
+const isDirectRun = process.argv[1]
+  ? import.meta.url === pathToFileURL(process.argv[1]).href
+  : false;
+
+if (isDirectRun) {
+  const apply = process.argv.includes('--apply');
+  const graceArgument = process.argv.find((argument) => argument.startsWith('--grace-days='));
+  const graceDays = graceArgument ? Number(graceArgument.split('=')[1]) : DEFAULT_GRACE_DAYS;
+  runCleanup({ apply, graceDays }).catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

@@ -20,7 +20,7 @@ Verdict: handoff-ready from local code, build, and test validation. Production d
 
 - Package scripts and Render build/start configuration.
 - Required environment variable surface in `.env.example` and `render.yaml`.
-- Express API route registration, including health, live, applications, admin, rentals, agreements, toll notices, cars, inquiries, and Stripe routes.
+- Express API route registration, including health, live, applications, admin, rentals, agreements, toll notices, inquiries, and Stripe routes.
 - Frontend route surface for public pages, admin pages, checkout, and success recovery.
 - Supabase migration inventory through `supabase/migrations/20260509090000_add_agreement_templates.sql`.
 - Stripe Checkout session creation, session status recovery, webhook signature verification, webhook event handling, pending/BECS states, completed session expiry avoidance, and idempotent activation tests.
@@ -63,7 +63,6 @@ Set real values in Render or the production secret store. Do not commit these va
 - `VITE_STRIPE_PUBLIC_KEY`
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_SUPABASE_VEHICLE_IMAGES_BUCKET`
 
 Optional or legacy-supported values to confirm intentionally:
 
@@ -97,7 +96,7 @@ Optional or legacy-supported values to confirm intentionally:
   - `customer.subscription.created`
   - `customer.subscription.updated`
   - `customer.subscription.deleted`
-- Confirm Checkout metadata includes `application_id`, `checkout_kind=vehicle`, `payment_link_version`, and `car_id` when a vehicle is assigned.
+- Confirm Checkout metadata includes `application_id`, `checkout_kind=vehicle`, and `payment_link_version`; vehicle registration remains application text and `car_id` is never sent.
 - Confirm BECS or asynchronous payment methods show processing until Stripe reports success or failure.
 - Confirm paid completed sessions are never expired during retry/cleanup.
 - Confirm payment activation remains idempotent for duplicate or replayed webhooks.
@@ -122,13 +121,13 @@ Optional or legacy-supported values to confirm intentionally:
 - Verify agreement template tables exist and the active template version persists.
 - Verify toll transfer notice tables and send metadata columns exist.
 - Verify Supabase storage buckets for application uploads are private and service-role accessible.
-- Verify the vehicle images bucket matches `VITE_SUPABASE_VEHICLE_IMAGES_BUCKET`.
+- Verify the private application-document bucket remains service-role accessible.
 
 ## 9. Manual Smoke Test Checklist
 
 - `GET /api/live` returns 200.
 - `GET /api/health` returns 200 in production with Supabase and direct Postgres reachable.
-- Public vehicle listing and vehicle detail pages load.
+- Legacy vehicle listing URLs redirect to the application flow.
 - Application submission succeeds with required uploads.
 - Admin login succeeds only for authorized admin users.
 - Admin dashboard loads applications, rentals, customers, invoices, agreements, and toll notices without missing-data crashes.

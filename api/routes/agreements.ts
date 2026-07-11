@@ -9,6 +9,7 @@ import {
   getImportedApplicationIdSet,
   isImportedApplicationRecord,
 } from '../importedDataFilters.js';
+import { recordAdminAuditEvent } from '../adminAudit.js';
 
 const router = express.Router();
 
@@ -220,6 +221,16 @@ router.post('/', authenticateAdmin, async (req, res) => {
     }
 
     if (error) throw error;
+    await recordAdminAuditEvent({
+      action: 'lease_agreement_created',
+      actor: req.admin?.email || null,
+      metadata: {
+        agreementTemplateVersion: savePayload.agreement_template_version,
+        status: savePayload.status,
+      },
+      targetId: inserted.id,
+      targetType: 'lease_agreement',
+    });
     res.status(201).json({ id: String(inserted.id) });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -289,25 +300,6 @@ router.get('/:id', authenticateAdmin, async (req, res) => {
   } catch (error) {
     console.error('Fetch lease agreement error:', error);
     res.status(500).json({ error: 'Failed to fetch lease agreement' });
-  }
-});
-
-router.delete('/:id', authenticateAdmin, async (req, res) => {
-  try {
-    const parsedParams = z
-      .object({ id: z.coerce.number().int().positive() })
-      .safeParse(req.params);
-
-    if (!parsedParams.success) {
-      return res.status(400).json({ error: 'Validation failed', details: parsedParams.error.issues });
-    }
-
-    const { error } = await db.from('lease_agreements').delete().eq('id', parsedParams.data.id);
-    if (error) throw error;
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Lease agreement deletion error:', error);
-    res.status(500).json({ error: 'Failed to delete lease agreement' });
   }
 });
 

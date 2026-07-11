@@ -140,7 +140,6 @@ const isLiveRentalStatus = (status: unknown) => {
   return normalized !== 'completed' && normalized !== 'cancelled';
 };
 
-const RENTAL_START_TRIAL_MINIMUM_SECONDS = 48 * 60 * 60;
 
 const getRentalSubscriptionStartDate = (application: StripeApplication) => {
   const value = String(
@@ -201,11 +200,6 @@ const buildSubscriptionData = ({
   const startTimestamp = getAustraliaSydneyStartOfDayUnix(rentalStartDate);
   const nowSeconds = Math.floor(Date.now() / 1000);
   if (!Number.isSafeInteger(startTimestamp) || startTimestamp <= nowSeconds) {
-    return subscriptionData;
-  }
-
-  if (startTimestamp >= nowSeconds + RENTAL_START_TRIAL_MINIMUM_SECONDS) {
-    subscriptionData.trial_end = startTimestamp;
     return subscriptionData;
   }
 

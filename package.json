@@ -12,6 +12,7 @@
     "preview": "node scripts/run-vite.js preview",
     "clean": "node scripts/clean.js",
     "clean:documents": "tsx scripts/cleanup-orphaned-documents.ts",
+    "clean:documents:apply": "tsx scripts/cleanup-orphaned-documents.ts --apply",
     "migrate:payment-workflow": "node scripts/migrate-payment-workflow-upgrade.js",
     "migrate:legacy-snake-payment-workflow": "node scripts/migrate-legacy-snake-case-payment-workflow.js",
     "migrate:stripe-webhook-ledger": "node scripts/migrate-stripe-webhook-ledger.js",

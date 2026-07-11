@@ -36,7 +36,7 @@ export default function AdminLogin() {
 
       <div className="max-w-md w-full space-y-8 bg-brand-navy-light p-10 rounded-xl shadow-2xl border border-white/10">
         <div>
-          <h2 className="text-center text-3xl font-serif font-bold text-white tracking-tight">Admin Access</h2>
+          <h1 className="text-center text-3xl font-serif font-bold text-white tracking-tight">Admin Access</h1>
           <p className="mt-2 text-center text-xs text-brand-gold font-bold uppercase tracking-[0.3em]">Maple Rentals Management</p>
         </div>
 
@@ -49,8 +49,9 @@ export default function AdminLogin() {
 
           <div className="space-y-4">
             <div>
-              <label className="sr-only">Admin Email</label>
+              <label htmlFor="admin-email" className="sr-only">Admin Email</label>
               <input
+                id="admin-email"
                 type="email"
                 required
                 className="appearance-none rounded-md relative block w-full px-4 py-3 border border-white/10 bg-brand-navy text-white placeholder-brand-grey/50 focus:outline-none focus:border-brand-gold focus:z-10 sm:text-sm font-light transition-colors"
@@ -60,8 +61,9 @@ export default function AdminLogin() {
               />
             </div>
             <div>
-              <label className="sr-only">Password</label>
+              <label htmlFor="admin-password" className="sr-only">Password</label>
               <input
+                id="admin-password"
                 type="password"
                 required
                 className="appearance-none rounded-md relative block w-full px-4 py-3 border border-white/10 bg-brand-navy text-white placeholder-brand-grey/50 focus:outline-none focus:border-brand-gold focus:z-10 sm:text-sm font-light transition-colors"

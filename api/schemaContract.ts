@@ -6,6 +6,11 @@ type RequiredColumnContract = {
 };
 
 export const PRODUCTION_SCHEMA_CONTRACT_REQUIRED_COLUMNS = {
+  admin_audit_events: [
+    { label: 'action', acceptable: ['action'] },
+    { label: 'target_type', acceptable: ['target_type'] },
+    { label: 'metadata', acceptable: ['metadata'] },
+  ],
   applications: [
     { label: 'approved_at', acceptable: ['approved_at', 'approvedAt'] },
     { label: 'approved_bond', acceptable: ['approved_bond', 'approvedBond'] },
@@ -62,6 +67,16 @@ export const PRODUCTION_SCHEMA_CONTRACT_REQUIRED_COLUMNS = {
       label: 'stripe_subscription_id',
       acceptable: ['stripe_subscription_id', 'stripeSubscriptionId'],
     },
+  ],
+  customers: [
+    { label: 'is_imported', acceptable: ['is_imported'] },
+  ],
+  document_retention_holds: [
+    { label: 'storage_path', acceptable: ['storage_path'] },
+    { label: 'released_at', acceptable: ['released_at'] },
+  ],
+  invoices: [
+    { label: 'is_imported', acceptable: ['is_imported'] },
   ],
 } as const;
 

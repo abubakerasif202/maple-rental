@@ -78,10 +78,11 @@ export default function InquiryForm() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Full Name</label>
+            <label htmlFor="inquiry-name" className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Full Name</label>
             <div className="relative">
               <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
               <input
+                id="inquiry-name"
                 {...register('name')}
                 placeholder="John Doe"
                 className={`w-full bg-brand-navy border ${errors.name ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
@@ -90,10 +91,11 @@ export default function InquiryForm() {
             {errors.name && <p className="text-red-500 text-[10px] uppercase tracking-widest">{errors.name.message}</p>}
           </div>
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Email Address</label>
+            <label htmlFor="inquiry-email" className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Email Address</label>
             <div className="relative">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
               <input
+                id="inquiry-email"
                 {...register('email')}
                 placeholder="john@example.com"
                 className={`w-full bg-brand-navy border ${errors.email ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
@@ -105,10 +107,11 @@ export default function InquiryForm() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Phone Number</label>
+            <label htmlFor="inquiry-phone" className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Phone Number</label>
             <div className="relative">
               <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
               <input
+                id="inquiry-phone"
                 {...register('phone')}
                 placeholder="0400 000 000"
                 className={`w-full bg-brand-navy border ${errors.phone ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
@@ -118,8 +121,9 @@ export default function InquiryForm() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Start Date</label>
+              <label htmlFor="inquiry-start-date" className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Start Date</label>
               <input
+                id="inquiry-start-date"
                 type="date"
                 {...register('startDate')}
                 className={`w-full bg-brand-navy border ${errors.startDate ? 'border-red-500' : 'border-white/10'} p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors`}
@@ -127,8 +131,9 @@ export default function InquiryForm() {
               {errors.startDate && <p className="text-red-500 text-[10px] uppercase tracking-widest">{errors.startDate.message}</p>}
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">End Date</label>
+              <label htmlFor="inquiry-end-date" className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">End Date</label>
               <input
+                id="inquiry-end-date"
                 type="date"
                 {...register('endDate')}
                 className={`w-full bg-brand-navy border ${errors.endDate ? 'border-red-500' : 'border-white/10'} p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors`}
@@ -139,8 +144,9 @@ export default function InquiryForm() {
         </div>
 
         <div className="space-y-2">
-          <label className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Additional Notes (Optional)</label>
+          <label htmlFor="inquiry-message" className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Additional Notes (Optional)</label>
           <textarea
+            id="inquiry-message"
             {...register('message')}
             rows={3}
             placeholder="Tell us about your requirements..."

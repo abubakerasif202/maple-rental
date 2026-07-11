@@ -232,9 +232,9 @@ function TrustPill({ text }: { text: string }) {
   );
 }
 
-function FormLabel({ children }: { children: React.ReactNode }) {
+function FormLabel({ children, htmlFor }: { children: React.ReactNode; htmlFor: string }) {
   return (
-    <label className="text-[10px] font-bold uppercase tracking-[0.32em] text-brand-grey">
+    <label htmlFor={htmlFor} className="text-[10px] font-bold uppercase tracking-[0.32em] text-brand-grey">
       {children}
     </label>
   );
@@ -750,8 +750,9 @@ export default function Apply() {
                     >
                       <div className="grid gap-5 md:grid-cols-2">
                         <div className="space-y-2">
-                          <FormLabel>Full name</FormLabel>
+                          <FormLabel htmlFor="application-name">Full name</FormLabel>
                           <input
+                            id="application-name"
                             {...register("name")}
                             className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
                             placeholder="As shown on your licence"
@@ -760,8 +761,9 @@ export default function Apply() {
                         </div>
 
                         <div className="space-y-2">
-                          <FormLabel>Mobile number</FormLabel>
+                          <FormLabel htmlFor="application-phone">Mobile number</FormLabel>
                           <input
+                            id="application-phone"
                             {...register("phone")}
                             className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
                             placeholder="0412 345 678"
@@ -770,8 +772,9 @@ export default function Apply() {
                         </div>
 
                         <div className="space-y-2">
-                          <FormLabel>Email address</FormLabel>
+                          <FormLabel htmlFor="application-email">Email address</FormLabel>
                           <input
+                            id="application-email"
                             {...register("email")}
                             className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
                             placeholder="driver@example.com"
@@ -780,8 +783,9 @@ export default function Apply() {
                         </div>
 
                         <div className="space-y-2">
-                          <FormLabel>Intended start date</FormLabel>
+                          <FormLabel htmlFor="application-start-date">Intended start date</FormLabel>
                           <input
+                            id="application-start-date"
                             type="date"
                             {...register("intended_start_date")}
                             className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
@@ -792,8 +796,9 @@ export default function Apply() {
                         </div>
 
                         <div className="space-y-2 md:col-span-2">
-                          <FormLabel>Residential address</FormLabel>
+                          <FormLabel htmlFor="application-address">Residential address</FormLabel>
                           <textarea
+                            id="application-address"
                             {...register("address")}
                             rows={3}
                             className="w-full resize-none rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
@@ -814,8 +819,9 @@ export default function Apply() {
                     >
                       <div className="grid gap-5 lg:grid-cols-3">
                         <div className="space-y-2">
-                          <FormLabel>Licence number</FormLabel>
+                          <FormLabel htmlFor="application-licence-number">Licence number</FormLabel>
                           <input
+                            id="application-licence-number"
                             {...register("license_number")}
                             className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
                             placeholder="NSW licence number"
@@ -826,8 +832,9 @@ export default function Apply() {
                         </div>
 
                         <div className="space-y-2">
-                          <FormLabel>Licence expiry</FormLabel>
+                          <FormLabel htmlFor="application-licence-expiry">Licence expiry</FormLabel>
                           <input
+                            id="application-licence-expiry"
                             type="date"
                             {...register("license_expiry")}
                             className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
@@ -838,8 +845,9 @@ export default function Apply() {
                         </div>
 
                         <div className="space-y-2">
-                          <FormLabel>Passport or Uber profile screenshot</FormLabel>
+                          <FormLabel htmlFor="application-passport-document">Passport or Uber profile screenshot</FormLabel>
                           <input
+                            id="application-passport-document"
                             type="file"
                             accept={APPLICATION_DOCUMENT_CONTENT_TYPES.join(",")}
                             onChange={(event) =>
@@ -937,8 +945,9 @@ export default function Apply() {
 
                       <div className="mt-6 grid gap-5 md:grid-cols-2">
                         <div className="space-y-2">
-                          <FormLabel>Uber status</FormLabel>
+                          <FormLabel htmlFor="application-uber-status">Uber status</FormLabel>
                           <select
+                            id="application-uber-status"
                             {...register("uber_status")}
                             className="w-full appearance-none rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
                           >
@@ -952,8 +961,9 @@ export default function Apply() {
                         </div>
 
                         <div className="space-y-2">
-                          <FormLabel>Rideshare experience</FormLabel>
+                          <FormLabel htmlFor="application-experience">Rideshare experience</FormLabel>
                           <select
+                            id="application-experience"
                             {...register("experience")}
                             className="w-full appearance-none rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
                           >
@@ -1028,8 +1038,9 @@ export default function Apply() {
                           </label>
 
                           <div className="space-y-2">
-                            <FormLabel>Typed signature</FormLabel>
+                            <FormLabel htmlFor="application-signature">Typed signature</FormLabel>
                             <input
+                              id="application-signature"
                               {...register("agreement_signature")}
                               className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
                               placeholder="Type your full legal name"
