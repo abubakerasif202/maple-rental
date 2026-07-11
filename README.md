@@ -1,14 +1,14 @@
 # Maple Rental
 
-Maple Rental is a single-service full-stack rental platform for a hybrid vehicle fleet. The same Express process serves the API and the built React/Vite frontend in production.
+Maple Rental is a single-service full-stack rental platform for weekly vehicle rentals. Vehicles are identified operationally by registration text rather than a separate fleet catalogue. The same Express process serves the API and the built React/Vite frontend in production.
 
 Client-ready deployment and release notes are documented in [docs/CLIENT_HANDOFF.md](docs/CLIENT_HANDOFF.md).
 Stripe operational setup and reset steps are documented in [docs/STRIPE_SETUP.md](docs/STRIPE_SETUP.md).
 
 ## Executive Summary
 
-- Public users can browse vehicles, submit applications, upload driver documents, and receive a payment link after admin review.
-- Admin users can review applications, manage cars, activate rentals, inspect customer and invoice history, and work with lease agreements.
+- Public users can submit applications, upload driver documents, and receive a payment link after admin review.
+- Admin users can review applications, record a registration number, manage payment status, inspect customer and invoice history, and work with lease agreements.
 - Supabase provides auth and private document storage.
 - Transactional app data and Stripe/payment state use a direct PostgreSQL connection, with Render Postgres preferred through `DATABASE_URL`.
 - Render deploys the app as one Node web service.
@@ -63,8 +63,8 @@ Stripe operational setup and reset steps are documented in [docs/STRIPE_SETUP.md
 
 - `/`
 - `/pricing`
-- `/cars`
-- `/cars/:id`
+- `/cars` (legacy redirect to `/apply`)
+- `/cars/:id` (legacy redirect to `/apply`)
 - `/apply`
 - `/checkout/:id`
 - `/success`
@@ -77,7 +77,6 @@ Stripe operational setup and reset steps are documented in [docs/STRIPE_SETUP.md
 ### API
 
 - `/api/auth`
-- `/api/cars`
 - `/api/applications`
 - `/api/inquiries`
 - `/api/stripe`
@@ -161,7 +160,6 @@ Apply additional migrations for existing environments as needed:
 
 ```bash
 npm run migrate:payment-workflow
-npm run migrate:vehicle-allocation
 npm run migrate:operational-history
 ```
 
@@ -348,7 +346,6 @@ $env:DATABASE_URL='postgresql://...'
 npm run migrate:payment-workflow
 npm run migrate:legacy-snake-payment-workflow
 npm run migrate:stripe-webhook-ledger
-npm run migrate:vehicle-allocation
 npm run migrate:operational-history
 npm run migrate:application-indexes
 ```

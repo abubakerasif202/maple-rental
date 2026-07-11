@@ -5,7 +5,6 @@ import { authenticateAdmin } from '../middleware/auth.js';
 import { getStripeClient } from '../stripeClient.js';
 import {
   getRentalCreatedAtColumn,
-  getRentalSelectColumns,
   getSchemaCompat,
 } from '../schemaCompat.js';
 import {
@@ -39,14 +38,10 @@ const buildCancellationIdempotencyKey = ({
 
 router.get('/', authenticateAdmin, async (_req, res) => {
   try {
-    const selectColumns = await getRentalSelectColumns({
-      includeRelations: true,
-      includeStripeFields: true,
-    });
     const orderColumn = await getRentalCreatedAtColumn();
     const { data, error } = await db
       .from('rentals')
-      .select(selectColumns)
+      .select('*')
       .order(orderColumn, { ascending: false });
 
     if (error) throw error;
@@ -60,13 +55,33 @@ router.get('/', authenticateAdmin, async (_req, res) => {
     const importedApplicationIds = getImportedApplicationIdSet(
       (applications || []) as Array<Record<string, any>>,
     );
+    const applicationsById = new Map(
+      ((applications || []) as Array<Record<string, any>>).map((application) => [
+        String(application.id),
+        application,
+      ])
+    );
     const formattedRentals = ((data || []) as Array<Record<string, any>>)
       .filter((rental) => !isImportedRentalRecord(rental, importedApplicationIds))
-      .map((rental: any) => ({
-      ...rental,
-      applicant_name: rental.applications?.name,
-      car_name: rental.cars?.name
-    }));
+      .map((rental: any) => {
+        const applicationId = String(rental.application_id || rental.applicationId || '');
+        const application = applicationsById.get(applicationId);
+        const vehicleRegistration = String(
+          rental.vehicle_registration ||
+            rental.vehicleRegistration ||
+            application?.approved_vehicle ||
+            application?.approvedVehicle ||
+            ''
+        ).trim();
+
+        return {
+          ...rental,
+          application_id: applicationId,
+          applicant_name: application?.name,
+          car_name: vehicleRegistration,
+          vehicle_registration: vehicleRegistration,
+        };
+      });
 
     res.json(formattedRentals);
   } catch (error) {
@@ -90,10 +105,9 @@ router.post('/:rentalId/cancel-subscription', authenticateAdmin, async (req, res
   }
 
   try {
-    const selectColumns = await getRentalSelectColumns({ includeStripeFields: true });
     const { data: rental, error: rentalError } = await db
       .from('rentals')
-      .select(selectColumns)
+      .select('*')
       .eq('id', rentalId)
       .single();
 

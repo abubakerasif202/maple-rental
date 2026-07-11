@@ -95,7 +95,21 @@ const getTrustedWriteOrigins = (req: express.Request) =>
 const isSafeMethod = (method: string) =>
   ['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase());
 
-const getCookieSameSite = () => ((isProduction ? 'strict' : 'none') as 'none' | 'strict');
+const getCookieSameSite = () => ((isProduction ? 'strict' : 'lax') as 'lax' | 'strict');
+
+const shouldUseCrossSiteCookie = (req?: express.Request) => {
+  if (!req) {
+    return false;
+  }
+
+  const requestOrigin = toOrigin(req.get('origin'));
+  if (!requestOrigin) {
+    return false;
+  }
+
+  const hostOrigin = toOrigin(getRequestOrigin(req));
+  return requestOrigin !== hostOrigin && requestOrigin.startsWith('https://');
+};
 
 const readAdminSessionSecret = () => (process.env.JWT_SECRET || '').trim();
 
@@ -139,13 +153,15 @@ const hasTrustedWriteOrigin = (req: express.Request) => {
   return false;
 };
 
-export const createCookieOptions = () => {
+export const createCookieOptions = (req?: express.Request) => {
+  const useCrossSiteCookie = shouldUseCrossSiteCookie(req);
+
   return {
     httpOnly: true,
     maxAge: LOCAL_ADMIN_SESSION_TTL_MS,
     path: '/',
-    sameSite: getCookieSameSite(),
-    secure: true,
+    sameSite: useCrossSiteCookie ? ('none' as const) : getCookieSameSite(),
+    secure: useCrossSiteCookie || isProduction,
   };
 };
 
@@ -202,6 +218,66 @@ const signAdminSessionValueWithSecret = (value: string, secret: string) =>
 const signAdminSessionValue = (value: string) =>
   signAdminSessionValueWithSecret(value, requireAdminSessionSecret());
 
+const getAdminSessionEncryptionKey = () =>
+  crypto
+    .createHash('sha256')
+    .update(`maple-admin-session:v1:${requireAdminSessionSecret()}`)
+    .digest();
+
+const encryptAdminSessionPayload = (payload: SupabaseAdminSessionPayload) => {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv(
+    'aes-256-gcm',
+    getAdminSessionEncryptionKey(),
+    iv
+  );
+  const ciphertext = Buffer.concat([
+    cipher.update(JSON.stringify(payload), 'utf8'),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
+
+  return [
+    'enc',
+    'v1',
+    iv.toString('base64url'),
+    tag.toString('base64url'),
+    ciphertext.toString('base64url'),
+  ].join('.');
+};
+
+const decryptAdminSessionPayload = (
+  token: string
+): Partial<SupabaseAdminSessionPayload> | null => {
+  const [prefix, version, ivValue, tagValue, ciphertextValue] = token.split('.');
+  if (
+    prefix !== 'enc' ||
+    version !== 'v1' ||
+    !ivValue ||
+    !tagValue ||
+    !ciphertextValue
+  ) {
+    return null;
+  }
+
+  try {
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      getAdminSessionEncryptionKey(),
+      Buffer.from(ivValue, 'base64url')
+    );
+    decipher.setAuthTag(Buffer.from(tagValue, 'base64url'));
+    const plaintext = Buffer.concat([
+      decipher.update(Buffer.from(ciphertextValue, 'base64url')),
+      decipher.final(),
+    ]).toString('utf8');
+
+    return JSON.parse(plaintext) as Partial<SupabaseAdminSessionPayload>;
+  } catch {
+    return null;
+  }
+};
+
 const verifySignedSessionToken = (token: string) => {
   const adminSessionSecret = readAdminSessionSecret();
   if (!adminSessionSecret) {
@@ -256,7 +332,7 @@ const verifyLocalAdminSessionToken = (token: string) => {
 };
 
 const verifySupabaseAdminSessionToken = (token: string) => {
-  const payload = verifySignedSessionToken(token);
+  const payload = decryptAdminSessionPayload(token);
   if (!payload || payload.mode !== 'supabase-admin') {
     return null;
   }
@@ -266,6 +342,10 @@ const verifySupabaseAdminSessionToken = (token: string) => {
     typeof payload.accessToken !== 'string' ||
     typeof payload.refreshToken !== 'string'
   ) {
+    return null;
+  }
+
+  if (typeof payload.exp !== 'number' || payload.exp <= Date.now()) {
     return null;
   }
 
@@ -320,11 +400,7 @@ export const createSupabaseAdminSessionToken = ({
     refreshToken,
   };
 
-  const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString(
-    'base64url'
-  );
-
-  return `${encodedPayload}.${signAdminSessionValue(encodedPayload)}`;
+  return encryptAdminSessionPayload(payload);
 };
 
 export const createLocalAdminSessionToken = (email: string) => {
@@ -405,7 +481,7 @@ const refreshSupabaseAdminSession = async (
       email: data.user.email || effectiveAdminEmail,
       refreshToken: data.session.refresh_token,
     }),
-    createCookieOptions()
+    createCookieOptions(req)
   );
 
   return { accessDenied: false as const, user: data.user };

@@ -1,7 +1,5 @@
 type SchemaMode = 'snake' | 'camel';
 
-import { calculateBondFromWeeklyRent } from '../shared/rentalPricing.js';
-
 type OpenApiDefinition = {
   properties?: Record<string, unknown>;
 };
@@ -27,11 +25,8 @@ type SchemaCompat = {
   applicationAgreementAcceptedAtColumn: string;
   applicationAgreementSignatureColumn: string;
   applicationAgreementTemplateVersionColumn: ApplicationAgreementTemplateVersionColumn;
-  carArchivedAtColumn: string;
-  carCreatedAtColumn: string;
   coreMode: SchemaMode;
   applicationBackPhotoColumn: ApplicationBackPhotoColumn;
-  applicationAssignedCarColumn: string | null;
   applicationApprovedBondColumn: string;
   applicationBondNotesColumn: string;
   applicationBondPaymentMethodColumn: string;
@@ -56,14 +51,11 @@ const DEFAULT_SCHEMA_COMPAT: SchemaCompat = {
   applicationAgreementAcceptedAtColumn: 'agreement_accepted_at',
   applicationAgreementSignatureColumn: 'agreement_signature',
   applicationAgreementTemplateVersionColumn: 'agreement_template_version',
-  carArchivedAtColumn: 'archived_at',
-  carCreatedAtColumn: 'created_at',
   coreMode: 'snake',
   // Default to the modern column name so environments without schema
   // introspection (e.g. missing SUPABASE_SERVICE_ROLE_KEY) still write to
   // the correct column defined in supabase/migrations/01_schema.sql.
   applicationBackPhotoColumn: 'license_back_photo',
-  applicationAssignedCarColumn: null,
   applicationApprovedBondColumn: 'approved_bond',
   applicationBondNotesColumn: 'bond_notes',
   applicationBondPaymentMethodColumn: 'bond_payment_method',
@@ -130,21 +122,15 @@ export const getSchemaCompat = async (): Promise<SchemaCompat> => {
           return DEFAULT_SCHEMA_COMPAT;
         }
 
-        const carsDefinition = definitions.cars;
         const applicationsDefinition = definitions.applications;
         const rentalsDefinition = definitions.rentals;
 
-        const coreMode: SchemaMode = hasProperty(carsDefinition, 'modelYear') ? 'camel' : 'snake';
-        const carArchivedAtColumn = hasProperty(carsDefinition, 'archivedAt')
-          ? 'archivedAt'
-          : hasProperty(carsDefinition, 'archived_at')
-            ? 'archived_at'
-            : coreMode === 'camel'
-              ? 'archivedAt'
-              : 'archived_at';
-        const carCreatedAtColumn = hasProperty(carsDefinition, 'createdAt')
-          ? 'createdAt'
-          : 'created_at';
+        const coreMode: SchemaMode =
+          hasProperty(applicationsDefinition, 'approvedVehicle') ||
+          hasProperty(applicationsDefinition, 'approvedAt') ||
+          hasProperty(applicationsDefinition, 'createdAt')
+            ? 'camel'
+            : 'snake';
         const applicationBackPhotoColumn: ApplicationBackPhotoColumn = hasProperty(
           applicationsDefinition,
           'licenseBackPhoto'
@@ -176,11 +162,6 @@ export const getSchemaCompat = async (): Promise<SchemaCompat> => {
             : coreMode === 'camel'
               ? 'licenceState'
               : 'licence_state';
-        const applicationAssignedCarColumn = hasProperty(applicationsDefinition, 'assignedCarId')
-          ? 'assignedCarId'
-          : hasProperty(applicationsDefinition, 'assigned_car_id')
-            ? 'assigned_car_id'
-            : null;
         const applicationApprovedBondColumn = hasProperty(applicationsDefinition, 'approvedBond')
           ? 'approvedBond'
           : hasProperty(applicationsDefinition, 'approved_bond')
@@ -351,11 +332,8 @@ export const getSchemaCompat = async (): Promise<SchemaCompat> => {
           applicationAgreementAcceptedAtColumn,
           applicationAgreementSignatureColumn,
           applicationAgreementTemplateVersionColumn,
-          carArchivedAtColumn,
-          carCreatedAtColumn,
           coreMode,
           applicationBackPhotoColumn,
-          applicationAssignedCarColumn,
           applicationApprovedBondColumn,
           applicationBondNotesColumn,
           applicationBondPaymentMethodColumn,
@@ -389,76 +367,11 @@ export const getSchemaCompat = async (): Promise<SchemaCompat> => {
   return schemaCompatPromise;
 };
 
-export const getCarSelectColumns = async () => {
-  const { carArchivedAtColumn, carCreatedAtColumn, coreMode } = await getSchemaCompat();
-
-  if (coreMode !== 'camel') {
-    const archivedAtSelect =
-      carArchivedAtColumn === 'archived_at' ? 'archived_at' : `archived_at:${carArchivedAtColumn}`;
-    return ['id', 'name', 'model_year', 'weekly_price', 'bond', 'status', 'image', archivedAtSelect, 'created_at'].join(', ');
-  }
-
-  const archivedAtSelect =
-    carArchivedAtColumn === 'archivedAt' ? 'archived_at:archivedAt' : `archived_at:${carArchivedAtColumn}`;
-
-  return carCreatedAtColumn === 'createdAt'
-    ? ['id', 'name', 'model_year:modelYear', 'weekly_price:weeklyPrice', 'bond', 'status', 'image', archivedAtSelect, 'created_at:createdAt'].join(', ')
-    : ['id', 'name', 'model_year:modelYear', 'weekly_price:weeklyPrice', 'bond', 'status', 'image', archivedAtSelect, 'created_at'].join(', ');
-};
-
-export const toCarWritePayload = async (car: {
-  name: string;
-  model_year: number;
-  weekly_price: number;
-  bond: number;
-  status: string;
-}) => {
-  const { coreMode } = await getSchemaCompat();
-  const normalizedBond =
-    Number.isFinite(car.bond) && car.bond >= 0
-      ? car.bond
-      : calculateBondFromWeeklyRent(car.weekly_price);
-
-  return coreMode === 'camel'
-    ? {
-        name: car.name,
-        modelYear: car.model_year,
-        weeklyPrice: car.weekly_price,
-        bond: normalizedBond,
-        status: car.status,
-        image: '',
-      }
-    : {
-        name: car.name,
-        model_year: car.model_year,
-        weekly_price: car.weekly_price,
-        bond: normalizedBond,
-        status: car.status,
-        image: '',
-      };
-};
-
-export const getCarWeeklyPriceColumn = async () => {
-  const { coreMode } = await getSchemaCompat();
-  return coreMode === 'camel' ? 'weeklyPrice' : 'weekly_price';
-};
-
-export const getCarCreatedAtColumn = async () => {
-  const { carCreatedAtColumn } = await getSchemaCompat();
-  return carCreatedAtColumn;
-};
-
-export const getCarArchivedAtColumn = async () => {
-  const { carArchivedAtColumn } = await getSchemaCompat();
-  return carArchivedAtColumn;
-};
-
 export const getApplicationSelectColumns = async () => {
   const {
     coreMode,
     applicationBackPhotoColumn,
     applicationPassportDocumentColumn,
-    applicationAssignedCarColumn,
     applicationApprovedBondColumn,
     applicationBondNotesColumn,
     applicationBondPaymentMethodColumn,
@@ -484,11 +397,6 @@ export const getApplicationSelectColumns = async () => {
     applicationPassportDocumentColumn === 'passport_or_uber_profile_screenshot'
       ? 'passport_or_uber_profile_screenshot'
       : `passport_or_uber_profile_screenshot:${applicationPassportDocumentColumn}`;
-  const assignedCarSelect = applicationAssignedCarColumn
-    ? applicationAssignedCarColumn === 'assigned_car_id'
-      ? 'assigned_car_id'
-      : `assigned_car_id:${applicationAssignedCarColumn}`
-    : null;
   const approvedBondSelect =
     applicationApprovedBondColumn === 'approved_bond'
       ? 'approved_bond'
@@ -570,7 +478,6 @@ export const getApplicationSelectColumns = async () => {
         'license_photo:licensePhoto',
         backPhotoSelect,
         passportDocumentSelect,
-        ...(assignedCarSelect ? [assignedCarSelect] : []),
         approvedBondSelect,
         bondPaymentStatusSelect,
         bondPaymentMethodSelect,
@@ -605,7 +512,6 @@ export const getApplicationSelectColumns = async () => {
         'license_photo',
         backPhotoSelect,
         passportDocumentSelect,
-        ...(assignedCarSelect ? [assignedCarSelect] : []),
         approvedBondSelect,
         bondPaymentStatusSelect,
         bondPaymentMethodSelect,
@@ -737,13 +643,7 @@ export const getApplicationCreatedAtColumn = async () => {
   return coreMode === 'camel' ? 'createdAt' : 'created_at';
 };
 
-export const getApplicationAssignedCarColumn = async () => {
-  const { applicationAssignedCarColumn } = await getSchemaCompat();
-  return applicationAssignedCarColumn;
-};
-
 export const toApplicationPaymentWritePayload = async (payload: {
-  assigned_car_id?: number | null;
   approved_bond?: number | null;
   bond_notes?: string | null;
   bond_payment_method?: string | null;
@@ -762,10 +662,6 @@ export const toApplicationPaymentWritePayload = async (payload: {
 }) => {
   const compat = await getSchemaCompat();
   const mappedPayload: Record<string, unknown> = {};
-
-  if ('assigned_car_id' in payload && compat.applicationAssignedCarColumn) {
-    mappedPayload[compat.applicationAssignedCarColumn] = payload.assigned_car_id ?? null;
-  }
 
   if ('approved_bond' in payload) {
     mappedPayload[compat.applicationApprovedBondColumn] = payload.approved_bond ?? null;
@@ -872,7 +768,7 @@ export const getRentalSelectColumns = async ({
     compat.coreMode === 'camel'
       ? [
           'id',
-          'car_id:carId',
+          'vehicle_registration:vehicleRegistration',
           'application_id:applicationId',
           'start_date:startDate',
           'end_date:endDate',
@@ -883,7 +779,7 @@ export const getRentalSelectColumns = async ({
         ]
       : [
           'id',
-          'car_id',
+          'vehicle_registration',
           'application_id',
           'start_date',
           'end_date',
@@ -912,8 +808,8 @@ export const getRentalSelectColumns = async ({
   if (includeRelations) {
     columns.push(
       compat.coreMode === 'camel'
-        ? 'applications:applicationId(name), cars:carId(name)'
-        : 'applications:application_id(name), cars:car_id(name)'
+        ? 'applications:applicationId(name)'
+        : 'applications:application_id(name)'
     );
   }
 
@@ -921,7 +817,7 @@ export const getRentalSelectColumns = async ({
 };
 
 export const toRentalWritePayload = async (rental: {
-  car_id: number;
+  vehicle_registration: string;
   application_id: string;
   start_date: string;
   end_date?: string | null;
@@ -935,7 +831,7 @@ export const toRentalWritePayload = async (rental: {
   const basePayload =
     compat.coreMode === 'camel'
       ? {
-          carId: rental.car_id,
+          vehicleRegistration: rental.vehicle_registration,
           applicationId: rental.application_id,
           startDate: rental.start_date,
           endDate: rental.end_date ?? null,
@@ -944,7 +840,7 @@ export const toRentalWritePayload = async (rental: {
           status: rental.status,
         }
       : {
-          car_id: rental.car_id,
+          vehicle_registration: rental.vehicle_registration,
           application_id: rental.application_id,
           start_date: rental.start_date,
           end_date: rental.end_date ?? null,
@@ -971,24 +867,9 @@ export const getRentalCreatedAtColumn = async () => {
   return coreMode === 'camel' ? 'createdAt' : 'created_at';
 };
 
-export const getRentalCarIdColumn = async () => {
-  const { coreMode } = await getSchemaCompat();
-  return coreMode === 'camel' ? 'carId' : 'car_id';
-};
-
 export const getRentalApplicationIdColumn = async () => {
   const { coreMode } = await getSchemaCompat();
   return coreMode === 'camel' ? 'applicationId' : 'application_id';
-};
-
-export const getBookingCarIdColumn = async () => {
-  const { coreMode } = await getSchemaCompat();
-  return coreMode === 'camel' ? 'carId' : 'car_id';
-};
-
-export const getLeaseAgreementCarIdColumn = async () => {
-  const { coreMode } = await getSchemaCompat();
-  return coreMode === 'camel' ? 'carId' : 'car_id';
 };
 
 export const getBookingSelectColumns = async () => {

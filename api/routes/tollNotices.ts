@@ -71,7 +71,6 @@ const optionalStringSchema = z.preprocess(
 const tollNoticePayloadBaseSchema = z.object({
   application_id: z.string().trim().uuid().nullable().optional(),
   authorised_officer_name: z.string().trim().min(1, 'Authorised officer name is required'),
-  car_id: z.coerce.number().int().positive().nullable().optional(),
   customer_id: z.coerce.number().int().positive().nullable().optional(),
   declaration_date: optionalDateSchema,
   declaration_place: z.string().trim().min(1, 'Declaration place is required'),
@@ -145,16 +144,6 @@ const parseAddressParts = (address: string | null | undefined) => {
   };
 };
 
-const inferVehicleRegistration = (car: Record<string, unknown> | undefined) => {
-  const name = String(car?.name || '');
-  const bracketMatch = name.match(/\(([A-Z0-9]{2,8})\)\s*$/i);
-  if (bracketMatch) {
-    return bracketMatch[1].toUpperCase();
-  }
-
-  return '';
-};
-
 const auditNoticeAction = async ({
   action,
   actor,
@@ -220,26 +209,12 @@ const loadRentalPrefillOptions = async (search: string) => {
   const applicationIds = Array.from(
     new Set(rentalRows.map((rental) => String(rental.application_id || '')).filter(Boolean))
   );
-  const carIds = Array.from(
-    new Set(
-      rentalRows
-        .map((rental) => Number(rental.car_id || 0))
-        .filter((id) => Number.isInteger(id) && id > 0)
-    )
-  );
-
-  const [applicationsResult, carsResult, customersResult] = await Promise.all([
+  const [applicationsResult, customersResult] = await Promise.all([
     applicationIds.length
       ? db
           .from('applications')
           .select('*')
           .in('id', applicationIds)
-      : Promise.resolve({ data: [], error: null }),
-    carIds.length
-      ? db
-          .from('cars')
-          .select('id, name')
-          .in('id', carIds)
       : Promise.resolve({ data: [], error: null }),
     db
       .from('customers')
@@ -248,7 +223,6 @@ const loadRentalPrefillOptions = async (search: string) => {
   ]);
 
   if (applicationsResult.error) throw applicationsResult.error;
-  if (carsResult.error) throw carsResult.error;
   if (customersResult.error) throw customersResult.error;
 
   const importedApplicationIds = getImportedApplicationIdSet(
@@ -258,11 +232,6 @@ const loadRentalPrefillOptions = async (search: string) => {
   const applicationsById = new Map<string, Record<string, unknown>>();
   for (const application of applicationsResult.data || []) {
     applicationsById.set(String(application.id), application as Record<string, unknown>);
-  }
-
-  const carsById = new Map<number, Record<string, unknown>>();
-  for (const car of carsResult.data || []) {
-    carsById.set(Number(car.id), car as Record<string, unknown>);
   }
 
   const customerRows = filterRealOperationalCustomers(
@@ -292,7 +261,6 @@ const loadRentalPrefillOptions = async (search: string) => {
   return realRentalRows
     .map((rental) => {
       const application = applicationsById.get(String(rental.application_id || ''));
-      const car = carsById.get(Number(rental.car_id || 0));
       const customer = customerForApplication(application);
       const addressParts = parseAddressParts(
         String(customer?.street || '') ||
@@ -300,13 +268,20 @@ const loadRentalPrefillOptions = async (search: string) => {
       );
       const fullName = String(customer?.full_name || application?.name || '').trim();
       const { given_names, surname } = splitFullName(fullName);
-      const vehicleRegistration = inferVehicleRegistration(car);
+      const vehicleRegistration = String(
+        rental.vehicle_registration ||
+          rental.vehicleRegistration ||
+          application?.approved_vehicle ||
+          application?.approvedVehicle ||
+          ''
+      )
+        .trim()
+        .toUpperCase();
 
       return {
         application_id: String(rental.application_id || ''),
         applicant_name: fullName,
-        car_id: Number(rental.car_id || 0) || null,
-        car_name: String(car?.name || application?.approved_vehicle || ''),
+        car_name: vehicleRegistration,
         customer_id: customer?.id ? Number(customer.id) : null,
         nominee_address: addressParts.address,
         nominee_country: 'AUSTRALIA',
@@ -339,7 +314,6 @@ const loadRentalPrefillOptions = async (search: string) => {
 const toRecordPayload = (payload: TollNoticePayload, req: express.Request) => ({
   ...payload,
   application_id: payload.application_id || null,
-  car_id: payload.car_id || null,
   customer_id: payload.customer_id || null,
   declaration_date: payload.declaration_date || null,
   nominee_country: payload.nominee_country.toUpperCase(),

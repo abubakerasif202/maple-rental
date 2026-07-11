@@ -61,7 +61,7 @@ describe('checkDBHealth', () => {
       issues: ['schema_contract_validation_failed'],
     });
 
-    expect(mockFrom).toHaveBeenCalledWith('cars');
+    expect(mockFrom).toHaveBeenCalledWith('applications');
     expect(mockSelect).toHaveBeenCalledWith('id', { head: true });
     expect(mockLimit).toHaveBeenCalledWith(1);
     expect(warnSpy).toHaveBeenCalledWith(

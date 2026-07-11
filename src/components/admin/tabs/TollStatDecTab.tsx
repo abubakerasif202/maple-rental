@@ -39,7 +39,6 @@ const TOLL_NOTICE_TEMPLATE_URL = '/forms/tolling-notice-statutory-declaration-co
 const createEmptyForm = (): TollTransferForm => ({
   application_id: null,
   authorised_officer_name: '',
-  car_id: null,
   car_name: '',
   customer_id: null,
   declaration_date: null,
@@ -469,7 +468,6 @@ export default function TollStatDecTab({ initialSearch = '' }: TollStatDecTabPro
     setForm((current) => ({
       ...current,
       application_id: option.application_id || null,
-      car_id: option.car_id,
       car_name: option.car_name,
       customer_id: option.customer_id,
       nominee_address: option.nominee_address,
@@ -508,7 +506,6 @@ export default function TollStatDecTab({ initialSearch = '' }: TollStatDecTabPro
   const buildPayload = (): api.TollTransferNoticePayload => ({
     application_id: form.application_id || null,
     authorised_officer_name: form.authorised_officer_name.trim(),
-    car_id: form.car_id || null,
     customer_id: form.customer_id || null,
     declaration_date: null,
     declaration_place: form.declaration_place.trim(),

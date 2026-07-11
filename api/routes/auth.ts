@@ -63,7 +63,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
       res.cookie(
         'admin_token',
         createLocalAdminSessionToken(email),
-        createCookieOptions()
+        createCookieOptions(req)
       );
       return res.json({ username: email });
     }
@@ -90,7 +90,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
         email: data.user?.email || email,
         refreshToken: data.session.refresh_token,
       }),
-      createCookieOptions()
+      createCookieOptions(req)
     );
     res.json({ username: data.user?.email });
   } catch (err) {

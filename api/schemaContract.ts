@@ -49,8 +49,11 @@ export const PRODUCTION_SCHEMA_CONTRACT_REQUIRED_COLUMNS = {
       ],
     },
   ],
-  cars: [{ label: 'created_at', acceptable: ['created_at', 'createdAt'] }],
   rentals: [
+    {
+      label: 'vehicle_registration',
+      acceptable: ['vehicle_registration', 'vehicleRegistration'],
+    },
     {
       label: 'stripe_customer_id',
       acceptable: ['stripe_customer_id', 'stripeCustomerId'],
@@ -191,7 +194,6 @@ export const verifyProductionSchemaContract = async () => {
         { table: 'applications', column: compat.applicationPaymentLinkVersionColumn },
         { table: 'applications', column: compat.applicationAgreementTemplateVersionColumn },
         { table: 'applications', column: compat.applicationPendingCheckoutSessionColumn },
-        { table: 'cars', column: compat.carCreatedAtColumn },
         { table: 'rentals', column: compat.rentalStripeCustomerColumn },
         { table: 'rentals', column: compat.rentalStripeSubscriptionColumn },
       ].filter(

@@ -94,7 +94,6 @@ const performReset = async (req: express.Request, res: express.Response) => {
       deleted: result.counts,
       preserved: {
         adminUsers: true,
-        cars: true,
         stripeExternalRecords: true,
         stripeWebhookEvents: true,
       },

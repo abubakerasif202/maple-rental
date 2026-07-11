@@ -28,7 +28,6 @@ describe('stripeWebhookService queue-ready boundaries', () => {
 
     expect(workItem).toEqual({
       applicationId: '11111111-1111-4111-8111-111111111111',
-      carId: 7,
       checkoutKind: 'vehicle',
       checkoutSessionId: 'cs_test_123',
       eventId: 'evt_test_123',

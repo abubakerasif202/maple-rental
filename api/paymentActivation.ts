@@ -12,8 +12,6 @@ import {
 } from './applicationPaymentState.js';
 import {
   getApplicationSelectColumns,
-  getRentalApplicationIdColumn,
-  getRentalCarIdColumn,
   getSchemaCompat,
   toApplicationPaymentWritePayload,
 } from './schemaCompat.js';
@@ -36,10 +34,8 @@ const assertSupabaseWrite = (
   }
 };
 
-const isLiveRentalStatus = (status: unknown) => {
-  const normalized = String(status || '').toLowerCase();
-  return normalized !== 'completed' && normalized !== 'cancelled';
-};
+export const isPaymentRecordingStatus = (status: unknown) =>
+  ['Approved', 'Paid', 'Payment Review'].includes(String(status || ''));
 
 export const getRentalStatusUpdatePayload = async (status: string, endDate?: string) => {
   const compat = await getSchemaCompat();
@@ -115,10 +111,9 @@ export const updateRentalsBySubscriptionIdentity = async (
     const safeApplicationId = typeof metadata.application_id === 'string'
       ? normalizeUuid(metadata.application_id)
       : null;
-    const safeCarId = Number(metadata.car_id || 0) || null;
     throw new Error(
       `No rental found for Stripe subscription ${subscriptionId}. ` +
-        `Refusing fallback update for application=${String(safeApplicationId)} car=${String(safeCarId)}.`
+        `Refusing fallback update for application=${String(safeApplicationId)}.`
     );
   }
 
@@ -129,18 +124,11 @@ export const updateRentalsBySubscriptionIdentity = async (
 const quoteIdentifier = (identifier: string) => `"${identifier.replace(/"/g, '""')}"`;
 
 export const buildLockedApplicationSelectSql = async () => {
-  const {
-    applicationAssignedCarColumn,
-    applicationPaymentLinkVersionColumn,
-  } = await getSchemaCompat();
-  const assignedCarSelect = applicationAssignedCarColumn
-    ? `${quoteIdentifier(applicationAssignedCarColumn)} AS assigned_car_id`
-    : 'NULL::bigint AS assigned_car_id';
+  const { applicationPaymentLinkVersionColumn } = await getSchemaCompat();
 
   return (
     `SELECT status, ` +
-    `${quoteIdentifier(applicationPaymentLinkVersionColumn)} AS payment_link_version, ` +
-    `${assignedCarSelect} ` +
+    `${quoteIdentifier(applicationPaymentLinkVersionColumn)} AS payment_link_version ` +
     `FROM ${quoteIdentifier('applications')} WHERE id = $1 FOR UPDATE`
   );
 };
@@ -300,13 +288,8 @@ const applyVehicleCheckoutPaymentOnlyWrites = async ({
       );
     }
 
-const lockedApplicationStatus = String(lockedApplicationRow.status || '');
-    if (
-      lockedApplicationStatus !== 'Approved' &&
-      lockedApplicationStatus !== 'Paid' &&
-      lockedApplicationStatus !== 'Payment Review' &&
-      lockedApplicationStatus !== 'Cancelled'
-    ) {
+    const lockedApplicationStatus = String(lockedApplicationRow.status || '');
+    if (!isPaymentRecordingStatus(lockedApplicationStatus)) {
       throw new Error(
         `Application ${applicationId} cannot be marked paid from status ${lockedApplicationStatus || 'Unknown'}.`
       );
@@ -328,66 +311,6 @@ const lockedApplicationStatus = String(lockedApplicationRow.status || '');
 
     return 'fulfilled' as const;
   });
-};
-
-const fetchExistingRentalsForCar = async (carId: number) => {
-  const compat = await getSchemaCompat();
-  const rentalCarIdColumn = await getRentalCarIdColumn();
-  const rentalApplicationIdColumn = await getRentalApplicationIdColumn();
-  const existingRentalColumns = [
-    'id',
-    'status',
-    'weekly_price',
-    'bond_paid',
-    rentalCarIdColumn,
-    rentalApplicationIdColumn,
-    compat.rentalStripeSubscriptionColumn,
-    compat.rentalStripeCustomerColumn,
-  ]
-    .filter((column): column is string => Boolean(column))
-    .join(', ');
-  const existingRentalResult = await db
-    .from('rentals')
-    .select(existingRentalColumns)
-    .eq(rentalCarIdColumn, carId);
-
-  if (existingRentalResult.error) {
-    throw new Error(
-      `Failed to inspect existing rentals: ${existingRentalResult.error.message || 'Unknown error'}`
-    );
-  }
-
-  return {
-    compat,
-    rentalApplicationIdColumn,
-    rentals: ((existingRentalResult.data || []) as unknown) as Array<Record<string, unknown>>,
-  };
-};
-
-export const maybeMarkCarAvailable = async (carId: number) => {
-  const { rentals } = await fetchExistingRentalsForCar(carId);
-  const hasLiveRental = rentals.some((rental) => isLiveRentalStatus(rental.status));
-
-  if (hasLiveRental) {
-    return;
-  }
-
-  const { data: car, error: carError } = await db
-    .from('cars')
-    .select('id, status')
-    .eq('id', carId)
-    .single();
-
-  if (carError || !car) {
-    throw new Error(`Failed to fetch car ${carId} before availability release.`);
-  }
-
-  if (car.status !== 'Rented') {
-    return;
-  }
-
-  const result = await db.from('cars').update({ status: 'Available' }).eq('id', carId);
-  assertSupabaseWrite(result, 'Failed to mark car as available');
 };
 
 export const handleVehicleCheckoutCompletion = async (

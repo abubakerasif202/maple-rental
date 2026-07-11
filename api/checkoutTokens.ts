@@ -13,6 +13,13 @@ type CheckoutTokenPayload = {
   version: number;
 };
 
+export const normalizeCheckoutTokenPayload = (
+  payload: CheckoutTokenPayload
+): CheckoutTokenPayload => ({
+  ...payload,
+  carId: null,
+});
+
 const DEFAULT_TOKEN_TTL_HOURS = 24;
 
 const getCheckoutLinkSecret = () => {
@@ -36,7 +43,6 @@ const fromTokenPayload = (payload: string): CheckoutTokenPayload => {
 
 export const createCheckoutToken = ({
   applicationId,
-  carId = null,
   expiresInHours = DEFAULT_TOKEN_TTL_HOURS,
   purpose,
   version = 0,
@@ -51,7 +57,7 @@ export const createCheckoutToken = ({
     typeof applicationId === 'string' ? normalizeUuid(applicationId) : applicationId;
   const payload = toTokenPayload({
     applicationId: normalizedApplicationId,
-    carId,
+    carId: null,
     expiresAt: Date.now() + expiresInHours * 60 * 60 * 1000,
     nonce: crypto.randomBytes(12).toString('hex'),
     purpose,
@@ -67,7 +73,6 @@ export const createCheckoutToken = ({
 
 export const verifyCheckoutToken = ({
   applicationId,
-  carId = null,
   purpose,
   token,
   version,
@@ -107,10 +112,6 @@ export const verifyCheckoutToken = ({
     throw new Error('Checkout token application mismatch.');
   }
 
-  if (carId != null && (payload.carId ?? null) !== carId) {
-    throw new Error('Checkout token car mismatch.');
-  }
-
   if (typeof version === 'number' && payload.version !== version) {
     throw new Error('Checkout token version mismatch.');
   }
@@ -119,5 +120,10 @@ export const verifyCheckoutToken = ({
     throw new Error('Checkout token has expired.');
   }
 
-  return payload;
+  return normalizeCheckoutTokenPayload({
+    ...payload,
+    // Legacy signed links may still contain a historical vehicle id. Preserve
+    // payment recovery while permanently removing that id from runtime state.
+    carId: null,
+  });
 };

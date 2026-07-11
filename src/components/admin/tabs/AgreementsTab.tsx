@@ -388,7 +388,7 @@ export default function AgreementsTab({
             </select>
             {approvedVehicleLabel && (
               <p className="text-[11px] text-brand-grey font-light">
-                Approved vehicle: <span className="text-white">{approvedVehicleLabel}</span>
+                Registration: <span className="text-white">{approvedVehicleLabel}</span>
               </p>
             )}
           </div>
@@ -428,7 +428,7 @@ export default function AgreementsTab({
         </div>
         <p className="mt-4 text-[11px] text-brand-grey font-light">
           Secure payment links are signed and time-limited. Approve the
-          application first so the approved vehicle and pricing are locked before
+          application first so the registration and pricing are locked before
           copying a fresh link.
         </p>
         {selectedAgreementApplication &&
@@ -456,7 +456,7 @@ export default function AgreementsTab({
                     {agreement.applicant_name}
                   </p>
                   <p className="text-[10px] uppercase tracking-widest text-brand-grey">
-                    {agreement.car_name || agreement.vehicle_label || 'Approved vehicle'}
+                    {agreement.car_name || agreement.vehicle_label || 'Registration not recorded'}
                   </p>
                 </div>
                 <p className="shrink-0 text-xs text-brand-grey">
@@ -529,7 +529,7 @@ export default function AgreementsTab({
                       {agreement.applicant_name}
                     </p>
                     <p className="text-[10px] text-brand-grey uppercase tracking-widest">
-                      {agreement.car_name || agreement.vehicle_label || 'Approved vehicle'}
+                      {agreement.car_name || agreement.vehicle_label || 'Registration not recorded'}
                     </p>
                   </div>
                 </td>

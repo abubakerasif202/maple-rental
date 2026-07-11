@@ -25,7 +25,6 @@ export interface CheckoutSessionStatusView {
   internal_status: CheckoutSessionStatusState;
   metadata_match?: {
     application_id?: boolean;
-    car_id?: boolean | null;
     checkout_kind?: boolean;
     matched: boolean;
     payment_link_version?: boolean;

@@ -720,7 +720,7 @@ router.post(
                     <li><strong>Experience:</strong> ${safeExperience}</li>
                     <li><strong>Intended Start:</strong> ${safeIntendedStart}</li>
                   </ul>
-                  <p>Review the application in the admin dashboard, confirm the approved vehicle and pricing, then issue the Stripe payment link.</p>
+                  <p>Review the application in the admin dashboard, confirm the registration number and pricing, then issue the Stripe payment link.</p>
                 </div>
               `,
             }),
@@ -854,7 +854,6 @@ router.post("/:id/approve-payment", authenticateAdmin, async (req, res) => {
           bond_payment_status: payload.bond_payment_status,
           approved_vehicle: payload.approved_vehicle.trim(),
           approved_weekly_price: payload.approved_weekly_price,
-          assigned_car_id: null,
           ...(payload.rental_subscription_start_date
             ? { intended_start_date: payload.rental_subscription_start_date }
             : {}),

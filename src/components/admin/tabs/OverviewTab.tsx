@@ -8,21 +8,19 @@ import {
   ChevronRight,
   TrendingUp,
 } from 'lucide-react';
-import { Application, Car, DashboardStats } from '../../../types';
+import { Application, DashboardStats } from '../../../types';
 import EmptyState from '../EmptyState';
 import MetricCard from '../MetricCard';
 
 interface OverviewTabProps {
   stats?: DashboardStats;
   applications: Application[];
-  cars: Car[];
   setActiveTab: (tab: string) => void;
 }
 
 export default function OverviewTab({
   stats,
   applications,
-  cars,
   setActiveTab,
 }: OverviewTabProps) {
   return (
@@ -78,7 +76,7 @@ export default function OverviewTab({
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 gap-8">
         <div className="bg-white/5 border border-white/10 p-8 rounded-3xl">
           <h3 className="text-white font-bold uppercase tracking-widest text-xs mb-8 flex items-center gap-3">
             <Clock className="w-4 h-4 text-brand-gold" /> Pending Applications
@@ -123,49 +121,6 @@ export default function OverviewTab({
           </div>
         </div>
 
-        <div className="bg-white/5 border border-white/10 p-8 rounded-3xl">
-          <h3 className="text-white font-bold uppercase tracking-widest text-xs mb-8 flex items-center gap-3">
-            <CarIcon className="w-4 h-4 text-brand-gold" /> Fleet Availability
-          </h3>
-          <div className="space-y-4">
-            {cars.slice(0, 5).map((car) => (
-              <div
-                key={car.id}
-                className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-white/10 transition-all"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-8 w-12 items-center justify-center rounded-lg border border-white/10 bg-brand-navy/70 text-[7px] font-bold uppercase tracking-[0.2em] text-brand-grey">
-                    N/A
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white">{car.name}</p>
-                    <p className="text-[10px] text-brand-grey uppercase tracking-widest">
-                      {car.model_year} Model
-                    </p>
-                  </div>
-                </div>
-                <span
-                  className={`px-3 py-1 rounded-full text-[8px] font-bold uppercase tracking-widest border ${
-                    car.status === 'Available'
-                      ? 'bg-green-500/10 text-green-500 border-green-500/20'
-                      : 'bg-brand-navy text-brand-grey border-white/10'
-                  }`}
-                >
-                  {car.status}
-                </span>
-              </div>
-            ))}
-            {cars.length === 0 && (
-              <EmptyState
-                actionLabel="Open Fleet"
-                description="Fleet availability appears here after vehicles are added."
-                icon={CarIcon}
-                onAction={() => setActiveTab('cars')}
-                title="No fleet vehicles"
-              />
-            )}
-          </div>
-        </div>
       </div>
     </motion.div>
   );

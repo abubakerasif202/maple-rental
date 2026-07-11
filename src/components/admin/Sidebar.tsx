@@ -36,7 +36,6 @@ export default function Sidebar({
     { id: 'customers', icon: Users, label: 'Customers' },
     { id: 'invoices', icon: DollarSign, label: 'Invoices' },
     { id: 'financials', icon: TrendingUp, label: 'Financials' },
-    { id: 'cars', icon: Car, label: 'Fleet' },
     { id: 'agreements', icon: FileText, label: 'Agreements' },
     { id: 'toll-notices', icon: ScrollText, label: 'Toll Notices' },
     { id: 'maintenance', icon: Settings, label: 'Maintenance' },

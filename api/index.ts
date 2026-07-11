@@ -34,7 +34,6 @@ import adminAgreementRoutes from './routes/adminAgreements.js';
 import adminMaintenanceRoutes from './routes/adminMaintenance.js';
 import applicationRoutes from './routes/applications.js';
 import authRoutes from './routes/auth.js';
-import carRoutes from './routes/cars.js';
 import customerRoutes from './routes/customers.js';
 import financialRoutes from './routes/financials.js';
 import indexNowAdminRoutes from './routes/indexNowAdmin.js';
@@ -556,7 +555,6 @@ const registerCoreRoutes = (app: express.Express) => {
   app.use(express.urlencoded({ extended: false, limit: JSON_BODY_LIMIT }));
 
   app.use('/api/auth', authRoutes);
-  app.use('/api/cars', carRoutes);
   app.use('/api/applications', applicationRoutes);
   app.use('/api/inquiries', inquiryRoutes);
   app.use('/api/stripe', stripeRoutes);

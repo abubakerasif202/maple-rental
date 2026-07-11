@@ -1738,253 +1738,25 @@ const { createCheckoutToken, verifyCheckoutToken } =
   vi.clearAllMocks();
 });
 
-describe("Cars API", () => {
-  it("GET /api/cars should return a list of cars", async () => {
-    const res = await request(app).get("/api/cars");
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body[0].name).toBe("Toyota Prius");
-    expect(res.body[0].bond).toBe(0);
-    expect(res.body[0].weekly_price).toBe(0);
-    expect(res.body[0].image).toBe("");
-  });
 
-  it("GET /api/cars hides archived vehicles from the public fleet list", async () => {
-    mockState.cars[0].archived_at = "2026-04-20T00:00:00.000Z";
-
-    const res = await request(app).get("/api/cars");
-
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0].id).toBe(2);
-  });
-
-  it("GET /api/cars/admin/all returns archived vehicles for admins", async () => {
-    mockState.cars[0].archived_at = "2026-04-20T00:00:00.000Z";
-
+describe("Removed cars API", () => {
+  it("does not expose the removed car collection", async () => {
     const res = await request(app)
-      .get("/api/cars/admin/all")
-      .set("Authorization", "Bearer fake-token");
-
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(2);
-    expect(
-      res.body.find((car: { id: number }) => car.id === 1)?.archived_at,
-    ).toBe("2026-04-20T00:00:00.000Z");
-    expect(
-      res.body.find((car: { id: number }) => car.id === 1)?.weekly_price,
-    ).toBe(250);
-    expect(res.body.find((car: { id: number }) => car.id === 1)?.image).toBe("");
-  });
-
-  it("GET /api/cars strips registration-style suffixes and redacts private fields", async () => {
-    mockState.cars[0].name = "Toyota Camry (ABC123)";
-
-    const res = await request(app).get("/api/cars/1");
-
-    expect(res.status).toBe(200);
-    expect(res.body.name).toBe("Toyota Camry");
-    expect(res.body.weekly_price).toBe(0);
-    expect(res.body.bond).toBe(0);
-    expect(res.body.image).toBe("");
-  });
-
-  it("PUT /api/cars/:id returns 404 when the car does not exist", async () => {
-    const res = await request(app)
-      .put("/api/cars/999")
-      .set("Authorization", "Bearer fake-token")
-      .send({
-        name: "Toyota Corolla Hybrid",
-        model_year: 2025,
-        weekly_price: 299,
-        bond: 500,
-        status: "Available",
-        image: "https://example.com/corolla.jpg",
-      });
-
-    expect(res.status).toBe(404);
-    expect(res.body.error).toBe("Car not found");
-  });
-
-  it("DELETE /api/cars/:id blocks deletion while operational records still reference the car", async () => {
-    mockState.rentals = [
-      {
-        id: 20,
-        application_id: APPROVED_APPLICATION_ID,
-        bond_paid: 500,
-        car_id: 1,
-        status: "Active",
-        weekly_price: 250,
-        start_date: "2026-03-01",
-      },
-    ];
-    mockState.lease_agreements = [
-      {
-        id: 30,
-        application_id: APPROVED_APPLICATION_ID,
-        car_id: 1,
-        content: "Agreement",
-        status: "generated",
-      },
-    ];
-
-    const res = await request(app)
-      .delete("/api/cars/1")
-      .set("Authorization", "Bearer fake-token");
-
-    expect(res.status).toBe(409);
-    expect(res.body.usage).toMatchObject({
-      assigned_applications: 0,
-      bookings: 1,
-      lease_agreements: 1,
-      rentals: 1,
-    });
-    expect(mockState.cars).toHaveLength(2);
-  });
-
-  it("DELETE /api/cars/:id returns 404 when the car does not exist", async () => {
-    const res = await request(app)
-      .delete("/api/cars/999")
+      .get("/api/cars")
       .set("Authorization", "Bearer fake-token");
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toBe("Car not found");
+    expect(res.body.error).toBe("API route not found");
   });
 
-  it("POST /api/cars creates a new car and returns its id", async () => {
+  it("does not allow recreating car records", async () => {
     const res = await request(app)
       .post("/api/cars")
       .set("Authorization", "Bearer fake-token")
-      .send({
-        name: "Toyota Corolla Hybrid",
-        model_year: 2025,
-        weekly_price: 299,
-        bond: 600,
-        status: "Available",
-        image: "https://example.com/corolla.jpg",
-      });
-
-    expect(res.status).toBe(201);
-    expect(res.body.id).toBeDefined();
-    expect(mockState.cars).toHaveLength(3);
-    expect(mockState.cars[2].name).toBe("Toyota Corolla Hybrid");
-  });
-
-  it("POST /api/cars returns 400 for invalid car data", async () => {
-    const res = await request(app)
-      .post("/api/cars")
-      .set("Authorization", "Bearer fake-token")
-      .send({
-        name: "",
-        model_year: 1800,
-        weekly_price: -100,
-        bond: 0,
-        status: "Unknown",
-        image: "not-a-valid-url",
-      });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("Validation failed");
-    expect(mockState.cars).toHaveLength(2);
-  });
-
-  it("POST /api/cars returns 401 when not authenticated", async () => {
-    const res = await request(app).post("/api/cars").send({
-      name: "Toyota Corolla",
-      model_year: 2025,
-      weekly_price: 299,
-      bond: 600,
-      status: "Available",
-      image: "https://example.com/corolla.jpg",
-    });
-
-    expect(res.status).toBe(401);
-  });
-
-  it("PUT /api/cars/:id updates an existing car and returns success", async () => {
-    const res = await request(app)
-      .put("/api/cars/1")
-      .set("Authorization", "Bearer fake-token")
-      .send({
-        name: "Toyota Camry Updated",
-        model_year: 2025,
-        weekly_price: 280,
-        bond: 560,
-        status: "Maintenance",
-        image: "https://example.com/camry-updated.jpg",
-      });
-
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    const updated = mockState.cars.find((c) => c.id === 1);
-    expect(updated?.name).toBe("Toyota Camry Updated");
-    expect(updated?.status).toBe("Maintenance");
-  });
-
-  it("PATCH /api/cars/:id/archive archives a non-rented vehicle", async () => {
-    const res = await request(app)
-      .patch("/api/cars/1/archive")
-      .set("Authorization", "Bearer fake-token")
-      .send({ archived: true });
-
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(mockState.cars.find((c) => c.id === 1)?.archived_at).toBeTruthy();
-    expect(mockState.cars.find((c) => c.id === 1)?.status).toBe("Maintenance");
-  });
-
-  it("PATCH /api/cars/:id/archive blocks archiving a rented vehicle", async () => {
-    const res = await request(app)
-      .patch("/api/cars/2/archive")
-      .set("Authorization", "Bearer fake-token")
-      .send({ archived: true });
-
-    expect(res.status).toBe(409);
-    expect(res.body.error).toContain("currently rented");
-  });
-
-  it("PUT /api/cars/:id returns 400 for invalid update data", async () => {
-    const res = await request(app)
-      .put("/api/cars/1")
-      .set("Authorization", "Bearer fake-token")
-      .send({
-        name: "Toyota Camry",
-        model_year: 2025,
-        weekly_price: -50,
-        bond: 0,
-        status: "Available",
-        image: "/valid.jpg",
-      });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("Validation failed");
-  });
-
-  it("DELETE /api/cars/:id deletes a car that has no associated records", async () => {
-    mockState.rentals = [];
-    mockState.lease_agreements = [];
-    mockState.bookings = [];
-    // Reset applications so no app has assigned_car_id = 2
-    mockState.applications = mockState.applications.map((app) => ({
-      ...app,
-      assigned_car_id: null,
-    }));
-
-    const res = await request(app)
-      .delete("/api/cars/2")
-      .set("Authorization", "Bearer fake-token");
-
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(mockState.cars).toHaveLength(1);
-    expect(mockState.cars.find((c) => c.id === 2)).toBeUndefined();
-  });
-
-  it("GET /api/cars/:id returns 404 when the car does not exist", async () => {
-    const res = await request(app).get("/api/cars/999");
+      .send({ name: "ABC12D" });
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toBe("Car not found");
+    expect(res.body.error).toBe("API route not found");
   });
 });
 
@@ -2263,7 +2035,6 @@ describe("Agreements API", () => {
     expect(mockState.lease_agreements).toHaveLength(1);
     expect(mockState.lease_agreements[0]).toMatchObject({
       application_id: APPROVED_APPLICATION_ID,
-      car_id: null,
       status: "generated",
       vehicle_label: "Any approved vehicle",
     });
@@ -2287,7 +2058,6 @@ describe("Agreements API", () => {
     expect(mockState.lease_agreements).toHaveLength(1);
     expect(mockState.lease_agreements[0]).toMatchObject({
       application_id: APPROVED_APPLICATION_ID,
-      car_id: null,
       vehicle_label: "Maintenance-listed vehicle",
     });
   });
@@ -2300,7 +2070,6 @@ describe("Agreements API", () => {
       .set("Authorization", "Bearer fake-token")
       .send({
         application_id: APPROVED_APPLICATION_ID,
-        car_id: 1,
         content: "# Final agreement",
       });
 
@@ -2308,12 +2077,11 @@ describe("Agreements API", () => {
     expect(mockState.lease_agreements).toHaveLength(1);
     expect(mockState.lease_agreements[0]).toMatchObject({
       application_id: APPROVED_APPLICATION_ID,
-      car_id: null,
       content: "# Final agreement",
     });
   });
 
-  it("POST /api/agreements updates an existing agreement for the application", async () => {
+  it("POST /api/agreements appends an immutable agreement history row", async () => {
     mockState.applications[1].status = "Paid";
     mockState.lease_agreements = [{
       id: 31,
@@ -2334,18 +2102,21 @@ describe("Agreements API", () => {
         vehicle_label: "NEW02",
       });
 
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ id: "31", duplicate: false, updated: true });
-    expect(mockState.lease_agreements).toHaveLength(1);
+    expect(res.status).toBe(201);
+    expect(mockState.lease_agreements).toHaveLength(2);
     expect(mockState.lease_agreements[0]).toMatchObject({
       id: 31,
-      car_id: null,
+      car_id: 1,
+      content: "# Old agreement",
+      vehicle_label: "OLD01",
+    });
+    expect(mockState.lease_agreements[1]).toMatchObject({
       content: "# Updated agreement",
       vehicle_label: "NEW02",
     });
   });
 
-  it("POST /api/agreements treats a repeated save as an idempotent update", async () => {
+  it("POST /api/agreements preserves repeated generations as separate records", async () => {
     mockState.applications[1].status = "Paid";
     const payload = {
       application_id: APPROVED_APPLICATION_ID,
@@ -2363,9 +2134,10 @@ describe("Agreements API", () => {
       .send(payload);
 
     expect(first.status).toBe(201);
-    expect(second.status).toBe(200);
-    expect(second.body).toMatchObject({ duplicate: true, updated: true });
-    expect(mockState.lease_agreements).toHaveLength(1);
+    expect(second.status).toBe(201);
+    expect(mockState.lease_agreements).toHaveLength(2);
+    expect(mockState.lease_agreements[0].content).toBe("# Final agreement");
+    expect(mockState.lease_agreements[1].content).toBe("# Final agreement");
   });
 
   it("POST /api/agreements saves manual vehicle agreements when vehicle_label is missing in legacy storage", async () => {
@@ -2385,7 +2157,6 @@ describe("Agreements API", () => {
     expect(mockState.lease_agreements).toHaveLength(1);
     expect(mockState.lease_agreements[0]).toMatchObject({
       application_id: APPROVED_APPLICATION_ID,
-      car_id: null,
       content: "# Agreement\nVehicle / Number Plate: Toyota Camry - ABC12D",
     });
     expect(mockState.lease_agreements[0]).not.toHaveProperty("vehicle_label");
@@ -2404,8 +2175,8 @@ describe("Agreements API", () => {
         vehicle_label: "Toyota Camry - ABC12D",
       });
 
-    expect(res.status).toBe(503);
-    expect(res.body.error).toContain("lease_agreements.car_id must allow blank values");
+    expect(res.status).toBe(500);
+    expect(res.body.error).toContain("Failed to save lease agreement");
     expect(mockState.lease_agreements).toHaveLength(0);
   });
 
@@ -2490,7 +2261,7 @@ describe("Agreements API", () => {
       {
         id: 31,
         application_id: APPROVED_APPLICATION_ID,
-        car_id: 1,
+        vehicle_label: "CZ55XY",
         content: "# Agreement",
         status: "generated",
         created_at: "2026-03-08T00:00:00.000Z",
@@ -2506,7 +2277,7 @@ describe("Agreements API", () => {
     expect(res.body[0]).toMatchObject({
       id: 31,
       applicant_name: "Approved Driver",
-      car_name: "Toyota Camry",
+      car_name: "CZ55XY",
     });
   });
 
@@ -2515,7 +2286,7 @@ describe("Agreements API", () => {
       {
         id: 31,
         application_id: APPROVED_APPLICATION_ID,
-        car_id: 1,
+        vehicle_label: "CZ55XY",
         content: "# Agreement",
         status: "generated",
         created_at: "2026-03-08T00:00:00.000Z",
@@ -2530,7 +2301,7 @@ describe("Agreements API", () => {
     expect(res.body).toMatchObject({
       id: 31,
       applicant_name: "Approved Driver",
-      car_name: "Toyota Camry",
+      car_name: "CZ55XY",
     });
   });
 
@@ -4012,12 +3783,11 @@ describe("Toll Transfer Notices API", () => {
   });
 
   it("GET /api/toll-notices/rental-options prefills customer and vehicle details", async () => {
-    mockState.cars[0].name = "Toyota Camry (CZ55XY)";
     mockState.rentals = [
       {
         id: 20,
         application_id: APPROVED_APPLICATION_ID,
-        car_id: 1,
+        vehicle_registration: "CZ55XY",
         status: "Active",
         start_date: "2026-03-01",
         weekly_price: 250,
@@ -4312,7 +4082,6 @@ describe("Stripe API", () => {
         approved_vehicle: "Toyota Camry Hybrid",
         approved_bond: 650,
         approved_weekly_price: 285,
-        car_id: 1,
       });
 
     expect(res.status).toBe(200);
@@ -4337,7 +4106,6 @@ describe("Stripe API", () => {
         approved_vehicle: "Toyota Camry",
         approved_bond: 650,
         approved_weekly_price: 285,
-        car_id: 1,
         send_payment_link: true,
       });
 
@@ -4359,7 +4127,6 @@ describe("Stripe API", () => {
         approved_vehicle: '<a href="https://evil.example">Camry</a>',
         approved_bond: 650,
         approved_weekly_price: 285,
-        car_id: 1,
         send_payment_link: true,
       });
 
@@ -4394,7 +4161,6 @@ describe("Stripe API", () => {
         approved_vehicle: "Toyota Camry",
         approved_bond: 650,
         approved_weekly_price: 285,
-        car_id: 1,
         send_payment_link: true,
       });
 
@@ -4439,7 +4205,6 @@ describe("Stripe API", () => {
         approved_vehicle: "Toyota Camry",
         approved_bond: 650,
         approved_weekly_price: 285,
-        car_id: 1,
       });
 
     expect(res.status).toBe(409);
@@ -4466,14 +4231,13 @@ describe("Stripe API", () => {
         approved_vehicle: "Toyota Camry",
         approved_bond: 650,
         approved_weekly_price: 285,
-        car_id: 1,
       });
 
     expect(res.status).toBe(409);
     expect(res.body.error).toContain("payment details changed");
   });
 
-  it("POST /api/applications/:id/approve-payment allows a car to be re-approved after the prior rental is only historically paid", async () => {
+  it("POST /api/applications/:id/approve-payment allows a new application after another application was historically paid", async () => {
     mockState.applications[1].status = "Paid";
     mockState.applications[1].paid_at = "2026-03-06T00:00:00.000Z";
     mockState.cars[0].status = "Available";
@@ -4485,7 +4249,6 @@ describe("Stripe API", () => {
         approved_vehicle: "Toyota Camry",
         approved_bond: 650,
         approved_weekly_price: 285,
-        car_id: 1,
       });
 
     expect(res.status).toBe(200);
@@ -4729,7 +4492,7 @@ describe("Stripe API", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body.car_id).toBeNull();
+    expect(res.body).not.toHaveProperty("car_id");
     expect(res.body.approved_vehicle).toBe("Toyota Camry");
     expect(res.body.vehicle_image).toBe("/camry-deep-blue.webp");
   });
@@ -4947,12 +4710,12 @@ describe("Stripe API", () => {
     expect(payload.metadata.stripe_bond_charge).toBeUndefined();
     expect(payload.metadata.approved_weekly_price).toBe("250.00");
     expect(payload.metadata.applicant_email).toBe("approved@example.com");
-    expect(payload.metadata.car_id).toBe("1");
+    expect(payload.metadata.car_id).toBeUndefined();
     expect(payload.metadata.payment_type).toBe("vehicle_rental");
     expect(payload.metadata.rental_subscription_start_date).toBe(
       mockState.applications[1].intended_start_date,
     );
-    expect(payload.subscription_data.metadata.car_id).toBe("1");
+    expect(payload.subscription_data.metadata.car_id).toBeUndefined();
     expect(payload.subscription_data.metadata.rental_subscription_start_date).toBe(
       mockState.applications[1].intended_start_date,
     );
@@ -5211,7 +4974,6 @@ describe("Stripe API", () => {
       .set("Authorization", "Bearer fake-token")
       .send({
         application_id: APPROVED_APPLICATION_ID,
-        car_id: 1,
       });
 
     expect(res.status).toBe(200);
@@ -5219,7 +4981,7 @@ describe("Stripe API", () => {
     expect(mockState.applications[1].payment_link_version).toBe(2);
   });
 
-  it("POST /api/stripe/vehicle-checkout-link ignores car_id and returns a text-only signed payment link", async () => {
+  it("POST /api/stripe/vehicle-checkout-link rejects car_id without changing vehicle state", async () => {
     const carStatusesBefore = mockState.cars.map((car) => car.status);
     const rentalCountBefore = mockState.rentals.length;
 
@@ -5231,23 +4993,10 @@ describe("Stripe API", () => {
         car_id: 1,
     });
 
-    expect(res.status).toBe(200);
-    expect(res.body.checkout_url).toContain(`/checkout/${APPROVED_APPLICATION_ID}`);
-    expect(mockState.applications[1].payment_link_version).toBe(2);
+    expect(res.status).toBe(400);
+    expect(mockState.applications[1].payment_link_version).toBe(1);
     expect(mockState.cars.map((car) => car.status)).toEqual(carStatusesBefore);
     expect(mockState.rentals).toHaveLength(rentalCountBefore);
-    expect(res.body.checkout_url).toContain(
-      `#checkout_token=${encodeURIComponent(res.body.checkout_token)}`,
-    );
-
-    const verified = verifyCheckoutToken({
-      applicationId: APPROVED_APPLICATION_ID,
-      purpose: "vehicle",
-      token: res.body.checkout_token,
-      version: 2,
-    });
-    expect(verified.applicationId).toBe(APPROVED_APPLICATION_ID);
-    expect(verified.carId).toBeNull();
   });
 
   it("POST /api/stripe/vehicle-checkout-link returns a signed payment link without a car id", async () => {
@@ -5278,7 +5027,6 @@ describe("Stripe API", () => {
       .set("Authorization", "Bearer fake-token")
       .send({
         application_id: APPROVED_APPLICATION_ID,
-        car_id: 1,
       });
 
     expect(res.status).toBe(409);
@@ -5364,10 +5112,9 @@ describe("Stripe API", () => {
       id: "cs_test_123",
       internal_status: "pending_webhook",
       customer_id: "cus_123",
-      metadata_match: {
-        application_id: true,
-        car_id: true,
-        checkout_kind: true,
+        metadata_match: {
+          application_id: true,
+          checkout_kind: true,
         matched: true,
         payment_link_version: true,
       },
@@ -5416,7 +5163,7 @@ describe("Stripe API", () => {
       internal_status: "complete_paid",
       payment_method_type: "card",
       payment_status: "paid",
-      rental_status: "Active",
+      rental_status: null,
       state: "complete_paid",
       status: "complete",
     });
@@ -5510,7 +5257,7 @@ describe("Stripe API", () => {
     });
   });
 
-  it("GET /api/stripe/checkout-sessions/:id does not return complete from application status alone", async () => {
+  it("GET /api/stripe/checkout-sessions/:id derives completion from Stripe and application payment state only", async () => {
     mockState.applications[1].status = "Paid";
 
     const token = createCheckoutToken({
@@ -5528,8 +5275,8 @@ describe("Stripe API", () => {
       });
 
     expect(res.status).toBe(200);
-    expect(res.body.internal_status).toBe("manual_review");
-    expect(res.body.state).toBe("manual_review");
+    expect(res.body.internal_status).toBe("complete_paid");
+    expect(res.body.state).toBe("complete_paid");
     expect(res.body.application_status).toBe("Paid");
     expect(res.body.rental_status).toBeNull();
   });
@@ -5565,7 +5312,7 @@ describe("Stripe API", () => {
     expect(res.body.internal_status).toBe("complete_paid");
     expect(res.body.state).toBe("complete_paid");
     expect(res.body.application_status).toBe("Paid");
-    expect(res.body.rental_status).toBe("Active");
+    expect(res.body.rental_status).toBeNull();
   });
 
   it("GET /api/stripe/checkout-sessions/:id returns complete after activation even if the success token was scrubbed", async () => {
@@ -5594,7 +5341,7 @@ describe("Stripe API", () => {
     expect(res.body.internal_status).toBe("complete_paid");
     expect(res.body.state).toBe("complete_paid");
     expect(res.body.application_status).toBe("Paid");
-    expect(res.body.rental_status).toBe("Active");
+    expect(res.body.rental_status).toBeNull();
   });
 
   it("GET /api/stripe/checkout-sessions/:id returns manual_review when payment completed but activation was blocked", async () => {
@@ -5660,7 +5407,7 @@ describe("Stripe API", () => {
     });
   });
 
-  it("GET /api/stripe/checkout-sessions/:id rejects mismatched car metadata", async () => {
+  it("GET /api/stripe/checkout-sessions/:id ignores quarantined legacy car metadata", async () => {
     mockStripe.checkoutSessionsRetrieve.mockResolvedValueOnce({
       id: "cs_test_123",
       status: "complete",
@@ -5686,10 +5433,9 @@ describe("Stripe API", () => {
         checkout_token: token.token,
       });
 
-    expect(res.status).toBe(403);
-    expect(res.body.error).toBe(
-      "Checkout session vehicle does not match this payment link.",
-    );
+    expect(res.status).toBe(200);
+    expect(res.body.metadata_match.matched).toBe(true);
+    expect(res.body.rental_status).toBeNull();
   });
 
   it("GET /api/stripe/checkout-sessions/:id returns 404 when Stripe no longer has the session", async () => {

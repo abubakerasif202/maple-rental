@@ -6,7 +6,6 @@ import { persistPendingCheckoutSessionIdIfCurrentVersion } from '../applicationP
 import {
   getRentalStatusUpdatePayload,
   handleVehicleCheckoutCompletion,
-  maybeMarkCarAvailable,
   updateRentalsBySubscriptionIdentity,
 } from '../paymentActivation.js';
 import { getTodayInAustralia } from '../../shared/applicationSubmission.js';
@@ -30,7 +29,6 @@ type WebhookEventClaim =
 
 export type StripeWebhookWorkItem = {
   applicationId: string | null;
-  carId: number | null;
   checkoutKind: string | null;
   checkoutSessionId: string | null;
   eventId: string;
@@ -45,7 +43,6 @@ export type StripeWebhookWorkItem = {
 type ModernWebhookLedgerRow = {
   id: number;
   application_id?: string | null;
-  car_id?: number | null;
   checkout_kind?: string | null;
   checkout_session_id?: string | null;
   error_message?: string | null;
@@ -85,8 +82,6 @@ export const buildStripeWebhookWorkItem = (
     typeof metadata.application_id === 'string' && metadata.application_id.trim()
       ? metadata.application_id.trim()
       : null;
-  const carIdValue = Number(metadata.car_id || 0);
-  const carId = Number.isFinite(carIdValue) && carIdValue > 0 ? carIdValue : null;
   const paymentLinkVersionValue = Number(metadata.payment_link_version || 0);
   const paymentLinkVersion =
     Number.isFinite(paymentLinkVersionValue) && paymentLinkVersionValue > 0
@@ -118,7 +113,6 @@ export const buildStripeWebhookWorkItem = (
 
   return {
     applicationId,
-    carId,
     checkoutKind:
       typeof metadata.checkout_kind === 'string' && metadata.checkout_kind.trim()
         ? metadata.checkout_kind.trim()
@@ -200,7 +194,7 @@ const readModernLedgerRow = async (eventId: string) => {
   const { data, error } = await db
     .from('stripe_webhook_events')
     .select(
-      'id, application_id, car_id, checkout_kind, checkout_session_id, error_message, fulfillment_state, received_at, retry_count, retry_reason, status, updated_at'
+      'id, application_id, checkout_kind, checkout_session_id, error_message, fulfillment_state, received_at, retry_count, retry_reason, status, updated_at'
     )
     .eq('stripe_event_id', eventId)
     .maybeSingle();
@@ -232,7 +226,6 @@ const claimModernLedgerForProcessing = async (
       .from('stripe_webhook_events')
       .update({
         application_id: workItem.applicationId,
-        car_id: workItem.carId,
         checkout_kind: workItem.checkoutKind,
         checkout_session_id: workItem.checkoutSessionId,
         status: 'processing',
@@ -266,7 +259,6 @@ const reclaimStaleModernInFlightLedger = async (
     .from('stripe_webhook_events')
     .update({
       application_id: workItem.applicationId,
-      car_id: workItem.carId,
       checkout_kind: workItem.checkoutKind,
       checkout_session_id: workItem.checkoutSessionId,
       error_message: null,
@@ -461,7 +453,6 @@ const claimModernWebhookEvent = async (
   const { error } = await db.from('stripe_webhook_events').insert([
     {
       application_id: workItem.applicationId,
-      car_id: workItem.carId,
       checkout_kind: workItem.checkoutKind,
       checkout_session_id: workItem.checkoutSessionId,
       event_type: workItem.eventType,
@@ -618,8 +609,9 @@ const clearPendingCheckoutSessionForTerminatedSession = async (
   console.log(`Stripe Webhook: cleared pending checkout session ${sessionId} for application ${applicationId} after ${reason}.`);
 };
 
-const shouldReleaseVehicleAfterSubscriptionDeletion = (subscription: Stripe.Subscription) =>
-  subscription.cancellation_details?.reason === 'cancellation_requested';
+const shouldCompleteRentalAfterRequestedCancellation = (
+  subscription: Stripe.Subscription
+) => subscription.cancellation_details?.reason === 'cancellation_requested';
 
 const isMissingSubscriptionRentalIdentityError = (error: unknown) =>
   error instanceof Error &&
@@ -755,17 +747,14 @@ export const processStripeWebhookWorkItem = async (
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription;
         const subscriptionId = subscription.id;
-        const { car_id } = subscription.metadata;
-        const shouldReleaseVehicle = shouldReleaseVehicleAfterSubscriptionDeletion(subscription);
-        const nextRentalStatus = shouldReleaseVehicle ? 'Completed' : 'Cancelled';
+        const nextRentalStatus = shouldCompleteRentalAfterRequestedCancellation(subscription)
+          ? 'Completed'
+          : 'Cancelled';
         await updateRentalBySubscriptionIdentityOrSkip(
           subscriptionId,
           subscription.metadata,
           await getRentalStatusUpdatePayload(nextRentalStatus, todayIsoDate())
         );
-        if (car_id && shouldReleaseVehicle) {
-          await maybeMarkCarAvailable(Number(car_id));
-        }
         break;
       }
       case 'customer.subscription.updated': {

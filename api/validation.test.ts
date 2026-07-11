@@ -240,7 +240,6 @@ describe('applicationApprovalSchema', () => {
     approved_bond: 700,
     approved_weekly_price: 350,
     application_id: '11111111-1111-4111-8111-111111111111',
-    car_id: 1,
   };
 
   it('accepts a valid approval payload', () => {
@@ -277,9 +276,8 @@ describe('applicationApprovalSchema', () => {
     expect(() => applicationApprovalSchema.parse({ ...valid, application_id: 'bad-id' })).toThrow();
   });
 
-  it('accepts a missing car_id', () => {
-    const { car_id: _carId, ...withoutCarId } = valid;
-    expect(() => applicationApprovalSchema.parse(withoutCarId)).not.toThrow();
+  it('rejects car_id in payment approval payloads', () => {
+    expect(() => applicationApprovalSchema.parse({ ...valid, car_id: 1 })).toThrow();
   });
 
   it('accepts an optional rental subscription start date', () => {
@@ -378,10 +376,8 @@ describe('vehicleCheckoutLinkSchema', () => {
     car_id: 1,
   };
 
-  it('accepts legacy car_id but strips it from payment link payloads', () => {
-    expect(vehicleCheckoutLinkSchema.parse(valid)).toEqual({
-      application_id: valid.application_id,
-    });
+  it('rejects car_id in payment link payloads', () => {
+    expect(() => vehicleCheckoutLinkSchema.parse(valid)).toThrow();
   });
 
   it('accepts a missing car_id', () => {

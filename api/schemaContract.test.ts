@@ -50,6 +50,7 @@ describe('schemaContract', () => {
             cars: { properties: { created_at: { type: 'string' } } },
             rentals: {
               properties: {
+                vehicle_registration: { type: 'string' },
                 stripe_customer_id: { type: 'string' },
                 stripe_subscription_id: { type: 'string' },
               },
@@ -108,6 +109,7 @@ describe('schemaContract', () => {
             cars: { properties: { created_at: { type: 'string' }, modelYear: { type: 'number' } } },
             rentals: {
               properties: {
+                vehicleRegistration: { type: 'string' },
                 stripeCustomerId: { type: 'string' },
                 stripeSubscriptionId: { type: 'string' },
               },
@@ -197,6 +199,7 @@ describe('schemaContract', () => {
             cars: { properties: { created_at: { type: 'string' } } },
             rentals: {
               properties: {
+                vehicle_registration: { type: 'string' },
                 stripe_customer_id: { type: 'string' },
                 stripe_subscription_id: { type: 'string' },
               },

@@ -23,6 +23,7 @@ vi.mock('./db/postgres.js', () => ({
 
 import {
   buildLockedApplicationSelectSql,
+  isPaymentRecordingStatus,
   withVehicleCheckoutProcessingLock,
 } from './paymentActivation.js';
 
@@ -40,7 +41,7 @@ describe('buildLockedApplicationSelectSql', () => {
     });
 
     await expect(buildLockedApplicationSelectSql()).resolves.toBe(
-      'SELECT status, "paymentLinkVersion" AS payment_link_version, "assignedCarId" AS assigned_car_id FROM "applications" WHERE id = $1 FOR UPDATE'
+      'SELECT status, "paymentLinkVersion" AS payment_link_version FROM "applications" WHERE id = $1 FOR UPDATE'
     );
   });
 
@@ -51,8 +52,22 @@ describe('buildLockedApplicationSelectSql', () => {
     });
 
     await expect(buildLockedApplicationSelectSql()).resolves.toBe(
-      'SELECT status, "payment_link_version" AS payment_link_version, "assigned_car_id" AS assigned_car_id FROM "applications" WHERE id = $1 FOR UPDATE'
+      'SELECT status, "payment_link_version" AS payment_link_version FROM "applications" WHERE id = $1 FOR UPDATE'
     );
+  });
+});
+
+describe('isPaymentRecordingStatus', () => {
+  it('allows only payment-recording lifecycle states', () => {
+    expect(isPaymentRecordingStatus('Approved')).toBe(true);
+    expect(isPaymentRecordingStatus('Paid')).toBe(true);
+    expect(isPaymentRecordingStatus('Payment Review')).toBe(true);
+  });
+
+  it('rejects cancelled applications so a race cannot turn them into Paid', () => {
+    expect(isPaymentRecordingStatus('Cancelled')).toBe(false);
+    expect(isPaymentRecordingStatus('Pending')).toBe(false);
+    expect(isPaymentRecordingStatus(null)).toBe(false);
   });
 });
 

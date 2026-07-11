@@ -1,14 +1,3 @@
-export interface Car {
-  id: number;
-  archived_at?: string | null;
-  name: string;
-  model_year: number;
-  weekly_price: number;
-  bond: number;
-  status: 'Available' | 'Rented' | 'Maintenance';
-  image: string;
-}
-
 export interface Application {
   approved_at?: string | null;
   approved_bond?: number | null;
@@ -48,7 +37,7 @@ export interface Rental {
   id: number;
   application_id: string;
   bond_paid?: number;
-  car_id: number;
+  vehicle_registration?: string | null;
   applicant_name?: string;
   car_name?: string;
   start_date: string;

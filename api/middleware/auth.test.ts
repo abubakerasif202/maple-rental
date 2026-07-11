@@ -56,6 +56,65 @@ describe('admin auth cookie handling', () => {
     });
   });
 
+  it('uses browser-storable cookies for local HTTP development', async () => {
+    process.env.NODE_ENV = 'development';
+    process.env.VITEST = 'false';
+    vi.resetModules();
+
+    const { createCookieOptions } = await import('./auth.js');
+    expect(createCookieOptions()).toMatchObject({
+      httpOnly: true,
+      path: '/',
+      sameSite: 'lax',
+      secure: false,
+    });
+  });
+
+  it('uses secure SameSite=None cookies for HTTPS cross-site admin requests', async () => {
+    process.env.NODE_ENV = 'development';
+    process.env.VITEST = 'false';
+    vi.resetModules();
+
+    const { createCookieOptions } = await import('./auth.js');
+    const request = {
+      get: (header: string) => {
+        const headers: Record<string, string> = {
+          host: 'maple-rental.onrender.com',
+          origin: 'https://admin.maplerentals.com.au',
+          'x-forwarded-proto': 'https',
+        };
+        return headers[header.toLowerCase()] || undefined;
+      },
+      secure: false,
+    } as unknown as express.Request;
+
+    expect(createCookieOptions(request)).toMatchObject({
+      httpOnly: true,
+      path: '/',
+      sameSite: 'none',
+      secure: true,
+    });
+  });
+
+  it('encrypts Supabase admin session cookies instead of exposing tokens', async () => {
+    const { createSupabaseAdminSessionToken } = await import('./auth.js');
+    const token = createSupabaseAdminSessionToken({
+      accessToken: 'access-token',
+      accessTokenExpiresAt: Math.floor(Date.now() / 1000) + 3600,
+      email: 'admin@maplerentals.com.au',
+      refreshToken: 'refresh-token',
+    });
+
+    expect(token).toMatch(/^enc\.v1\./);
+    expect(token).not.toContain('access-token');
+    expect(token).not.toContain('refresh-token');
+
+    const encodedPayload = token.split('.')[0];
+    expect(() =>
+      JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'))
+    ).toThrow();
+  });
+
   it('clears all historical cookie variants on logout', async () => {
     const { clearAdminSessionCookie } = await import('./auth.js');
     const response = buildResponse();
@@ -136,7 +195,7 @@ describe('admin auth cookie handling', () => {
     expect(response.cookie).toHaveBeenCalledWith(
       'admin_token',
       expect.any(String),
-      createCookieOptions()
+      createCookieOptions(request)
     );
   });
 });

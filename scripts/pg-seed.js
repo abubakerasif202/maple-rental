@@ -35,14 +35,6 @@ async function runSchema() {
 
         console.log("Schema applied completely successfully!");
 
-        if (process.env.ALLOW_LEGACY_IMPORT === 'true') {
-            console.warn("ALLOW_LEGACY_IMPORT=true is set. Importing legacy seed-data script...");
-            const { execSync } = await import('child_process');
-            execSync('node scripts/seed-data.js', { stdio: 'inherit' });
-        } else {
-            console.warn("Skipping legacy seed-data import. Set ALLOW_LEGACY_IMPORT=true only for an intentional one-off legacy import.");
-        }
-
     } catch (err) {
         console.error("Error executing schema:", err);
     } finally {

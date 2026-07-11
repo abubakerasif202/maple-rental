@@ -139,7 +139,7 @@ export const checkDBHealth = async () => {
   }
 
   const { error } = await getServiceClient()
-    .from('cars')
+    .from('applications')
     .select('id', { head: true })
     .limit(1);
 

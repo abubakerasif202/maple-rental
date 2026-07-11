@@ -136,7 +136,7 @@ export const applicationApprovalSchema = z.object({
     .enum(["to_collect", "cash_paid", "already_paid"])
     .optional()
     .default("to_collect"),
-  car_id: optionalPositiveIntegerSchema,
+  car_id: z.never().optional(),
   rental_subscription_start_date: optionalDateOnlySchema(
     "Rental subscription start date must be a valid date",
   ),
@@ -172,7 +172,7 @@ export const applicationApprovalSchema = z.object({
 
 export const vehicleCheckoutLinkSchema = z.object({
   application_id: uuidSchema,
-});
+}).strict();
 
 export const leaseFeeSchema = z.object({
   code: z.string().min(1),
@@ -214,7 +214,7 @@ export const leaseAgreementSchema = z.object({
 
 export const createLeaseAgreementSchema = z.object({
   application_id: uuidSchema,
-  car_id: optionalPositiveIntegerSchema,
+  agreement_template_version: z.coerce.number().int().positive().optional().nullable(),
   content: z.string().min(1),
   status: z.string().optional().default("generated"),
   vehicle_label: z.string().trim().optional(),

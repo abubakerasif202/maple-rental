@@ -13,7 +13,6 @@ type ApplicationPaymentWritePayload = {
   bond_payment_status?: string | null;
   approved_vehicle?: string | null;
   approved_weekly_price?: number | null;
-  assigned_car_id?: number | null;
   cancelled_at?: string | null;
   cancel_reason?: string | null;
   intended_start_date?: string | null;

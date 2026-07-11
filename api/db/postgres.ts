@@ -20,11 +20,10 @@ const REQUIRED_PAYMENT_SCHEMA_COLUMNS: Record<string, string[]> = {
     'pending_checkout_session_id',
     'paid_at',
   ],
-  cars: ['id', 'status'],
   rentals: [
     'id',
-    'car_id',
     'application_id',
+    'vehicle_registration',
     'status',
     'weekly_price',
     'bond_paid',

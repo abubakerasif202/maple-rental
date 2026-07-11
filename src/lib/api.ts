@@ -1,6 +1,5 @@
 import axios from 'axios';
 import {
-  Car,
   Application,
   Rental,
   DashboardStats,
@@ -49,40 +48,6 @@ export interface AdminSessionResponse {
 
 export const verifyAdminSession = async (): Promise<AdminSessionResponse> => {
   const { data } = await api.get('/auth/verify');
-  return data;
-};
-
-export const fetchCars = async (options: { includeArchived?: boolean } = {}): Promise<Car[]> => {
-  const endpoint = options.includeArchived ? '/cars/admin/all' : '/cars';
-  const { data } = await api.get(endpoint);
-  return data;
-};
-
-export const fetchCar = async (id: string): Promise<Car> => {
-  const { data } = await api.get(`/cars/${id}`);
-  return data;
-};
-
-export const createCar = async (carData: Partial<Car>): Promise<{ id: string }> => {
-  const { data } = await api.post('/cars', carData);
-  return data;
-};
-
-export const updateCar = async (id: number, carData: Partial<Car>): Promise<{ success: boolean }> => {
-  const { data } = await api.put(`/cars/${id}`, carData);
-  return data;
-};
-
-export const deleteCar = async (id: number): Promise<{ success: boolean }> => {
-  const { data } = await api.delete(`/cars/${id}`);
-  return data;
-};
-
-export const archiveCar = async (
-  id: number,
-  archived: boolean
-): Promise<{ success: boolean }> => {
-  const { data } = await api.patch(`/cars/${id}/archive`, { archived });
   return data;
 };
 
@@ -231,7 +196,6 @@ export interface CheckoutSessionStatusResponse {
   internal_status: CheckoutSessionStatusState;
   metadata_match: {
     application_id: boolean;
-    car_id: boolean | null;
     checkout_kind: boolean;
     matched: boolean;
     payment_link_version: boolean;
@@ -279,7 +243,6 @@ export interface ApprovedPaymentContextResponse {
     setupFees: number;
     upfrontDue: number;
   };
-  car_id: number | null;
   vehicle_image: string;
 }
 
@@ -451,7 +414,7 @@ export const fetchCarLeaseTemplate = async (): Promise<string> => {
 
 export const renderCarLeaseAgreement = async (
   payload: LeaseAgreementPayload
-): Promise<{ agreement: string }> => {
+): Promise<{ agreement: string; agreementTemplateVersion: number }> => {
   const { data } = await api.post('/agreements/car-lease/render', payload);
   return data;
 };
@@ -462,9 +425,9 @@ export const fetchStripeLeaseSettings = async (): Promise<StripeLeaseSettings> =
 };
 
 export interface SavedLeaseAgreement {
+  agreement_template_version?: number | null;
   id: number;
   application_id: string;
-  car_id?: number | null;
   content: string;
   status: string;
   created_at: string;
@@ -521,8 +484,8 @@ export const previewAgreementTemplate = async (
 };
 
 export const saveLeaseAgreement = async (payload: {
+  agreement_template_version?: number | null;
   application_id: string;
-  car_id?: number | null;
   content: string;
   status?: string;
   vehicle_label?: string | null;
@@ -569,7 +532,6 @@ export const fetchWeeklyFinancials = async (
 export interface TollNoticeRentalOption {
   application_id: string;
   applicant_name: string;
-  car_id: number | null;
   car_name: string;
   customer_id: number | null;
   nominee_address: string;
@@ -590,7 +552,6 @@ export interface TollNoticeRentalOption {
 export interface TollTransferNoticePayload {
   application_id?: string | null;
   authorised_officer_name: string;
-  car_id?: number | null;
   customer_id?: number | null;
   declaration_date?: string | null;
   declaration_place: string;
@@ -681,7 +642,6 @@ export interface ImportedDataResetResponse {
   deleted?: Record<string, number>;
   preserved?: {
     adminUsers: true;
-    cars: true;
     stripeExternalRecords: true;
     stripeWebhookEvents: true;
   };

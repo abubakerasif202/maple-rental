@@ -76,7 +76,6 @@ export type ResetSummary = {
   criteria: ResetCriteria;
   preserved: {
     adminUsers: true;
-    cars: true;
     stripeExternalRecords: true;
     stripeWebhookEvents: true;
   };
@@ -269,7 +268,6 @@ export const buildResetSummary = (counts: ResetCounts): ResetSummary => ({
   },
   preserved: {
     adminUsers: true,
-    cars: true,
     stripeExternalRecords: true,
     stripeWebhookEvents: true,
   },
@@ -491,7 +489,6 @@ const insertMaintenanceAuditEvent = async ({
     counts,
     preserved: {
       adminUsers: true,
-      cars: true,
       stripeExternalRecords: true,
       stripeWebhookEvents: true,
     },

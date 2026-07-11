@@ -20,37 +20,6 @@ describe('schemaCompat', () => {
     vi.unstubAllGlobals();
   });
 
-  it('keeps created_at snake_case when the cars table mixes camel and snake fields', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          definitions: {
-            applications: { properties: {} },
-            cars: {
-              properties: {
-                created_at: { type: 'string' },
-                modelYear: { type: 'number' },
-                weeklyPrice: { type: 'number' },
-              },
-            },
-            rentals: { properties: {} },
-          },
-        }),
-        status: 200,
-        statusText: 'OK',
-      })
-    );
-
-    const { getCarCreatedAtColumn, getCarSelectColumns } = await import('./schemaCompat.js');
-
-    await expect(getCarCreatedAtColumn()).resolves.toBe('created_at');
-    await expect(getCarSelectColumns()).resolves.toBe(
-      'id, name, model_year:modelYear, weekly_price:weeklyPrice, bond, status, image, archived_at:archivedAt, created_at'
-    );
-  });
-
   it('uses deterministic defaults in production even when introspection fails', async () => {
     process.env.NODE_ENV = 'production';
     vi.stubGlobal(
@@ -65,8 +34,6 @@ describe('schemaCompat', () => {
     const { getSchemaCompat } = await import('./schemaCompat.js');
 
     await expect(getSchemaCompat()).resolves.toMatchObject({
-      applicationAssignedCarColumn: null,
-      carCreatedAtColumn: 'created_at',
       coreMode: 'snake',
       rentalStripeSubscriptionColumn: 'stripe_subscription_id',
     });
@@ -85,20 +52,12 @@ describe('schemaCompat', () => {
                 approvedAt: { type: 'string' },
                 approvedBond: { type: 'number' },
                 approvedWeeklyPrice: { type: 'number' },
-                assignedCarId: { type: 'number' },
                 licenseBackPhoto: { type: 'string' },
                 agreementTemplateVersion: { type: 'number' },
                 paidAt: { type: 'string' },
                 paymentLinkSentAt: { type: 'string' },
                 paymentLinkVersion: { type: 'number' },
                 pendingCheckoutSessionId: { type: 'string' },
-              },
-            },
-            cars: {
-              properties: {
-                created_at: { type: 'string' },
-                modelYear: { type: 'number' },
-                weeklyPrice: { type: 'number' },
               },
             },
             rentals: {
@@ -117,7 +76,6 @@ describe('schemaCompat', () => {
     const { getSchemaCompat } = await import('./schemaCompat.js');
 
     await expect(getSchemaCompat()).resolves.toMatchObject({
-      applicationAssignedCarColumn: 'assignedCarId',
       applicationApprovedAtColumn: 'approvedAt',
       applicationApprovedBondColumn: 'approvedBond',
       applicationApprovedWeeklyPriceColumn: 'approvedWeeklyPrice',
@@ -127,7 +85,6 @@ describe('schemaCompat', () => {
       applicationPaymentLinkSentAtColumn: 'paymentLinkSentAt',
       applicationPaymentLinkVersionColumn: 'paymentLinkVersion',
       applicationPendingCheckoutSessionColumn: 'pendingCheckoutSessionId',
-      carCreatedAtColumn: 'created_at',
       coreMode: 'camel',
       rentalStripeCustomerColumn: 'stripeCustomerId',
       rentalStripeSubscriptionColumn: 'stripeSubscriptionId',
@@ -149,14 +106,7 @@ describe('schemaCompat', () => {
         ok: true,
         json: async () => ({
           definitions: {
-            applications: { properties: {} },
-            cars: {
-              properties: {
-                created_at: { type: 'string' },
-                modelYear: { type: 'number' },
-                weeklyPrice: { type: 'number' },
-              },
-            },
+            applications: { properties: { createdAt: { type: 'string' } } },
             rentals: { properties: {} },
           },
         }),
@@ -166,17 +116,13 @@ describe('schemaCompat', () => {
 
     vi.stubGlobal('fetch', fetchMock);
 
-    const { getCarSelectColumns } = await import('./schemaCompat.js');
+    const { getApplicationCreatedAtColumn } = await import('./schemaCompat.js');
 
-    await expect(getCarSelectColumns()).resolves.toBe(
-      'id, name, model_year, weekly_price, bond, status, image, archived_at, created_at'
-    );
+    await expect(getApplicationCreatedAtColumn()).resolves.toBe('created_at');
 
     vi.advanceTimersByTime(61_000);
 
-    await expect(getCarSelectColumns()).resolves.toBe(
-      'id, name, model_year:modelYear, weekly_price:weeklyPrice, bond, status, image, archived_at:archivedAt, created_at'
-    );
+    await expect(getApplicationCreatedAtColumn()).resolves.toBe('createdAt');
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     vi.useRealTimers();

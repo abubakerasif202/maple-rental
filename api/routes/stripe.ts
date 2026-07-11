@@ -14,9 +14,6 @@ import {
   vehicleCheckoutSessionSchema,
 } from '../validation.js';
 import {
-  VehicleAllocationConflictError,
-} from '../vehicleAllocations.js';
-import {
   buildPublicRentalPlan,
   rentalPlans,
 } from '../../src/lib/rentalPlans.js';
@@ -214,10 +211,6 @@ router.get('/payment-context', async (req, res) => {
       return res.status(400).json({ error: 'Validation failed', details: error.issues });
     }
 
-    if (error instanceof VehicleAllocationConflictError) {
-      return res.status(error.status).json({ error: error.message });
-    }
-
     if (error instanceof Error && error.message === 'Application not found') {
       return res.status(404).json({ error: error.message });
     }
@@ -252,10 +245,6 @@ router.post('/vehicle-checkout-session', async (req, res) => {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: error.issues });
-    }
-
-    if (error instanceof VehicleAllocationConflictError) {
-      return res.status(error.status).json({ error: error.message });
     }
 
     if (isStripeConfigurationError(error)) {
@@ -311,16 +300,8 @@ router.post('/vehicle-checkout-link', authenticateAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Validation failed', details: error.issues });
     }
 
-    if (error instanceof VehicleAllocationConflictError) {
-      return res.status(error.status).json({ error: error.message });
-    }
-
     if (error instanceof Error && 'status' in error && error.status === 503) {
       return res.status(503).json({ error: error.message });
-    }
-
-    if (error instanceof Error && error.message === 'Car not found') {
-      return res.status(404).json({ error: error.message });
     }
 
     if (

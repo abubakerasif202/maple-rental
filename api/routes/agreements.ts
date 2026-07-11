@@ -13,8 +13,8 @@ import {
 const router = express.Router();
 
 type LeaseAgreementRecord = {
+  agreement_template_version?: number | null;
   application_id: string;
-  car_id?: number | null;
   content: string;
   created_at: string;
   id: number;
@@ -83,9 +83,6 @@ const isMissingVehicleLabelColumnError = (error: unknown) =>
         .includes('vehicle_label')
   );
 
-const isCarIdRequiredError = (error: unknown) =>
-  isRequiredColumnError(error, 'car_id');
-
 const isLegacyApplicationIdRequiredError = (error: unknown) =>
   isRequiredColumnError(error, 'legacy_application_id');
 
@@ -93,8 +90,8 @@ const isUniqueViolationError = (error: unknown) =>
   getDatabaseErrorCode(error) === '23505';
 
 const getAgreementSaveSchemaMessage = (error: unknown) => {
-  if (isCarIdRequiredError(error)) {
-    return 'Agreement storage is missing manual vehicle support: lease_agreements.car_id must allow blank values. Apply the manual vehicle agreement migration and retry.';
+  if (isUniqueViolationError(error)) {
+    return 'Agreement storage still enforces one agreement per application. Apply the immutable agreement history migration and retry.';
   }
 
   if (isMissingVehicleLabelColumnError(error)) {
@@ -118,29 +115,12 @@ const enrichLeaseAgreements = async (
         .filter((id) => id.length > 0)
     )
   );
-  const carIds = Array.from(
-    new Set(
-      agreements
-        .map((agreement) => Number(agreement.car_id || 0))
-        .filter((id) => Number.isInteger(id) && id > 0)
-    )
-  );
-
-  const [applicationsResult, carsResult] = await Promise.all([
-    applicationIds.length > 0
-      ? db.from('applications').select('*').in('id', applicationIds)
-      : Promise.resolve({ data: [], error: null }),
-    carIds.length > 0
-      ? db.from('cars').select('id, name').in('id', carIds)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
+  const applicationsResult = applicationIds.length > 0
+    ? await db.from('applications').select('*').in('id', applicationIds)
+    : { data: [], error: null };
 
   if (applicationsResult.error) {
     throw applicationsResult.error;
-  }
-
-  if (carsResult.error) {
-    throw carsResult.error;
   }
 
   const applicationNames = new Map<string, string>();
@@ -151,20 +131,12 @@ const enrichLeaseAgreements = async (
     applicationNames.set(String(application.id), String(application.name || ''));
   }
 
-  const carNames = new Map<number, string>();
-  for (const car of carsResult.data || []) {
-    carNames.set(Number(car.id), String(car.name || ''));
-  }
-
   return agreements
     .filter((agreement) => !importedApplicationIds.has(String(agreement.application_id)))
     .map((agreement) => ({
       ...agreement,
       applicant_name: applicationNames.get(agreement.application_id) || undefined,
-      car_name:
-        carNames.get(Number(agreement.car_id || 0)) ||
-        agreement.vehicle_label ||
-        undefined,
+      car_name: agreement.vehicle_label || undefined,
     }));
 };
 
@@ -177,7 +149,7 @@ router.post('/car-lease/render', authenticateAdmin, async (req, res) => {
   try {
     const payload = leaseAgreementSchema.parse(req.body ?? {});
     const rendered = await renderActiveAgreementTemplate(payload);
-    res.json({ agreement: rendered.agreement });
+    res.json(rendered);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: error.issues });
@@ -214,57 +186,22 @@ router.post('/', authenticateAdmin, async (req, res) => {
       });
     }
 
+    const applicationTemplateVersion = Number(
+      applicationRecord.agreement_template_version ??
+        applicationRecord.agreementTemplateVersion ??
+        0,
+    );
     const savePayload = {
+      agreement_template_version:
+        data.agreement_template_version ??
+        (Number.isInteger(applicationTemplateVersion) && applicationTemplateVersion > 0
+          ? applicationTemplateVersion
+          : null),
       application_id: data.application_id,
-      car_id: null,
       content: data.content,
       status: data.status,
       vehicle_label: data.vehicle_label || null,
     };
-    saveOperation = 'find-existing';
-    const findExistingAgreement = () => db
-      .from('lease_agreements')
-      .select('id, content')
-      .eq('application_id', data.application_id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const updateAgreement = async (id: number | string) => {
-      saveOperation = 'update';
-      let result = await db
-        .from('lease_agreements')
-        .update(savePayload)
-        .eq('id', id)
-        .select('id')
-        .single();
-
-      if (result.error && isMissingVehicleLabelColumnError(result.error)) {
-        const { vehicle_label: _vehicleLabel, ...legacySavePayload } = savePayload;
-        result = await db
-          .from('lease_agreements')
-          .update(legacySavePayload)
-          .eq('id', id)
-          .select('id')
-          .single();
-      }
-
-      return result;
-    };
-
-    const { data: existing, error: existingError } = await findExistingAgreement();
-    if (existingError) throw existingError;
-
-    if (existing?.id) {
-      const updated = await updateAgreement(existing.id);
-      if (updated.error) throw updated.error;
-      return res.status(200).json({
-        id: String(updated.data.id),
-        duplicate: existing.content === data.content,
-        updated: true,
-      });
-    }
-
     saveOperation = 'insert';
     let { data: inserted, error } = await db.from('lease_agreements').insert([savePayload]).select('id').single();
 
@@ -280,20 +217,6 @@ router.post('/', authenticateAdmin, async (req, res) => {
         .single();
       inserted = retry.data;
       error = retry.error;
-    }
-
-    if (error && isUniqueViolationError(error)) {
-      const racedExisting = await findExistingAgreement();
-      if (racedExisting.error) throw racedExisting.error;
-      if (racedExisting.data?.id) {
-        const updated = await updateAgreement(racedExisting.data.id);
-        if (updated.error) throw updated.error;
-        return res.status(200).json({
-          id: String(updated.data.id),
-          duplicate: racedExisting.data.content === data.content,
-          updated: true,
-        });
-      }
     }
 
     if (error) throw error;
@@ -325,7 +248,7 @@ router.get('/', authenticateAdmin, async (_req, res) => {
   try {
     const { data, error } = await db
       .from('lease_agreements')
-      .select('id, application_id, car_id, vehicle_label, content, status, created_at')
+      .select('id, application_id, vehicle_label, agreement_template_version, content, status, created_at')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -351,7 +274,7 @@ router.get('/:id', authenticateAdmin, async (req, res) => {
 
     const { data, error } = await db
       .from('lease_agreements')
-      .select('id, application_id, car_id, vehicle_label, content, status, created_at')
+      .select('id, application_id, vehicle_label, agreement_template_version, content, status, created_at')
       .eq('id', parsedParams.data.id)
       .single();
 
