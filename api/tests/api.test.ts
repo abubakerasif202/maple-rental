@@ -220,6 +220,13 @@ const {
     manual_invoices: [] as Array<Record<string, any>>,
     manual_invoice_items: [] as Array<Record<string, any>>,
     stripe_webhook_events: [] as Array<Record<string, any>>,
+    queryLog: [] as Array<{
+      columns?: string;
+      filters: Array<Record<string, any>>;
+      options: Record<string, any>;
+      range?: Record<string, number> | null;
+      table: string;
+    }>,
     failOnDeleteTable: null as string | null,
     leaseAgreementInsertErrorMode: null as
       | null
@@ -541,7 +548,16 @@ vi.mock("../db/index.js", () => {
     | { type: "gte"; column: string; value: unknown }
     | { type: "ilike"; column: string; pattern: string }
     | { type: "in"; column: string; values: unknown[] }
-    | { type: "or"; clauses: Array<{ column: string; search: string }> };
+    | {
+        type: "or";
+        referencedTable?: string;
+        clauses: Array<
+          | { type: "ilike"; column: string; search: string }
+          | { type: "is"; column: string; value: string | null }
+          | { type: "not"; column: string; operator: string; value: string }
+          | { type: "in"; column: string; values: string[] }
+        >;
+      };
 
   const applyFilters = (
     rows: Array<Record<string, any>>,
@@ -549,13 +565,24 @@ vi.mock("../db/index.js", () => {
   ) =>
     rows.filter((row) =>
       filters.every((filter) => {
+        const readValue = (column: string) => {
+          if (column.includes(".")) {
+            const [relation, ...rest] = column.split(".");
+            const related = row[relation];
+            const relatedRecord = Array.isArray(related) ? related[0] : related;
+            return relatedRecord?.[rest.join(".")];
+          }
+
+          return row[column];
+        };
+
         if (filter.type === "eq") {
-          const rowValue = filter.column === "is_imported" && row[filter.column] == null
+          const rowValue = filter.column === "is_imported" && readValue(filter.column) == null
             ? ["demo", "imported", "legacy", "legacy-import", "test"].includes(
                 String(row.source || "").toLowerCase(),
               ) || String(row.email || "").toLowerCase().endsWith("@example.invalid") ||
                 String(row.phone || "") === "0000000000"
-            : row[filter.column];
+            : readValue(filter.column);
           if (filter.value == null) {
             return rowValue == null;
           }
@@ -564,7 +591,7 @@ vi.mock("../db/index.js", () => {
         }
 
         if (filter.type === "is") {
-          const rowValue = row[filter.column];
+          const rowValue = readValue(filter.column);
           if (filter.value == null) {
             return rowValue == null;
           }
@@ -573,7 +600,7 @@ vi.mock("../db/index.js", () => {
         }
 
         if (filter.type === "gte") {
-          const left = row[filter.column];
+          const left = readValue(filter.column);
           const right = filter.value;
 
           if (left == null || right == null) {
@@ -603,11 +630,15 @@ vi.mock("../db/index.js", () => {
               .map((value) => value.trim().replace(/^"|"$/g, ""))
               .filter(Boolean);
 
-            return !values.some((value) => String(row[filter.column]) === String(value));
+            return !values.some((value) => String(readValue(filter.column)) === String(value));
           }
 
           if (filter.operator === "ilike") {
-            const source = String(row[filter.column] ?? "");
+            const value = readValue(filter.column);
+            if (value == null) {
+              return false;
+            }
+            const source = String(value);
             const escapedPattern = String(filter.value || "")
               .replace(/[.+^${}()|[\]\\]/g, "\\$&")
               .replace(/[%*]/g, ".*")
@@ -617,14 +648,19 @@ vi.mock("../db/index.js", () => {
           }
 
           if (filter.value == null) {
-            return row[filter.column] != null;
+            return readValue(filter.column) != null;
           }
 
-          return String(row[filter.column]) !== String(filter.value);
+          const value = readValue(filter.column);
+          if (value == null) {
+            return false;
+          }
+
+          return String(value) !== String(filter.value);
         }
 
         if (filter.type === "ilike") {
-          const source = String(row[filter.column] ?? "");
+          const source = String(readValue(filter.column) ?? "");
           const escapedPattern = filter.pattern
             .replace(/[.+^${}()|[\]\\]/g, "\\$&")
             .replace(/[%*]/g, ".*")
@@ -635,15 +671,48 @@ vi.mock("../db/index.js", () => {
 
         if (filter.type === "in") {
           return filter.values.some(
-            (value) => String(row[filter.column]) === String(value),
+            (value) => String(readValue(filter.column)) === String(value),
           );
         }
 
-        return filter.clauses.some(({ column, search }) =>
-          String(row[column] || "")
+        const clauseColumn = (column: string) =>
+          filter.referencedTable ? `${filter.referencedTable}.${column}` : column;
+
+        return filter.clauses.some((clause) => {
+          if (clause.type === "in") {
+            return clause.values.some(
+              (value) => String(readValue(clauseColumn(clause.column))) === String(value),
+            );
+          }
+
+          if (clause.type === "is") {
+            const rowValue = readValue(clauseColumn(clause.column));
+            return clause.value == null
+              ? rowValue == null
+              : String(rowValue) === String(clause.value);
+          }
+
+          if (clause.type === "not") {
+            const rowValue = readValue(clauseColumn(clause.column));
+            if (rowValue == null) {
+              return false;
+            }
+
+            if (clause.operator === "ilike") {
+              const escapedPattern = String(clause.value || "")
+                .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+                .replace(/[%*]/g, ".*")
+                .replace(/_/g, ".");
+              return !new RegExp(`^${escapedPattern}$`, "i").test(String(rowValue));
+            }
+
+            return String(rowValue) !== String(clause.value);
+          }
+
+          return String(readValue(clauseColumn(clause.column)) || "")
             .toLowerCase()
-            .includes(search.toLowerCase()),
-        );
+            .includes(clause.search.toLowerCase());
+        });
       }),
     );
 
@@ -696,13 +765,55 @@ vi.mock("../db/index.js", () => {
     return `${prefix}-0000-4000-8000-${suffix}`;
   };
 
+  const splitPostgrestList = (value: string) =>
+    value
+      .split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+      .map((entry) =>
+        entry
+          .trim()
+          .replace(/^"|"$/g, "")
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, "\\"),
+      )
+      .filter(Boolean);
+
   const parseOrClauses = (expression: string) =>
     expression
-      .split(",")
+      .split(/,(?=[A-Za-z_][A-Za-z0-9_]*\.)/)
       .map((clause) => {
         const [column, operator, ...rest] = clause.split(".");
 
-        if (!column || operator !== "ilike") {
+        if (!column) {
+          return null;
+        }
+
+        if (operator === "is") {
+          const value = rest.join(".") === "null" ? null : rest.join(".");
+          return { type: "is" as const, column, value };
+        }
+
+        if (operator === "not") {
+          const [notOperator, ...notRest] = rest;
+          if (!notOperator) {
+            return null;
+          }
+          return {
+            type: "not" as const,
+            column,
+            operator: notOperator,
+            value: notRest.join("."),
+          };
+        }
+
+        if (operator === "in") {
+          const values = rest.join(".").replace(/^\(|\)$/g, "");
+          const parsedValues = splitPostgrestList(values);
+          return parsedValues.length > 0
+            ? { type: "in" as const, column, values: parsedValues }
+            : null;
+        }
+
+        if (operator !== "ilike") {
           return null;
         }
 
@@ -710,9 +821,13 @@ vi.mock("../db/index.js", () => {
           .join(".")
           .replace(/^%+|%+$/g, "")
           .replace(/^\*+|\*+$/g, "");
-        return search ? { column, search } : null;
+        return search ? { type: "ilike" as const, column, search } : null;
       })
-      .filter((clause): clause is { column: string; search: string } =>
+      .filter((clause): clause is
+        | { type: "ilike"; column: string; search: string }
+        | { type: "is"; column: string; value: string | null }
+        | { type: "not"; column: string; operator: string; value: string }
+        | { type: "in"; column: string; values: string[] } =>
         Boolean(clause),
       );
 
@@ -769,8 +884,35 @@ vi.mock("../db/index.js", () => {
       table === "applications"
         ? getInvalidApplicationSelectColumn(columns)
         : null;
+    const includesApplicationInnerJoin =
+      table === "rentals" && typeof columns === "string" && columns.includes("applications!inner");
+
+    const attachRentalApplications = (
+      rows: Array<Record<string, any>>,
+    ): Array<Record<string, any>> => {
+      if (!includesApplicationInnerJoin) {
+        return rows;
+      }
+
+      return rows
+        .map((row): Record<string, any> | null => {
+          const application = mockState.applications.find(
+            (candidate) => String(candidate.id) === String(row.application_id || row.applicationId),
+          );
+          return application ? { ...row, applications: structuredClone(application) } : null;
+        })
+        .filter((row): row is Record<string, any> => Boolean(row));
+    };
 
     const resolveRows = async () => {
+      mockState.queryLog.push({
+        columns,
+        filters: structuredClone(filters) as Array<Record<string, any>>,
+        options: structuredClone(options),
+        range: range ? structuredClone(range) : null,
+        table,
+      });
+
       if (invalidApplicationColumn) {
         return {
           data: null,
@@ -779,7 +921,7 @@ vi.mock("../db/index.js", () => {
         };
       }
 
-      const filteredRows = applyFilters(getTableRows(table), filters);
+      const filteredRows = applyFilters(attachRentalApplications(getTableRows(table)), filters);
       const orderedRows = applyOrder(filteredRows, order);
       const selectedRows = applyRange(orderedRows, range);
 
@@ -870,13 +1012,14 @@ vi.mock("../db/index.js", () => {
           range,
         ),
       ),
-      or: vi.fn((expression: string) => {
+      or: vi.fn((expression: string, orOptions?: { referencedTable?: string; foreignTable?: string }) => {
         const clauses = parseOrClauses(expression);
+        const referencedTable = orOptions?.referencedTable || orOptions?.foreignTable;
         return createSelectQuery(
           table,
           columns,
           options,
-          clauses.length > 0 ? [...filters, { type: "or", clauses }] : filters,
+          clauses.length > 0 ? [...filters, { type: "or", clauses, referencedTable }] : filters,
           order,
           range,
         );
@@ -894,6 +1037,14 @@ vi.mock("../db/index.js", () => {
         }),
       ),
       single: vi.fn(async () => {
+        mockState.queryLog.push({
+          columns,
+          filters: structuredClone(filters) as Array<Record<string, any>>,
+          options: structuredClone(options),
+          range: range ? structuredClone(range) : null,
+          table,
+        });
+
         if (invalidApplicationColumn) {
           return {
             data: null,
@@ -901,7 +1052,7 @@ vi.mock("../db/index.js", () => {
           };
         }
 
-        const filteredRows = applyFilters(getTableRows(table), filters);
+        const filteredRows = applyFilters(attachRentalApplications(getTableRows(table)), filters);
         const orderedRows = applyOrder(filteredRows, order);
         const [row] = applyRange(orderedRows, range);
         return row
@@ -916,6 +1067,14 @@ vi.mock("../db/index.js", () => {
             };
       }),
       maybeSingle: vi.fn(async () => {
+        mockState.queryLog.push({
+          columns,
+          filters: structuredClone(filters) as Array<Record<string, any>>,
+          options: structuredClone(options),
+          range: range ? structuredClone(range) : null,
+          table,
+        });
+
         if (invalidApplicationColumn) {
           return {
             data: null,
@@ -923,7 +1082,7 @@ vi.mock("../db/index.js", () => {
           };
         }
 
-        const filteredRows = applyFilters(getTableRows(table), filters);
+        const filteredRows = applyFilters(attachRentalApplications(getTableRows(table)), filters);
         const orderedRows = applyOrder(filteredRows, order);
         const [row] = applyRange(orderedRows, range);
         return {
@@ -1496,7 +1655,40 @@ const { default: app } = await import("../index.js");
 const { createCheckoutToken, verifyCheckoutToken } =
   await import("../checkoutTokens.js");
 
-  beforeEach(() => {
+const getQueryTables = () => mockState.queryLog.map((query) => query.table);
+const expectNoImportedApplicationPreload = () => {
+  expect(
+    mockState.queryLog.some(
+      (query) =>
+        query.table === "applications" &&
+        query.columns?.includes("legacy_id") &&
+        !query.filters.some((filter) => filter.type === "in" || filter.type === "or"),
+    ),
+  ).toBe(false);
+};
+const expectNoUnfilteredCustomerLookup = () => {
+  expect(
+    mockState.queryLog.some(
+      (query) => query.table === "customers" && query.filters.length === 0,
+    ),
+  ).toBe(false);
+};
+const expectNoDuplicateRentalRehydration = () => {
+  expect(
+    mockState.queryLog.some(
+      (query) =>
+        query.table === "rentals" &&
+        query.filters.some(
+          (filter) =>
+            filter.type === "in" &&
+            filter.column === "id",
+        ),
+    ),
+  ).toBe(false);
+};
+
+beforeEach(() => {
+  mockState.queryLog = [];
   delete process.env.RESEND_API_KEY;
   delete process.env.LEASE_OWNER_NAME;
   delete process.env.LEASE_OWNER_ADDRESS;
@@ -2872,6 +3064,10 @@ describe("Applications API", () => {
     expect(res.body.totalPages).toBe(1);
     expect(res.body.page).toBe(1);
     expect(res.body.items).toHaveLength(3);
+    expect(getQueryTables().filter((table) => table === "rentals")).toHaveLength(2);
+    expect(mockState.queryLog).toHaveLength(2);
+    expectNoImportedApplicationPreload();
+    expectNoDuplicateRentalRehydration();
   });
 
   it("GET /api/rentals slices the requested page on the server", async () => {
@@ -2915,6 +3111,10 @@ describe("Applications API", () => {
       id: 402,
       vehicle_registration: "CZ55XY-3",
     });
+    expect(getQueryTables().filter((table) => table === "rentals")).toHaveLength(2);
+    expect(mockState.queryLog.length).toBeLessThanOrEqual(2);
+    expectNoImportedApplicationPreload();
+    expectNoDuplicateRentalRehydration();
   });
 
   it("GET /api/rentals searches server-side across older records", async () => {
@@ -2938,6 +3138,331 @@ describe("Applications API", () => {
       id: 400,
       vehicle_registration: "OLD-SEARCH-REGO",
     });
+    expect(getQueryTables()).toEqual(expect.arrayContaining(["applications", "rentals"]));
+    expect(mockState.queryLog.length).toBeLessThanOrEqual(2);
+    expectNoImportedApplicationPreload();
+    expectNoDuplicateRentalRehydration();
+  });
+
+  it("GET /api/rentals excludes imported application-linked rentals without loading all imported ids", async () => {
+    const importedApplicationId = "00000000-0000-4000-8000-000000000999";
+    mockState.applications = [
+      ...mockState.applications,
+      {
+        id: importedApplicationId,
+        approved_vehicle: "Imported Toyota",
+        created_at: "2026-03-01T00:00:00.000Z",
+        email: "legacy@example.invalid",
+        experience: "Imported from live fleet data",
+        license_number: "legacy-999",
+        name: "Legacy Imported Driver",
+        phone: "0000000000",
+        status: "Paid",
+      },
+    ];
+    mockState.rentals = [
+      {
+        id: 501,
+        application_id: importedApplicationId,
+        created_at: "2026-03-07T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "IMPORTED-1",
+      },
+      {
+        id: 502,
+        application_id: APPROVED_APPLICATION_ID,
+        created_at: "2026-03-06T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "LIVE-1",
+      },
+    ];
+
+    const res = await request(app)
+      .get("/api/rentals?page=1&pageSize=25")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]).toMatchObject({
+      application_id: APPROVED_APPLICATION_ID,
+      vehicle_registration: "LIVE-1",
+    });
+    expect(getQueryTables().filter((table) => table === "rentals")).toHaveLength(2);
+    expect(mockState.queryLog.length).toBeLessThanOrEqual(2);
+    expectNoImportedApplicationPreload();
+    expectNoDuplicateRentalRehydration();
+  });
+
+  it("GET /api/rentals paginates after excluding imported application-linked rentals", async () => {
+    const importedApplications = Array.from({ length: 4 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-0000000008${index}`,
+      approved_vehicle: `Imported Vehicle ${index}`,
+      created_at: `2026-03-0${index + 1}T00:00:00.000Z`,
+      email: `legacy-${index}@example.invalid`,
+      experience: "Imported from live fleet data",
+      license_number: `legacy-${index}`,
+      name: `Legacy Imported Driver ${index}`,
+      phone: "0000000000",
+      status: "Paid",
+    }));
+    const validApplications = Array.from({ length: 5 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-0000000009${index}`,
+      approved_vehicle: `Valid Vehicle ${index}`,
+      created_at: `2026-03-${10 + index}T00:00:00.000Z`,
+      email: `valid-${index}@example.com`,
+      experience: "1-3 years",
+      license_number: `NSW9000${index}`,
+      name: `Valid Driver ${index}`,
+      phone: `049999990${index}`,
+      status: "Paid",
+    }));
+    mockState.applications = [
+      ...mockState.applications,
+      ...importedApplications,
+      ...validApplications,
+    ];
+    mockState.rentals = [
+      ...importedApplications.map((application, index) => ({
+        id: 600 + index,
+        application_id: application.id,
+        created_at: new Date(Date.UTC(2026, 2, 20 - index)).toISOString(),
+        status: "Active",
+        vehicle_registration: `IMPORTED-${index}`,
+      })),
+      ...validApplications.map((application, index) => ({
+        id: 700 + index,
+        application_id: application.id,
+        created_at: new Date(Date.UTC(2026, 2, 10 - index)).toISOString(),
+        status: "Active",
+        vehicle_registration: `VALID-${index}`,
+      })),
+    ];
+
+    const page1 = await request(app)
+      .get("/api/rentals?page=1&pageSize=2")
+      .set("Authorization", "Bearer fake-token");
+    const page2 = await request(app)
+      .get("/api/rentals?page=2&pageSize=2")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(page1.status).toBe(200);
+    expect(page1.body).toMatchObject({
+      page: 1,
+      pageSize: 2,
+      total: 5,
+      totalItems: 5,
+      totalPages: 3,
+    });
+    expect(page1.body.items.map((rental: Record<string, any>) => rental.vehicle_registration)).toEqual([
+      "VALID-0",
+      "VALID-1",
+    ]);
+
+    expect(page2.status).toBe(200);
+    expect(page2.body).toMatchObject({
+      page: 2,
+      pageSize: 2,
+      total: 5,
+      totalItems: 5,
+      totalPages: 3,
+    });
+    expect(page2.body.items.map((rental: Record<string, any>) => rental.vehicle_registration)).toEqual([
+      "VALID-2",
+      "VALID-3",
+    ]);
+  });
+
+  it("GET /api/rentals search paginates only valid rental matches", async () => {
+    const importedApplication = {
+      id: "00000000-0000-4000-8000-000000000881",
+      approved_vehicle: "Imported Search Vehicle",
+      created_at: "2026-03-01T00:00:00.000Z",
+      email: "legacy-search@example.invalid",
+      experience: "Legacy renter import",
+      license_number: "legacy-search",
+      name: "Legacy Search Driver",
+      phone: "0000000000",
+      status: "Paid",
+    };
+    const validApplications = Array.from({ length: 3 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-00000000098${index}`,
+      approved_vehicle: `Search Vehicle ${index}`,
+      created_at: `2026-03-${10 + index}T00:00:00.000Z`,
+      email: `search-valid-${index}@example.com`,
+      experience: "1-3 years",
+      license_number: `NSW9800${index}`,
+      name: `Search Valid Driver ${index}`,
+      phone: `048888880${index}`,
+      status: "Paid",
+    }));
+    mockState.applications = [
+      ...mockState.applications,
+      importedApplication,
+      ...validApplications,
+    ];
+    mockState.rentals = [
+      {
+        id: 800,
+        application_id: importedApplication.id,
+        created_at: "2026-03-20T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "SEARCH-IMPORTED",
+      },
+      ...validApplications.map((application, index) => ({
+        id: 810 + index,
+        application_id: application.id,
+        created_at: new Date(Date.UTC(2026, 2, 10 - index)).toISOString(),
+        status: "Active",
+        vehicle_registration: `SEARCH-VALID-${index}`,
+      })),
+    ];
+
+    const res = await request(app)
+      .get("/api/rentals?search=SEARCH&page=2&pageSize=2")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      page: 2,
+      pageSize: 2,
+      total: 3,
+      totalItems: 3,
+      totalPages: 2,
+    });
+    expect(res.body.items.map((rental: Record<string, any>) => rental.vehicle_registration)).toEqual([
+      "SEARCH-VALID-2",
+    ]);
+  });
+
+  it("GET /api/rentals keeps valid application rentals visible when optional import marker fields are null", async () => {
+    const nullableApplicationId = "00000000-0000-4000-8000-000000001234";
+    mockState.applications = [
+      ...mockState.applications,
+      {
+        ...mockState.applications[1],
+        id: nullableApplicationId,
+        approved_vehicle: "NULL-SAFE-REG",
+        email: null,
+        experience: null,
+        legacy_id: null,
+        license_number: null,
+        name: "Nullable Valid Driver",
+        phone: null,
+        status: "Paid",
+      },
+    ];
+    mockState.rentals = [
+      {
+        id: 875,
+        application_id: nullableApplicationId,
+        created_at: "2026-03-21T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "NULL-SAFE-REG",
+      },
+    ];
+
+    const res = await request(app)
+      .get("/api/rentals?page=1&pageSize=25")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      total: 1,
+      totalItems: 1,
+      totalPages: 1,
+    });
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]).toMatchObject({
+      application_id: nullableApplicationId,
+      vehicle_registration: "NULL-SAFE-REG",
+    });
+    expectNoImportedApplicationPreload();
+    expectNoDuplicateRentalRehydration();
+  });
+
+  it("GET /api/rentals still excludes an imported application when any one canonical marker is present", async () => {
+    const importedByExperienceId = "00000000-0000-4000-8000-000000001235";
+    const validApplicationId = "00000000-0000-4000-8000-000000001236";
+    mockState.applications = [
+      ...mockState.applications,
+      {
+        ...mockState.applications[1],
+        id: importedByExperienceId,
+        email: null,
+        experience: "Legacy renter import",
+        legacy_id: null,
+        license_number: null,
+        phone: null,
+        status: "Paid",
+      },
+      {
+        ...mockState.applications[1],
+        id: validApplicationId,
+        approved_vehicle: "VALID-MARKER-CHECK",
+        email: null,
+        experience: null,
+        legacy_id: null,
+        license_number: null,
+        phone: null,
+        status: "Paid",
+      },
+    ];
+    mockState.rentals = [
+      {
+        id: 876,
+        application_id: importedByExperienceId,
+        created_at: "2026-03-22T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "IMPORTED-MARKER",
+      },
+      {
+        id: 877,
+        application_id: validApplicationId,
+        created_at: "2026-03-21T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "VALID-MARKER-CHECK",
+      },
+    ];
+
+    const res = await request(app)
+      .get("/api/rentals?page=1&pageSize=25")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.totalItems).toBe(1);
+    expect(res.body.items.map((rental: Record<string, any>) => rental.vehicle_registration)).toEqual([
+      "VALID-MARKER-CHECK",
+    ]);
+  });
+
+  it("GET /api/rentals excludes unlinked rentals under the current application-backed rental invariant", async () => {
+    mockState.rentals = [
+      {
+        id: 878,
+        application_id: null,
+        created_at: "2026-03-22T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "UNLINKED-REG",
+      },
+      {
+        id: 879,
+        application_id: APPROVED_APPLICATION_ID,
+        created_at: "2026-03-21T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "LINKED-REG",
+      },
+    ];
+
+    const res = await request(app)
+      .get("/api/rentals?page=1&pageSize=25")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.totalItems).toBe(1);
+    expect(res.body.items.map((rental: Record<string, any>) => rental.vehicle_registration)).toEqual([
+      "LINKED-REG",
+    ]);
+    expectNoImportedApplicationPreload();
   });
 
   it("POST /api/applications supports camel-case Supabase application schemas", async () => {
@@ -4148,6 +4673,205 @@ describe("Toll Transfer Notices API", () => {
       nominee_phone: "0499999999",
       vehicle_registration: "CZ55XY",
     });
+    expect(getQueryTables()).toEqual(expect.arrayContaining(["applications", "rentals", "customers"]));
+    expect(mockState.queryLog.length).toBeLessThanOrEqual(3);
+    expectNoImportedApplicationPreload();
+    expectNoDuplicateRentalRehydration();
+    const customerQuery = mockState.queryLog.find((query) => query.table === "customers");
+    expect(customerQuery?.filters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "or",
+        }),
+      ]),
+    );
+    expect(customerQuery?.range).toEqual({ from: 0, to: 149 });
+  });
+
+  it("GET /api/toll-notices/rental-options keeps empty searches bounded", async () => {
+    mockState.rentals = [
+      {
+        id: 20,
+        application_id: APPROVED_APPLICATION_ID,
+        created_at: "2026-03-07T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "CZ55XY",
+      },
+    ];
+    mockState.customers[0] = {
+      ...mockState.customers[0],
+      email: "approved@example.com",
+      full_name: "Approved Driver",
+      phone: "0499999999",
+      source: "current",
+    };
+
+    const res = await request(app)
+      .get("/api/toll-notices/rental-options?search=")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(getQueryTables()).toEqual(expect.arrayContaining(["rentals", "customers"]));
+    expect(mockState.queryLog.length).toBeLessThanOrEqual(3);
+    expectNoImportedApplicationPreload();
+    expectNoDuplicateRentalRehydration();
+    expectNoUnfilteredCustomerLookup();
+  });
+
+  it("GET /api/toll-notices/rental-options includes valid rentals with null optional import marker fields", async () => {
+    const nullableApplicationId = "00000000-0000-4000-8000-000000002234";
+    mockState.applications = [
+      ...mockState.applications,
+      {
+        ...mockState.applications[1],
+        id: nullableApplicationId,
+        approved_vehicle: "NULL-TOLL-REG",
+        email: null,
+        experience: null,
+        legacy_id: null,
+        license_number: null,
+        name: "Nullable Toll Driver",
+        phone: null,
+        status: "Paid",
+      },
+    ];
+    mockState.rentals = [
+      {
+        id: 24,
+        application_id: nullableApplicationId,
+        created_at: "2026-03-09T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "NULL-TOLL-REG",
+      },
+    ];
+
+    const res = await request(app)
+      .get("/api/toll-notices/rental-options?search=NULL-TOLL")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]).toMatchObject({
+      application_id: nullableApplicationId,
+      vehicle_registration: "NULL-TOLL-REG",
+    });
+    expectNoImportedApplicationPreload();
+    expectNoUnfilteredCustomerLookup();
+  });
+
+  it("GET /api/toll-notices/rental-options uses valid rentals after imported rows", async () => {
+    const importedApplications = Array.from({ length: 4 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-0000000007${index}`,
+      approved_vehicle: `Imported Toll Vehicle ${index}`,
+      created_at: `2026-03-0${index + 1}T00:00:00.000Z`,
+      email: `legacy-toll-${index}@example.invalid`,
+      experience: "Imported from live fleet data",
+      license_number: `legacy-toll-${index}`,
+      name: `Legacy Toll Driver ${index}`,
+      phone: "0000000000",
+      status: "Paid",
+    }));
+    const validApplications = Array.from({ length: 2 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-0000000006${index}`,
+      approved_vehicle: `Valid Toll Vehicle ${index}`,
+      address: `${10 + index} Toll Street Merrylands NSW 2160`,
+      created_at: `2026-03-${10 + index}T00:00:00.000Z`,
+      email: `valid-toll-${index}@example.com`,
+      experience: "1-3 years",
+      license_number: `NSW6000${index}`,
+      name: `Valid Toll Driver ${index}`,
+      phone: `047777770${index}`,
+      status: "Paid",
+    }));
+    mockState.applications = [
+      ...mockState.applications,
+      ...importedApplications,
+      ...validApplications,
+    ];
+    mockState.rentals = [
+      ...importedApplications.map((application, index) => ({
+        id: 900 + index,
+        application_id: application.id,
+        created_at: new Date(Date.UTC(2026, 2, 20 - index)).toISOString(),
+        status: "Active",
+        vehicle_registration: `TOLL-IMPORTED-${index}`,
+      })),
+      ...validApplications.map((application, index) => ({
+        id: 950 + index,
+        application_id: application.id,
+        created_at: new Date(Date.UTC(2026, 2, 10 - index)).toISOString(),
+        status: "Active",
+        vehicle_registration: `TOLL-VALID-${index}`,
+      })),
+    ];
+
+    const res = await request(app)
+      .get("/api/toll-notices/rental-options?search=")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.items.map((item: Record<string, any>) => item.vehicle_registration)).toEqual([
+      "TOLL-VALID-0",
+      "TOLL-VALID-1",
+    ]);
+  });
+
+  it("GET /api/toll-notices/rental-options prefers email and phone over duplicate customer names", async () => {
+    mockState.applications[1] = {
+      ...mockState.applications[1],
+      email: "correct-driver@example.com",
+      name: "Duplicate Driver",
+      phone: "0411111111",
+    };
+    mockState.customers = [
+      {
+        id: 10,
+        city: "Wrongtown",
+        date_of_birth: "1980-01-01",
+        email: "wrong-driver@example.com",
+        full_name: "Duplicate Driver",
+        phone: "0499999999",
+        postcode: "2000",
+        source: "current",
+        state: "NSW",
+        street: "1 Wrong Street",
+      },
+      {
+        id: 11,
+        city: "Merrylands",
+        date_of_birth: "1999-09-24",
+        email: "correct-driver@example.com",
+        full_name: "Duplicate Driver",
+        phone: "0411111111",
+        postcode: "2160",
+        source: "current",
+        state: "NSW",
+        street: "10 Correct Street",
+      },
+    ];
+    mockState.rentals = [
+      {
+        id: 20,
+        application_id: APPROVED_APPLICATION_ID,
+        created_at: "2026-03-07T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "DUP-NAME",
+      },
+    ];
+
+    const res = await request(app)
+      .get("/api/toll-notices/rental-options?search=DUP-NAME")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]).toMatchObject({
+      customer_id: 11,
+      nominee_address: "10 Correct Street",
+      nominee_phone: "0411111111",
+      vehicle_registration: "DUP-NAME",
+    });
   });
 
   it("GET /api/toll-notices/rental-options can find older rentals beyond the previous capped lookup", async () => {
@@ -4182,6 +4906,11 @@ describe("Toll Transfer Notices API", () => {
       nominee_full_name: "Approved Driver",
       vehicle_registration: "OLD-TOLL-SEARCH",
     });
+    expect(getQueryTables()).toEqual(expect.arrayContaining(["applications", "rentals", "customers"]));
+    expect(mockState.queryLog.length).toBeLessThanOrEqual(3);
+    expectNoImportedApplicationPreload();
+    expectNoDuplicateRentalRehydration();
+    expectNoUnfilteredCustomerLookup();
   });
 
   it("POST /api/toll-notices rejects missing required fields", async () => {

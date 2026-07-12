@@ -9,16 +9,27 @@ import {
   getApplicationListSelectColumns,
   getRentalSelectColumns,
   getSchemaCompat,
-  getApplicationImportedDataSelectColumns,
 } from "../schemaCompat.js";
-import {
-  getImportedApplicationIdSet,
-  isImportedApplicationRecord,
-} from "../importedDataFilters.js";
+import { isImportedApplicationRecord } from "../importedDataFilters.js";
 
 const router = express.Router();
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
+const RENTAL_APPLICATION_RELATION_SELECT = [
+  "applications!inner(",
+  [
+    "id",
+    "name",
+    "phone",
+    "email",
+    "address",
+    "approved_vehicle",
+    "legacy_id",
+    "license_number",
+    "experience",
+  ].join(", "),
+  ")",
+].join("");
 
 const cancelSubscriptionSchema = z.object({
   cancelAtPeriodEnd: z.boolean(),
@@ -100,16 +111,49 @@ const parseAddressParts = (address: string | null | undefined) => {
   };
 };
 
-const applyRentalImportFilters = (query: any, importedApplicationIds: Set<string>) => {
-  let nextQuery = query.is("legacy_application_id", null);
+const withRentalApplicationRelation = (selectColumns: string) =>
+  `${selectColumns}, ${RENTAL_APPLICATION_RELATION_SELECT}`;
 
-  if (importedApplicationIds.size > 0) {
-    const quotedIds = [...importedApplicationIds].map((id) => `"${id}"`).join(",");
-    nextQuery = nextQuery.not("application_id", "in", `(${quotedIds})`);
-  }
+const applyNullSafeNotFilter = (
+  query: any,
+  column: string,
+  operator: "eq" | "ilike",
+  value: string,
+  options?: { referencedTable?: string },
+) => query.or(`${column}.is.null,${column}.not.${operator}.${value}`, options || {});
 
-  return nextQuery;
-};
+const applyRentalImportFilters = (query: any) =>
+  applyNullSafeNotFilter(
+    applyNullSafeNotFilter(
+      applyNullSafeNotFilter(
+        applyNullSafeNotFilter(
+          applyNullSafeNotFilter(
+            query.is("legacy_application_id", null).is("applications.legacy_id", null),
+            "email",
+            "ilike",
+            "%@example.invalid",
+            { referencedTable: "applications" },
+          ),
+          "phone",
+          "eq",
+          "0000000000",
+          { referencedTable: "applications" },
+        ),
+        "license_number",
+        "ilike",
+        "legacy-%",
+        { referencedTable: "applications" },
+      ),
+      "experience",
+      "ilike",
+      "%imported from live fleet data%",
+      { referencedTable: "applications" },
+    ),
+    "experience",
+    "ilike",
+    "%legacy renter import%",
+    { referencedTable: "applications" },
+  );
 
 const applyRentalVehicleSearch = (query: any, searchTerm: string) => {
   if (!searchTerm) {
@@ -136,23 +180,7 @@ const applyApplicationSearch = (query: any, searchTerm: string) => {
   );
 };
 
-const fetchImportedApplicationIds = async () => {
-  const importedSelectColumns = await getApplicationImportedDataSelectColumns();
-  const { data, error } = await db
-    .from("applications")
-    .select(importedSelectColumns);
-
-  if (error) {
-    throw error;
-  }
-
-  return getImportedApplicationIdSet((data || []) as Array<Record<string, any>>);
-};
-
-const fetchMatchingApplicationIds = async (
-  searchTerm: string,
-  importedApplicationIds: Set<string>,
-) => {
+const fetchMatchingApplicationIds = async (searchTerm: string) => {
   if (!searchTerm) {
     return new Set<string>();
   }
@@ -168,34 +196,49 @@ const fetchMatchingApplicationIds = async (
 
   const ids = (data || [])
     .map((row: any) => String(row.id || "").trim())
-    .filter(Boolean)
-    .filter((id) => !importedApplicationIds.has(id));
+    .filter(Boolean);
 
   return new Set(ids);
 };
 
 const applyApplicationImportFilters = (query: any) =>
-  query
-    .is("legacy_id", null)
-    .not("email", "ilike", "%@example.invalid")
-    .not("phone", "eq", "0000000000")
-    .not("license_number", "ilike", "legacy-%")
-    .not("experience", "ilike", "%imported from live fleet data%")
-    .not("experience", "ilike", "%legacy renter import%");
+  applyNullSafeNotFilter(
+    applyNullSafeNotFilter(
+      applyNullSafeNotFilter(
+        applyNullSafeNotFilter(
+          applyNullSafeNotFilter(
+            query.is("legacy_id", null),
+            "email",
+            "ilike",
+            "%@example.invalid",
+          ),
+          "phone",
+          "eq",
+          "0000000000",
+        ),
+        "license_number",
+        "ilike",
+        "legacy-%",
+      ),
+      "experience",
+      "ilike",
+      "%imported from live fleet data%",
+    ),
+    "experience",
+    "ilike",
+    "%legacy renter import%",
+  );
 
-const fetchMatchingVehicleRentalIds = async (
-  searchTerm: string,
-  importedApplicationIds: Set<string>,
-) => {
+const fetchMatchingVehicleRentalRows = async (searchTerm: string) => {
   if (!searchTerm) {
-    return new Set<string>();
+    return [];
   }
 
+  const selectColumns = await getRentalSelectColumns({
+    includeStripeFields: true,
+  });
   const { data, error } = await applyRentalVehicleSearch(
-    applyRentalImportFilters(
-      db.from("rentals").select("id"),
-      importedApplicationIds,
-    ),
+    applyRentalImportFilters(db.from("rentals").select(withRentalApplicationRelation(selectColumns))),
     searchTerm,
   );
 
@@ -203,35 +246,7 @@ const fetchMatchingVehicleRentalIds = async (
     throw error;
   }
 
-  return new Set(
-    (data || [])
-      .map((row: any) => String(row.id || "").trim())
-      .filter(Boolean),
-  );
-};
-
-const loadRentalRowsByIds = async (rentalIds: Set<string>) => {
-  if (rentalIds.size === 0) {
-    return [];
-  }
-
-  const selectColumns = await getRentalSelectColumns({
-    includeStripeFields: true,
-  });
-  const { data, error } = await db
-    .from("rentals")
-    .select(selectColumns)
-    .in("id", [...rentalIds]);
-
-  if (error) {
-    throw error;
-  }
-
-  return ((data || []) as Array<Record<string, any>>).sort((left, right) => {
-    const leftCreated = new Date(String(left.created_at || 0)).getTime();
-    const rightCreated = new Date(String(right.created_at || 0)).getTime();
-    return rightCreated - leftCreated;
-  });
+  return (data || []) as Array<Record<string, any>>;
 };
 
 const loadApplicationRowsByIds = async (applicationIds: string[]) => {
@@ -256,38 +271,71 @@ const loadApplicationRowsByIds = async (applicationIds: string[]) => {
   return new Map(rows.map((application) => [String(application.id), application]));
 };
 
-const formatRentalRows = async (rentals: Array<Record<string, any>>) => {
+const getEmbeddedApplication = (rental: Record<string, any>) => {
+  const embedded = rental.applications;
+  if (Array.isArray(embedded)) {
+    return embedded[0] || null;
+  }
+
+  return embedded && typeof embedded === "object" ? embedded : null;
+};
+
+const formatRentalRowsWithApplications = async (rentals: Array<Record<string, any>>) => {
+  const embeddedApplicationsById = new Map<string, Record<string, any>>();
+  for (const rental of rentals) {
+    const application = getEmbeddedApplication(rental);
+    const applicationId = String(
+      application?.id || rental.application_id || rental.applicationId || "",
+    ).trim();
+
+    if (applicationId && application && !isImportedApplicationRecord(application)) {
+      embeddedApplicationsById.set(applicationId, application);
+    }
+  }
   const applicationIds = [
     ...new Set(
       rentals
         .map((rental) => String(rental.application_id || rental.applicationId || ""))
-        .filter(Boolean),
+        .filter((applicationId) => applicationId && !embeddedApplicationsById.has(applicationId)),
     ),
   ];
-  const applicationsById = await loadApplicationRowsByIds(applicationIds);
+  const applicationsById = new Map([
+    ...embeddedApplicationsById,
+    ...(await loadApplicationRowsByIds(applicationIds)),
+  ]);
 
-  return rentals.map((rental: any) => {
-    const applicationId = String(rental.application_id || rental.applicationId || "");
-    const application = applicationsById.get(applicationId);
-    const vehicleRegistration = String(
-      rental.vehicle_registration ||
-        rental.vehicleRegistration ||
-        application?.approved_vehicle ||
-        application?.approvedVehicle ||
-        "",
-    ).trim();
+  const items = rentals
+    .map((rental: any) => {
+      const applicationId = String(rental.application_id || rental.applicationId || "");
+      const application = applicationsById.get(applicationId);
 
-    return {
-      ...rental,
-      application_id: applicationId,
-      applicant_name: application?.name || null,
-      car_name: vehicleRegistration,
-      vehicle_registration: vehicleRegistration,
-    };
-  });
+      if (applicationId && !application) {
+        return null;
+      }
+
+      const vehicleRegistration = String(
+        rental.vehicle_registration ||
+          rental.vehicleRegistration ||
+          application?.approved_vehicle ||
+          application?.approvedVehicle ||
+          "",
+      ).trim();
+      const { applications: _applications, ...rentalWithoutApplications } = rental;
+
+      return {
+        ...rentalWithoutApplications,
+        application_id: applicationId,
+        applicant_name: application?.name || null,
+        car_name: vehicleRegistration,
+        vehicle_registration: vehicleRegistration,
+      };
+    })
+    .filter((rental): rental is Record<string, any> => Boolean(rental));
+
+  return { applicationsById, items };
 };
 
-export const loadAdminRentalDataset = async ({
+const loadAdminRentalDatasetWithApplications = async ({
   page,
   pageSize,
   search,
@@ -296,21 +344,22 @@ export const loadAdminRentalDataset = async ({
   pageSize: number;
   search: string;
 }) => {
-  const importedApplicationIds = await fetchImportedApplicationIds();
   const orderColumn = await getRentalCreatedAtColumn();
   const searchTerm = normalizeSearchTerm(search);
 
   if (searchTerm) {
-    const [applicationIds, vehicleRentalIds] = await Promise.all([
-      fetchMatchingApplicationIds(searchTerm, importedApplicationIds),
-      fetchMatchingVehicleRentalIds(searchTerm, importedApplicationIds),
+    const [applicationIds, vehicleRentalRows] = await Promise.all([
+      fetchMatchingApplicationIds(searchTerm),
+      fetchMatchingVehicleRentalRows(searchTerm),
     ]);
 
-    const matchingRentalIds = new Set<string>();
+    const rentalRowsById = new Map<string, Record<string, any>>();
     if (applicationIds.size > 0) {
+      const selectColumns = await getRentalSelectColumns({
+        includeStripeFields: true,
+      });
       const { data, error } = await applyRentalImportFilters(
-        db.from("rentals").select("id, application_id, created_at"),
-        importedApplicationIds,
+        db.from("rentals").select(withRentalApplicationRelation(selectColumns)),
       ).in("application_id", [...applicationIds]);
 
       if (error) {
@@ -318,16 +367,27 @@ export const loadAdminRentalDataset = async ({
       }
 
       for (const rental of (data || []) as Array<Record<string, any>>) {
-        matchingRentalIds.add(String(rental.id || "").trim());
+        const rentalId = String(rental.id || "").trim();
+        if (rentalId) {
+          rentalRowsById.set(rentalId, rental);
+        }
       }
     }
 
-    for (const rentalId of vehicleRentalIds as Set<string>) {
-      matchingRentalIds.add(rentalId);
+    for (const rental of vehicleRentalRows) {
+      const rentalId = String(rental.id || "").trim();
+      if (rentalId) {
+        rentalRowsById.set(rentalId, rental);
+      }
     }
 
-    const matchedRentalRows = await loadRentalRowsByIds(matchingRentalIds);
-    const formattedRentals = await formatRentalRows(matchedRentalRows);
+    const matchedRentalRows = [...rentalRowsById.values()].sort((left, right) => {
+      const leftCreated = new Date(String(left.created_at || 0)).getTime();
+      const rightCreated = new Date(String(right.created_at || 0)).getTime();
+      return rightCreated - leftCreated;
+    });
+    const { applicationsById, items: formattedRentals } =
+      await formatRentalRowsWithApplications(matchedRentalRows);
     const totalItems = formattedRentals.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const currentPage = Math.min(page, totalPages);
@@ -341,12 +401,14 @@ export const loadAdminRentalDataset = async ({
       total: totalItems,
       totalItems,
       totalPages,
+      applicationsById,
     };
   }
 
   const countQuery = applyRentalImportFilters(
-    db.from("rentals").select("id", { count: "exact", head: true }),
-    importedApplicationIds,
+    db
+      .from("rentals")
+      .select(`id, ${RENTAL_APPLICATION_RELATION_SELECT}`, { count: "exact", head: true }),
   );
   const { count, error: countError } = await countQuery;
   if (countError) {
@@ -362,8 +424,7 @@ export const loadAdminRentalDataset = async ({
     includeStripeFields: true,
   });
   const { data, error } = await applyRentalImportFilters(
-    db.from("rentals").select(selectColumns),
-    importedApplicationIds,
+    db.from("rentals").select(withRentalApplicationRelation(selectColumns)),
   )
     .order(orderColumn, { ascending: false })
     .range(rangeStart, rangeEnd);
@@ -372,7 +433,8 @@ export const loadAdminRentalDataset = async ({
     throw error;
   }
 
-  const formattedRentals = await formatRentalRows((data || []) as Array<Record<string, any>>);
+  const { applicationsById, items: formattedRentals } =
+    await formatRentalRowsWithApplications((data || []) as Array<Record<string, any>>);
 
   return {
     items: formattedRentals,
@@ -381,30 +443,85 @@ export const loadAdminRentalDataset = async ({
     total: totalItems,
     totalItems,
     totalPages,
+    applicationsById,
   };
 };
 
+export const loadAdminRentalDataset = async (params: {
+  page: number;
+  pageSize: number;
+  search: string;
+}) => {
+  const { applicationsById: _applicationsById, ...dataset } =
+    await loadAdminRentalDatasetWithApplications(params);
+  return dataset;
+};
+
+const quotePostgrestValue = (value: string) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+
+const buildCustomerLookupExpression = (applications: Array<Record<string, any>>) => {
+  const emails = new Set<string>();
+  const phones = new Set<string>();
+  const names = new Set<string>();
+
+  for (const application of applications) {
+    const email = String(application.email || "").trim();
+    const phone = String(application.phone || "").trim();
+    const name = String(application.name || "").trim();
+
+    if (email) {
+      emails.add(email);
+    }
+    if (phone) {
+      phones.add(phone);
+    }
+    if (name) {
+      names.add(name);
+    }
+  }
+
+  return [
+    emails.size > 0
+      ? `email.in.(${[...emails].map(quotePostgrestValue).join(",")})`
+      : null,
+    phones.size > 0
+      ? `phone.in.(${[...phones].map(quotePostgrestValue).join(",")})`
+      : null,
+    names.size > 0
+      ? `full_name.in.(${[...names].map(quotePostgrestValue).join(",")})`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(",");
+};
+
+const loadReferencedCustomers = async (applications: Array<Record<string, any>>) => {
+  const expression = buildCustomerLookupExpression(applications);
+  if (!expression) {
+    return [];
+  }
+
+  const { data, error } = await db
+    .from("customers")
+    .select("id, full_name, phone, email, date_of_birth, street, city, state, postcode")
+    .or(expression)
+    .limit(150);
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []) as Array<Record<string, any>>;
+};
+
 export const loadRentalPrefillOptions = async (search: string) => {
-  const dataset = await loadAdminRentalDataset({
+  const dataset = await loadAdminRentalDatasetWithApplications({
     page: 1,
     pageSize: 50,
     search,
   });
-  const applicationIds = [
-    ...new Set(dataset.items.map((rental) => String(rental.application_id || "").trim()).filter(Boolean)),
-  ];
-  const [applicationsById, customersResult] = await Promise.all([
-    loadApplicationRowsByIds(applicationIds),
-    db
-      .from("customers")
-      .select("id, full_name, phone, email, date_of_birth, street, city, state, postcode"),
-  ]);
-
-  if (customersResult.error) {
-    throw customersResult.error;
-  }
-
-  const customerRows = (customersResult.data || []) as Array<Record<string, any>>;
+  const referencedApplications = [...dataset.applicationsById.values()];
+  const customerRows = await loadReferencedCustomers(referencedApplications);
   const customerForApplication = (application: Record<string, any> | undefined) => {
     if (!application) {
       return null;
@@ -414,19 +531,40 @@ export const loadRentalPrefillOptions = async (search: string) => {
     const phone = normalizeExact(application.phone);
     const name = normalizeExact(application.name);
 
+    const emailMatch = email
+      ? customerRows.find((customer) => normalizeExact(customer.email) === email)
+      : null;
+    if (emailMatch) {
+      return emailMatch;
+    }
+
+    const phoneMatch = phone
+      ? customerRows.find((customer) => normalizeExact(customer.phone) === phone)
+      : null;
+    if (phoneMatch) {
+      return phoneMatch;
+    }
+
+    if (!name) {
+      return null;
+    }
+
     return (
-      customerRows.find(
-        (customer) =>
-          (email && normalizeExact(customer.email) === email) ||
-          (phone && normalizeExact(customer.phone) === phone) ||
-          (name && normalizeExact(customer.full_name) === name),
-      ) || null
+      customerRows.find((customer) => {
+        const customerEmail = normalizeExact(customer.email);
+        const customerPhone = normalizeExact(customer.phone);
+        return (
+          normalizeExact(customer.full_name) === name &&
+          (!email || !customerEmail || customerEmail === email) &&
+          (!phone || !customerPhone || customerPhone === phone)
+        );
+      }) || null
     );
   };
 
   return dataset.items.map((rental) => {
     const fullName = String(rental.applicant_name || "").trim();
-    const application = applicationsById.get(String(rental.application_id || ""));
+    const application = dataset.applicationsById.get(String(rental.application_id || ""));
     const customer = customerForApplication(application);
     const addressParts = parseAddressParts(
       String(customer?.street || "") || String(application?.address || ""),
