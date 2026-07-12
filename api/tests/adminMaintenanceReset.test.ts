@@ -71,8 +71,14 @@ vi.mock('../db/index.js', () => ({
         },
         then(onFulfilled: (value: { data: Array<Record<string, any>> | null; error: any }) => unknown) {
           if (state.missingTables.has(table)) {
+            const missingTableError = table === 'invoice_line_items'
+              ? {
+                  code: 'PGRST205',
+                  message: 'Could not find table public.invoice_line_items in the schema cache',
+                }
+              : { code: '42P01', message: `relation "${table}" does not exist` };
             return Promise.resolve(
-              onFulfilled({ data: null, error: { code: '42P01', message: `relation "${table}" does not exist` } }),
+              onFulfilled({ data: null, error: missingTableError }),
             );
           }
           const rows = (state as any)[table] || [];
@@ -261,5 +267,15 @@ describe('adminMaintenanceReset', () => {
         expect.objectContaining({ table: 'payments', skipped: true }),
       ]),
     );
+  });
+
+  it('skips an absent legacy invoice_line_items table while using manual_invoice_items', async () => {
+    mockState.missingTables = new Set(['invoice_line_items']);
+
+    const plan = await getImportedDataResetPlan();
+
+    expect(plan.skipped.invoiceLineItems).toBe(true);
+    expect(plan.counts.invoiceLineItems).toBe(0);
+    expect(plan.counts.manualInvoiceItems).toBe(1);
   });
 });

@@ -406,7 +406,6 @@ vi.mock("../schemaCompat.js", async () => {
         "license_number:licenseNumber",
         "experience",
         "status",
-        "source",
       ].join(", "),
     ),
   };
@@ -749,6 +748,7 @@ vi.mock("../db/index.js", () => {
       "license_expiry",
       "license_photo",
       "license_back_photo",
+      "source",
     ];
     return (
       invalidColumns.find(

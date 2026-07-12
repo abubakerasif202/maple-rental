@@ -127,6 +127,7 @@ const isMissingTableOrColumnError = (error: any) => {
   const code = String(error?.code || '').toLowerCase();
   return (
     code === '42p01' ||
+    code === 'pgrst205' ||
     code === '42703' ||
     message.includes('does not exist') ||
     (message.includes('column') && message.includes('does not exist')) ||

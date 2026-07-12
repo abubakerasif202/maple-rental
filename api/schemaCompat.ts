@@ -703,7 +703,6 @@ export const getApplicationImportedDataSelectColumns = async () => {
         'license_number:licenseNumber',
         'experience',
         'status',
-        'source',
       ].join(', ')
     : [
         'id',
@@ -713,7 +712,6 @@ export const getApplicationImportedDataSelectColumns = async () => {
         'license_number',
         'experience',
         'status',
-        'source',
       ].join(', ');
 };
 
