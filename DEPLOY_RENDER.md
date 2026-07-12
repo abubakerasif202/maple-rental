@@ -147,6 +147,25 @@ A healthy response should look like:
 
 If `paymentActivationMode` is `restricted`, the service is up but the selected direct Postgres connection is missing or not session-capable.
 
+## Authenticated admin smoke test
+
+After a deployment, run the read-only admin smoke test from PowerShell. It logs in through `/api/auth/login`, keeps the HTTP-only session cookie in a temporary cookie jar, checks the admin read endpoints, attempts trusted-origin logout, and removes all temporary files.
+
+```powershell
+$securePassword = Read-Host "Password" -AsSecureString
+$env:MAPLE_ADMIN_EMAIL = "admin@example.com"
+$env:MAPLE_ADMIN_PASSWORD = [System.Net.NetworkCredential]::new('', $securePassword).Password
+
+try {
+  npm run smoke:production:admin
+} finally {
+  Remove-Item Env:MAPLE_ADMIN_EMAIL -ErrorAction SilentlyContinue
+  Remove-Item Env:MAPLE_ADMIN_PASSWORD -ErrorAction SilentlyContinue
+}
+```
+
+Use `MAPLE_PRODUCTION_URL` only when verifying a non-default deployment URL. The script never prints credentials, cookies, tokens, private response bodies, or customer records, and exits non-zero on authentication, HTTP, JSON, or response-shape failures.
+
 ## Local production verification
 
 Use this to simulate the Render runtime locally:
