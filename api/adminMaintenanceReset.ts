@@ -12,6 +12,7 @@ import {
 } from './importedDataFilters.js';
 
 export const IMPORTED_DATA_RESET_CONFIRMATION_PHRASE = 'RESET IMPORTED DATA AND FINANCIALS';
+export const IMPORTED_DATA_RESET_FEATURE_FLAG = 'MAPLE_ENABLE_IMPORTED_DATA_RESET';
 
 type MaintenanceResetStepErrorInput = {
   step: string;
@@ -31,6 +32,16 @@ export class MaintenanceResetStepError extends Error {
     this.step = input.step;
     this.table = input.table;
     this.code = input.code || null;
+  }
+}
+
+export class MaintenanceResetDisabledError extends Error {
+  code: string;
+
+  constructor(message = 'Imported data reset is disabled.') {
+    super(message);
+    this.name = 'MaintenanceResetDisabledError';
+    this.code = 'MAINTENANCE_RESET_DISABLED';
   }
 }
 
@@ -103,6 +114,14 @@ type ResetPlan = ResetSummary & {
   skipped: Record<keyof ResetRows, boolean>;
 };
 
+const OPTIONAL_RESET_TABLES = new Set([
+  'invoice_items',
+  'invoice_line_items',
+  'payments',
+  'financial_transactions',
+  'maintenance_reset_audit_events',
+]);
+
 const emptyCounts = (): ResetCounts => ({
   applications: 0,
   bookings: 0,
@@ -135,7 +154,61 @@ const isMissingTableOrColumnError = (error: any) => {
   );
 };
 
+export const isImportedDataResetEnabled = () =>
+  String(process.env[IMPORTED_DATA_RESET_FEATURE_FLAG] || '').trim().toLowerCase() === 'true';
+
+const toSafeErrorCode = (error: any) => String(error?.code || error?.name || null);
+
+const wrapMaintenanceStepError = (
+  error: unknown,
+  {
+    message,
+    step,
+    table,
+  }: {
+    step: string;
+    table?: string;
+    message: string;
+  },
+) => {
+  if (error instanceof MaintenanceResetStepError) {
+    return error;
+  }
+
+  return new MaintenanceResetStepError({
+    step,
+    table,
+    message,
+    code: toSafeErrorCode(error),
+  });
+};
+
 const quoteIdentifier = (identifier: string) => `"${identifier.replace(/"/g, '""')}"`;
+
+const getExistingPublicTables = async (
+  tableNames: string[],
+  client?: PoolClient,
+) => {
+  if (!client || tableNames.length === 0) {
+    return new Set<string>(tableNames);
+  }
+
+  const result = await client.query(
+    `
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ANY($1::text[])
+    `,
+    [tableNames],
+  );
+
+  return new Set<string>(
+    result.rows
+      .map((row: Record<string, any>) => String(row.table_name || '').trim())
+      .filter(Boolean),
+  );
+};
 
 const fetchRows = async (table: string, client?: PoolClient) => {
   if (client) {
@@ -148,7 +221,19 @@ const fetchRows = async (table: string, client?: PoolClient) => {
   return (data || []) as Array<Record<string, any>>;
 };
 
-const fetchRowsSafe = async (table: string, client?: PoolClient): Promise<TableQueryResult> => {
+const fetchRowsSafe = async (
+  table: string,
+  client?: PoolClient,
+  existingTables?: Set<string>,
+): Promise<TableQueryResult> => {
+  if (client && OPTIONAL_RESET_TABLES.has(table) && existingTables && !existingTables.has(table)) {
+    return {
+      rows: [],
+      skipped: true,
+      reason: 'table_not_found',
+    };
+  }
+
   try {
     const rows = await fetchRows(table, client);
     return { rows, skipped: false };
@@ -275,37 +360,46 @@ export const buildResetSummary = (counts: ResetCounts): ResetSummary => ({
 });
 
 export const getImportedDataResetPlan = async (client?: PoolClient): Promise<ResetPlan> => {
-  const [
-    applicationsResult,
-    rentalsResult,
-    customersResult,
-    invoicesResult,
-    manualInvoicesResult,
-    manualInvoiceItemsResult,
-    invoiceItemsResult,
-    invoiceLineItemsResult,
-    paymentsResult,
-    financialTransactionsResult,
-    bookingsResult,
-    leaseAgreementsResult,
-    tollNoticesResult,
-    tollNoticeAuditEventsResult,
-  ] = await Promise.all([
-    fetchRowsSafe('applications', client),
-    fetchRowsSafe('rentals', client),
-    fetchRowsSafe('customers', client),
-    fetchRowsSafe('invoices', client),
-    fetchRowsSafe('manual_invoices', client),
-    fetchRowsSafe('manual_invoice_items', client),
-    fetchRowsSafe('invoice_items', client),
-    fetchRowsSafe('invoice_line_items', client),
-    fetchRowsSafe('payments', client),
-    fetchRowsSafe('financial_transactions', client),
-    fetchRowsSafe('bookings', client),
-    fetchRowsSafe('lease_agreements', client),
-    fetchRowsSafe('toll_transfer_notices', client),
-    fetchRowsSafe('toll_transfer_notice_audit_events', client),
-  ]);
+  let existingOptionalTables: Set<string> | undefined;
+
+  try {
+    existingOptionalTables = await getExistingPublicTables(
+      [...OPTIONAL_RESET_TABLES],
+      client,
+    );
+  } catch (error) {
+    throw wrapMaintenanceStepError(error, {
+      step: 'preflight_optional_tables',
+      message: 'Reset failed while checking optional maintenance tables.',
+    });
+  }
+
+  const loadTable = async (table: string) => {
+    try {
+      return await fetchRowsSafe(table, client, existingOptionalTables);
+    } catch (error) {
+      throw wrapMaintenanceStepError(error, {
+        step: `load_${table}`,
+        table,
+        message: `Reset failed while loading ${table.replace(/_/g, ' ')} rows.`,
+      });
+    }
+  };
+
+  const applicationsResult = await loadTable('applications');
+  const rentalsResult = await loadTable('rentals');
+  const customersResult = await loadTable('customers');
+  const invoicesResult = await loadTable('invoices');
+  const manualInvoicesResult = await loadTable('manual_invoices');
+  const manualInvoiceItemsResult = await loadTable('manual_invoice_items');
+  const invoiceItemsResult = await loadTable('invoice_items');
+  const invoiceLineItemsResult = await loadTable('invoice_line_items');
+  const paymentsResult = await loadTable('payments');
+  const financialTransactionsResult = await loadTable('financial_transactions');
+  const bookingsResult = await loadTable('bookings');
+  const leaseAgreementsResult = await loadTable('lease_agreements');
+  const tollNoticesResult = await loadTable('toll_transfer_notices');
+  const tollNoticeAuditEventsResult = await loadTable('toll_transfer_notice_audit_events');
 
   const applicationRows = applicationsResult.rows.filter(isImportedApplicationRecord);
   const applicationIds = getRecordIdSet(applicationRows);
@@ -383,7 +477,16 @@ export const getImportedDataResetPlan = async (client?: PoolClient): Promise<Res
     manualInvoiceItems: manualInvoiceItemRows,
   };
 
-  const stripeWebhookEvents = await countRowsSafe('stripe_webhook_events', client);
+  let stripeWebhookEvents = 0;
+  try {
+    stripeWebhookEvents = await countRowsSafe('stripe_webhook_events', client);
+  } catch (error) {
+    throw wrapMaintenanceStepError(error, {
+      step: 'count_stripe_webhook_events',
+      table: 'stripe_webhook_events',
+      message: 'Reset failed while counting stripe webhook event rows.',
+    });
+  }
 
   return {
     ...buildResetSummary(buildCounts(rows, stripeWebhookEvents)),
@@ -498,6 +601,14 @@ const insertMaintenanceAuditEvent = async ({
 
   try {
     if (client) {
+      const existingTables = await getExistingPublicTables(
+        ['maintenance_reset_audit_events'],
+        client,
+      );
+      if (!existingTables.has('maintenance_reset_audit_events')) {
+        return;
+      }
+
       await client.query(
         `
           INSERT INTO public.maintenance_reset_audit_events (action, actor, metadata)
@@ -644,6 +755,12 @@ export const resetImportedDataAndFinancials = async (options: {
   adminEmail?: string | null;
   reason?: string | null;
 } = {}) => {
+  if (!isImportedDataResetEnabled()) {
+    throw new MaintenanceResetDisabledError(
+      `Destructive imported data reset is disabled unless ${IMPORTED_DATA_RESET_FEATURE_FLAG}=true.`,
+    );
+  }
+
   const isTestRuntime = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
 
   if (hasDirectDatabaseConnection() && !isTestRuntime) {

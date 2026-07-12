@@ -1689,6 +1689,7 @@ const expectNoDuplicateRentalRehydration = () => {
 
 beforeEach(() => {
   mockState.queryLog = [];
+  delete process.env.MAPLE_ENABLE_IMPORTED_DATA_RESET;
   delete process.env.RESEND_API_KEY;
   delete process.env.LEASE_OWNER_NAME;
   delete process.env.LEASE_OWNER_ADDRESS;
@@ -4295,13 +4296,55 @@ describe("Operational history API", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.dryRun).toBe(true);
+    expect(res.body.resetEnabled).toBe(false);
     expect(res.body.counts.applications).toBeGreaterThan(0);
     expect(res.body.counts.rentals).toBeGreaterThan(0);
     expect(mockState.applications).toEqual(beforeApplications);
     expect(mockState.rentals).toEqual(beforeRentals);
   });
 
+  it("GET /api/admin/maintenance/imported-data-reset/export still works while reset is disabled", async () => {
+    const res = await request(app)
+      .get("/api/admin/maintenance/imported-data-reset/export")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.resetEnabled).toBe(false);
+    expect(res.body.confirm).toBe("RESET IMPORTED DATA AND FINANCIALS");
+    expect(res.body.rows).toBeTruthy();
+  });
+
+  it("POST /api/admin/maintenance/imported-data-reset rejects destructive reset when the feature flag is absent", async () => {
+    const res = await request(app)
+      .post("/api/admin/maintenance/imported-data-reset")
+      .set("Authorization", "Bearer fake-token")
+      .send({ confirm: "RESET IMPORTED DATA AND FINANCIALS" });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({
+      code: "MAINTENANCE_RESET_DISABLED",
+      resetEnabled: false,
+    });
+  });
+
+  it("POST /api/admin/maintenance/imported-data-reset rejects destructive reset when the feature flag is false", async () => {
+    process.env.MAPLE_ENABLE_IMPORTED_DATA_RESET = "false";
+
+    const res = await request(app)
+      .post("/api/admin/maintenance/imported-data-reset")
+      .set("Authorization", "Bearer fake-token")
+      .send({ confirm: "RESET IMPORTED DATA AND FINANCIALS" });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({
+      code: "MAINTENANCE_RESET_DISABLED",
+      resetEnabled: false,
+    });
+  });
+
   it("POST /api/admin/maintenance/imported-data-reset requires the exact confirmation phrase", async () => {
+    process.env.MAPLE_ENABLE_IMPORTED_DATA_RESET = "true";
+
     const res = await request(app)
       .post("/api/admin/maintenance/imported-data-reset")
       .set("Authorization", "Bearer fake-token")
@@ -4311,6 +4354,8 @@ describe("Operational history API", () => {
   });
 
   it("POST /api/admin/maintenance/imported-data-reset requires a signed dry-run token", async () => {
+    process.env.MAPLE_ENABLE_IMPORTED_DATA_RESET = "true";
+
     const res = await request(app)
       .post("/api/admin/maintenance/imported-data-reset")
       .set("Authorization", "Bearer fake-token")
@@ -4373,6 +4418,8 @@ describe("Operational history API", () => {
   });
 
   it("POST /api/admin/maintenance/reset-imported-data deletes imported rows and preserves live rentals", async () => {
+    process.env.MAPLE_ENABLE_IMPORTED_DATA_RESET = "true";
+
     mockState.applications[0].legacy_id = 101;
     mockState.applications = [
       {
@@ -4451,6 +4498,8 @@ describe("Operational history API", () => {
   });
 
   it("POST /api/admin/maintenance/reset-imported-data returns a safe invoice failure payload", async () => {
+    process.env.MAPLE_ENABLE_IMPORTED_DATA_RESET = "true";
+
     mockState.applications[0].legacy_id = 101;
     mockState.failOnDeleteTable = "invoices";
 

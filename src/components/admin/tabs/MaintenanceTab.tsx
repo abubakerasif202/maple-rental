@@ -64,15 +64,20 @@ export default function MaintenanceTab() {
   });
 
   const isConfirmed = confirmText === CONFIRMATION_PHRASE;
-  const canReset = Boolean(dryRunResult?.dryRun && isConfirmed && dryRunToken);
-
   const counts = useMemo(
     () => dryRunResult?.counts || dryRunResult?.deleted || null,
     [dryRunResult],
   );
   const resetFailure = axios.isAxiosError(resetMutation.error)
-    ? (resetMutation.error.response?.data as { step?: string; message?: string } | undefined)
+    ? (resetMutation.error.response?.data as {
+        code?: string;
+        step?: string;
+        message?: string;
+      } | undefined)
     : undefined;
+  const resetEnabled = dryRunResult?.resetEnabled === true;
+  const resetDisabled = dryRunResult?.resetEnabled === false || resetFailure?.code === 'MAINTENANCE_RESET_DISABLED';
+  const canReset = Boolean(resetEnabled && dryRunResult?.dryRun && isConfirmed && dryRunToken);
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -117,27 +122,40 @@ export default function MaintenanceTab() {
         </button>
       </div>
 
-      <div className="space-y-3">
-        <label className="block text-xs font-semibold uppercase tracking-widest text-brand-grey">
-          Confirmation phrase
-        </label>
-        <input
-          value={confirmText}
-          onChange={(event) => setConfirmText(event.target.value)}
-          className="min-h-11 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white outline-none focus:border-brand-gold"
-          placeholder={CONFIRMATION_PHRASE}
-        />
-      </div>
+      {resetEnabled ? (
+        <>
+          <div className="space-y-3">
+            <label className="block text-xs font-semibold uppercase tracking-widest text-brand-grey">
+              Confirmation phrase
+            </label>
+            <input
+              value={confirmText}
+              onChange={(event) => setConfirmText(event.target.value)}
+              className="min-h-11 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white outline-none focus:border-brand-gold"
+              placeholder={CONFIRMATION_PHRASE}
+            />
+          </div>
 
-      <button
-        type="button"
-        onClick={() => resetMutation.mutate()}
-        disabled={!canReset || resetMutation.isPending}
-        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto"
-      >
-        {resetMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-        Reset Imported Data
-      </button>
+          <button
+            type="button"
+            onClick={() => resetMutation.mutate()}
+            disabled={!canReset || resetMutation.isPending}
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto"
+          >
+            {resetMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Reset Imported Data
+          </button>
+        </>
+      ) : (
+        <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-4 text-sm text-amber-100">
+          Destructive imported-data reset is disabled by default. Dry Run and Export Backup remain available.
+          {resetDisabled && (
+            <div className="mt-2 text-amber-50">
+              Enable the explicit server-side feature flag only if the destructive reset is intentionally re-approved.
+            </div>
+          )}
+        </div>
+      )}
 
       {statusMessage && (
         <div className="flex items-start gap-3 rounded-lg border border-green-500/25 bg-green-500/10 p-4 text-sm text-green-100">

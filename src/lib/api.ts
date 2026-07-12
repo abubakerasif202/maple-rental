@@ -640,11 +640,15 @@ export const sendTollTransferNotice = async (
 };
 
 export interface ImportedDataResetResponse {
+  code?: string;
+  errorCode?: string | null;
   success: boolean;
   dryRun?: boolean;
   criteria?: Record<string, string>;
   counts?: Record<string, number>;
   deleted?: Record<string, number>;
+  resetEnabled?: boolean;
+  rollbackSucceeded?: boolean | null;
   preserved?: {
     adminUsers: true;
     stripeExternalRecords: true;

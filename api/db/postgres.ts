@@ -275,10 +275,26 @@ export const withPostgresTransaction = async <T>(
     await client.query('COMMIT');
     return result;
   } catch (error) {
+    let rollbackSucceeded: boolean | null = null;
+    let rollbackErrorCode: string | null = null;
+
     try {
       await client.query('ROLLBACK');
+      rollbackSucceeded = true;
     } catch (rollbackError) {
+      rollbackSucceeded = false;
+      rollbackErrorCode =
+        rollbackError && typeof rollbackError === 'object' && 'code' in rollbackError
+          ? String((rollbackError as { code?: unknown }).code || null)
+          : null;
       console.error('Failed to rollback PostgreSQL transaction:', rollbackError);
+    }
+
+    if (error && typeof error === 'object') {
+      Object.assign(error as Record<string, unknown>, {
+        rollbackSucceeded,
+        rollbackErrorCode,
+      });
     }
 
     throw error;
