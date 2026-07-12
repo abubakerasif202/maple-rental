@@ -1,4 +1,5 @@
 # Keep binary assets safe.
+* text=auto eol=lf
 *.jpeg binary
 *.jpg binary
 *.pdf binary
