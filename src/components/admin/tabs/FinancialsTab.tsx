@@ -9,6 +9,7 @@ import MetricCard from '../MetricCard';
 interface FinancialsTabProps {
   dateRange: DateRangeValue;
   isLoadingWeeklyFinancials: boolean;
+  weeklyFinancialsError?: string | null;
   weeklyFinancials?: WeeklyFinancials;
   onDateRangeChange: (value: DateRangeValue) => void;
   onRefresh: () => void;
@@ -22,9 +23,22 @@ const renderLoadingPanel = (message: string) => (
   </div>
 );
 
+const renderErrorPanel = (message: string) => (
+  <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-10 text-sm text-red-50">
+    <div className="flex items-start gap-4">
+      <AlertCircle className="mt-0.5 h-5 w-5 text-red-300" />
+      <div>
+        <h3 className="text-base font-bold text-white">Unable to load financials</h3>
+        <p className="mt-2 leading-relaxed text-red-100">{message}</p>
+      </div>
+    </div>
+  </div>
+);
+
 export default function FinancialsTab({
   dateRange,
   isLoadingWeeklyFinancials,
+  weeklyFinancialsError,
   weeklyFinancials,
   onDateRangeChange,
   onRefresh,
@@ -73,6 +87,8 @@ export default function FinancialsTab({
 
       {isLoadingWeeklyFinancials ? (
         renderLoadingPanel('Loading weekly financials...')
+      ) : weeklyFinancialsError ? (
+        renderErrorPanel(weeklyFinancialsError)
       ) : (
         <>
           <div className="grid grid-cols-1 gap-8 md:grid-cols-2 xl:grid-cols-4">
@@ -106,6 +122,12 @@ export default function FinancialsTab({
               value={formatCurrency(weeklyFinancials?.actual_payouts_weekly)}
             />
           </div>
+
+          {weeklyFinancials?.recent_payouts_truncated && (
+            <p className="text-xs uppercase tracking-widest text-brand-grey">
+              Showing the 10 most recent Stripe payouts for the selected period.
+            </p>
+          )}
 
           {!hasRevenue && (
             <EmptyState

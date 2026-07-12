@@ -530,6 +530,190 @@ export const getApplicationSelectColumns = async () => {
         cancelReasonSelect,
         'status',
         'created_at',
+    ].join(', ');
+};
+
+export const getApplicationListSelectColumns = async () => {
+  const {
+    coreMode,
+    applicationApprovedBondColumn,
+    applicationBondNotesColumn,
+    applicationBondPaymentMethodColumn,
+    applicationBondPaymentStatusColumn,
+    applicationApprovedVehicleColumn,
+    applicationApprovedWeeklyPriceColumn,
+    applicationPaymentLinkVersionColumn,
+    applicationPaymentLinkSentAtColumn,
+    applicationApprovedAtColumn,
+    applicationIntendedStartDateColumn,
+    applicationAgreementAcceptedAtColumn,
+    applicationAgreementSignatureColumn,
+    applicationAgreementTemplateVersionColumn,
+    applicationPaidAtColumn,
+    applicationPendingCheckoutSessionColumn,
+    applicationCancelledAtColumn,
+    applicationCancelReasonColumn,
+  } = await getSchemaCompat();
+
+  const approvedBondSelect =
+    applicationApprovedBondColumn === 'approved_bond'
+      ? 'approved_bond'
+      : `approved_bond:${applicationApprovedBondColumn}`;
+  const bondPaymentStatusSelect =
+    applicationBondPaymentStatusColumn === 'bond_payment_status'
+      ? 'bond_payment_status'
+      : `bond_payment_status:${applicationBondPaymentStatusColumn}`;
+  const bondPaymentMethodSelect =
+    applicationBondPaymentMethodColumn === 'bond_payment_method'
+      ? 'bond_payment_method'
+      : `bond_payment_method:${applicationBondPaymentMethodColumn}`;
+  const bondNotesSelect =
+    applicationBondNotesColumn === 'bond_notes'
+      ? 'bond_notes'
+      : `bond_notes:${applicationBondNotesColumn}`;
+  const approvedVehicleSelect =
+    applicationApprovedVehicleColumn === 'approved_vehicle'
+      ? 'approved_vehicle'
+      : `approved_vehicle:${applicationApprovedVehicleColumn}`;
+  const approvedWeeklyPriceSelect =
+    applicationApprovedWeeklyPriceColumn === 'approved_weekly_price'
+      ? 'approved_weekly_price'
+      : `approved_weekly_price:${applicationApprovedWeeklyPriceColumn}`;
+  const paymentLinkVersionSelect =
+    applicationPaymentLinkVersionColumn === 'payment_link_version'
+      ? 'payment_link_version'
+      : `payment_link_version:${applicationPaymentLinkVersionColumn}`;
+  const paymentLinkSentAtSelect =
+    applicationPaymentLinkSentAtColumn === 'payment_link_sent_at'
+      ? 'payment_link_sent_at'
+      : `payment_link_sent_at:${applicationPaymentLinkSentAtColumn}`;
+  const approvedAtSelect =
+    applicationApprovedAtColumn === 'approved_at'
+      ? 'approved_at'
+      : `approved_at:${applicationApprovedAtColumn}`;
+  const intendedStartDateSelect =
+    applicationIntendedStartDateColumn === 'intended_start_date'
+      ? 'intended_start_date'
+      : `intended_start_date:${applicationIntendedStartDateColumn}`;
+  const agreementAcceptedAtSelect =
+    applicationAgreementAcceptedAtColumn === 'agreement_accepted_at'
+      ? 'agreement_accepted_at'
+      : `agreement_accepted_at:${applicationAgreementAcceptedAtColumn}`;
+  const agreementSignatureSelect =
+    applicationAgreementSignatureColumn === 'agreement_signature'
+      ? 'agreement_signature'
+      : `agreement_signature:${applicationAgreementSignatureColumn}`;
+  const agreementTemplateVersionSelect =
+    applicationAgreementTemplateVersionColumn === 'agreement_template_version'
+      ? 'agreement_template_version'
+      : `agreement_template_version:${applicationAgreementTemplateVersionColumn}`;
+  const paidAtSelect =
+    applicationPaidAtColumn === 'paid_at'
+      ? 'paid_at'
+      : `paid_at:${applicationPaidAtColumn}`;
+  const pendingCheckoutSessionSelect =
+    applicationPendingCheckoutSessionColumn === 'pending_checkout_session_id'
+      ? 'pending_checkout_session_id'
+      : `pending_checkout_session_id:${applicationPendingCheckoutSessionColumn}`;
+  const cancelledAtSelect =
+    applicationCancelledAtColumn === 'cancelled_at'
+      ? 'cancelled_at'
+      : `cancelled_at:${applicationCancelledAtColumn}`;
+  const cancelReasonSelect =
+    applicationCancelReasonColumn === 'cancel_reason'
+      ? 'cancel_reason'
+      : `cancel_reason:${applicationCancelReasonColumn}`;
+
+  return coreMode === 'camel'
+    ? [
+        'id',
+        'name',
+        'phone',
+        'email',
+        'license_number:licenseNumber',
+        'license_expiry:licenseExpiry',
+        'uber_status:uberStatus',
+        'experience',
+        'address',
+        'weekly_budget:weeklyBudget',
+        intendedStartDateSelect === 'intended_start_date'
+          ? 'intended_start_date'
+          : `intended_start_date:${applicationIntendedStartDateColumn}`,
+        approvedBondSelect,
+        bondPaymentStatusSelect,
+        bondPaymentMethodSelect,
+        bondNotesSelect,
+        approvedVehicleSelect,
+        approvedWeeklyPriceSelect,
+        paymentLinkVersionSelect,
+        paymentLinkSentAtSelect,
+        approvedAtSelect,
+        agreementAcceptedAtSelect,
+        agreementSignatureSelect,
+        agreementTemplateVersionSelect,
+        paidAtSelect,
+        pendingCheckoutSessionSelect,
+        cancelledAtSelect,
+        cancelReasonSelect,
+        'status',
+        'created_at:createdAt',
+      ].join(', ')
+    : [
+        'id',
+        'name',
+        'phone',
+        'email',
+        'license_number',
+        'license_expiry',
+        'uber_status',
+        'experience',
+        'address',
+        'weekly_budget',
+        intendedStartDateSelect,
+        approvedBondSelect,
+        bondPaymentStatusSelect,
+        bondPaymentMethodSelect,
+        bondNotesSelect,
+        approvedVehicleSelect,
+        approvedWeeklyPriceSelect,
+        paymentLinkVersionSelect,
+        paymentLinkSentAtSelect,
+        approvedAtSelect,
+        agreementAcceptedAtSelect,
+        agreementSignatureSelect,
+        agreementTemplateVersionSelect,
+        paidAtSelect,
+        pendingCheckoutSessionSelect,
+        cancelledAtSelect,
+        cancelReasonSelect,
+        'status',
+        'created_at',
+      ].join(', ');
+};
+
+export const getApplicationImportedDataSelectColumns = async () => {
+  const { coreMode } = await getSchemaCompat();
+
+  return coreMode === 'camel'
+    ? [
+        'id',
+        'legacy_id:legacyId',
+        'email',
+        'phone',
+        'license_number:licenseNumber',
+        'experience',
+        'status',
+        'source',
+      ].join(', ')
+    : [
+        'id',
+        'legacy_id',
+        'email',
+        'phone',
+        'license_number',
+        'experience',
+        'status',
+        'source',
       ].join(', ');
 };
 

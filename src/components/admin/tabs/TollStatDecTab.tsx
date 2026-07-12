@@ -350,6 +350,7 @@ OriginalNoticePreview.displayName = 'OriginalNoticePreview';
 export default function TollStatDecTab({ initialSearch = '' }: TollStatDecTabProps) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
   const [form, setForm] = useState<TollTransferForm>(createEmptyForm);
   const [errors, setErrors] = useState<Partial<Record<keyof TollTransferForm, string>>>({});
   const [lastGeneratedId, setLastGeneratedId] = useState<number | null>(null);
@@ -358,11 +359,20 @@ export default function TollStatDecTab({ initialSearch = '' }: TollStatDecTabPro
 
   useEffect(() => {
     setSearch(initialSearch);
+    setDebouncedSearch(initialSearch.trim());
   }, [initialSearch]);
 
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [search]);
+
   const rentalOptionsQuery = useQuery({
-    queryKey: ['toll-notice-rental-options', search],
-    queryFn: () => api.fetchTollNoticeRentalOptions(search),
+    queryKey: ['toll-notice-rental-options', debouncedSearch],
+    queryFn: () => api.fetchTollNoticeRentalOptions(debouncedSearch),
     staleTime: 30_000,
   });
 

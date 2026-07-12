@@ -1,8 +1,12 @@
 import express from 'express';
+import type Stripe from 'stripe';
 import { db } from '../db/index.js';
 import { authenticateAdmin } from '../middleware/auth.js';
 import { LEASE_SETTINGS } from '../constants.js';
-import { getRentalSelectColumns } from '../schemaCompat.js';
+import {
+  getApplicationImportedDataSelectColumns,
+  getRentalSelectColumns,
+} from '../schemaCompat.js';
 import { getOptionalStripeClient } from '../stripeClient.js';
 import {
   filterRealApplications,
@@ -11,6 +15,8 @@ import {
 } from '../importedDataFilters.js';
 
 const router = express.Router();
+const STRIPE_PAYOUTS_PAGE_SIZE = 100;
+const RECENT_PAYOUTS_LIMIT = 10;
 
 const parseDateOnlyToStripeTimestamp = (value: unknown, endOfDay = false) => {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -32,6 +38,35 @@ const parseDateOnlyToStripeTimestamp = (value: unknown, endOfDay = false) => {
   }
 
   return Math.floor(date.getTime() / 1000);
+};
+
+const fetchAllStripePayouts = async (
+  stripe: Stripe,
+  created: { gte: number; lte?: number }
+) => {
+  const payouts: Stripe.Payout[] = [];
+  let startingAfter: string | undefined;
+
+  while (true) {
+    const page = await stripe.payouts.list({
+      created,
+      limit: STRIPE_PAYOUTS_PAGE_SIZE,
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    });
+
+    payouts.push(...page.data);
+
+    if (!page.has_more || page.data.length === 0) {
+      break;
+    }
+
+    startingAfter = page.data[page.data.length - 1]?.id;
+    if (!startingAfter) {
+      break;
+    }
+  }
+
+  return payouts;
 };
 
 router.get('/weekly', authenticateAdmin, async (req, res) => {
@@ -85,13 +120,11 @@ router.get('/weekly', authenticateAdmin, async (req, res) => {
       created.lte = requestedEnd;
     }
 
-    const payouts = await stripe.payouts.list({
-      created,
-      limit: 10,
-    });
+    const payouts = await fetchAllStripePayouts(stripe, created);
+    const recentPayouts = payouts.slice(0, RECENT_PAYOUTS_LIMIT);
 
-    const actual_payouts_weekly = payouts.data
-      .filter(p => p.status === 'paid' || p.status === 'in_transit')
+    const actual_payouts_weekly = payouts
+      .filter((payout) => payout.status === 'paid' || payout.status === 'in_transit')
       .reduce((sum, p) => sum + (p.amount / 100), 0);
 
     res.json({
@@ -99,12 +132,13 @@ router.get('/weekly', authenticateAdmin, async (req, res) => {
       projected_net_weekly,
       estimated_platform_fees,
       actual_payouts_weekly,
-      recent_payouts: payouts.data.map(p => ({
+      recent_payouts: recentPayouts.map((p) => ({
         id: p.id,
         amount: p.amount / 100,
         arrival_date: new Date(p.arrival_date * 1000).toISOString().slice(0, 10),
         status: p.status,
       })),
+      recent_payouts_truncated: payouts.length > recentPayouts.length,
     });
   } catch (err) {
     console.error('Financials fetch error:', err);
@@ -115,8 +149,10 @@ router.get('/weekly', authenticateAdmin, async (req, res) => {
 router.get('/stats', authenticateAdmin, async (_req, res) => {
   try {
     const rentalSelectColumns = await getRentalSelectColumns();
+    const importedApplicationSelectColumns =
+      await getApplicationImportedDataSelectColumns();
     const [applications, incomeRows] = await Promise.all([
-      db.from('applications').select('*'),
+      db.from('applications').select(importedApplicationSelectColumns),
       db.from('rentals').select(rentalSelectColumns).eq('status', 'Active'),
     ]);
 

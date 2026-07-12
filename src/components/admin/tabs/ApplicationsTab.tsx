@@ -1,26 +1,72 @@
 import React, { useMemo } from 'react';
 import { Badge, Button, Input } from '@fluentui/react-components';
 import { motion } from 'motion/react';
-import { Download, FileText, Search, Users } from 'lucide-react';
+import { Download, FileText, Loader2, Search, Users } from 'lucide-react';
 import { Application } from '../../../types';
 import DataTable, { type DataTableColumn } from '../DataTable';
 
 interface ApplicationsTabProps {
   applicationSearch: string;
+  applications: Application[];
+  applicationsError: string | null;
+  applicationsPage: number;
+  applicationsPageSize: number;
+  applicationsTotalItems: number;
+  applicationsTotalPages: number;
+  clearApplicationStatuses: () => void;
+  isFetchingApplications: boolean;
+  isLoadingApplications: boolean;
+  onApplicationPageChange: (page: number) => void;
+  onApplicationPageSizeChange: (pageSize: number) => void;
   setApplicationSearch: (val: string) => void;
-  filteredApplications: Application[];
   setSelectedApplication: (app: Application) => void;
+  statusFilters: string[];
+  toggleApplicationStatus: (status: string) => void;
 }
+
+const APPLICATION_STATUS_OPTIONS = [
+  'Pending',
+  'Payment Review',
+  'Approved',
+  'Paid',
+  'Rejected',
+  'Cancelled',
+];
+
+const renderLoadingPanel = (message: string) => (
+  <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-brand-grey">
+    <Loader2 className="h-5 w-5 animate-spin text-brand-gold" />
+    <span>{message}</span>
+  </div>
+);
+
+const renderErrorPanel = (message: string) => (
+  <div className="rounded-2xl border border-red-400/30 bg-red-500/10 p-5 text-sm text-red-100">
+    {message}
+  </div>
+);
 
 export default function ApplicationsTab({
   applicationSearch,
+  applications,
+  applicationsError,
+  applicationsPage,
+  applicationsPageSize,
+  applicationsTotalItems,
+  applicationsTotalPages,
+  clearApplicationStatuses,
+  isFetchingApplications,
+  isLoadingApplications,
+  onApplicationPageChange,
+  onApplicationPageSizeChange,
   setApplicationSearch,
-  filteredApplications,
   setSelectedApplication,
+  statusFilters,
+  toggleApplicationStatus,
 }: ApplicationsTabProps) {
-  const exportApplications = (applications: Application[]) => {
+  const exportApplications = (rows: Application[]) => {
     const headers = ['Driver', 'Email', 'Phone', 'Status', 'Experience', 'Date'];
-    const rows = applications.map((app) => [
+    const csvRows = rows.map((app) => [
       app.name,
       app.email,
       app.phone,
@@ -28,9 +74,9 @@ export default function ApplicationsTab({
       app.experience,
       new Date(app.created_at).toLocaleDateString(),
     ]);
-    const csv = [headers, ...rows]
+    const csv = [headers, ...csvRows]
       .map((row) =>
-        row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')
+        row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','),
       )
       .join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -138,8 +184,20 @@ export default function ApplicationsTab({
         ),
       },
     ],
-    [setSelectedApplication]
+    [setSelectedApplication],
   );
+
+  const hasActiveStatusFilter = statusFilters.length > 0;
+  const emptyTitle = applicationSearch
+    ? 'No matching applications'
+    : hasActiveStatusFilter
+      ? 'No applications for the selected statuses'
+      : 'No real applications yet';
+  const emptyDescription = applicationSearch
+    ? 'No driver applications match the current search and status filters.'
+    : hasActiveStatusFilter
+      ? 'No driver applications match the selected status filters.'
+      : 'New driver applications will appear here as soon as renters submit the application form.';
 
   return (
     <motion.div
@@ -147,7 +205,7 @@ export default function ApplicationsTab({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="space-y-12"
+      className="space-y-8"
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
@@ -162,7 +220,7 @@ export default function ApplicationsTab({
           <div className="w-full md:w-auto">
             <Input
               appearance="filled-darker"
-              contentBefore={<Search className="w-4 h-4 text-brand-grey" />}
+              contentBefore={<Search className="h-4 w-4 text-brand-grey" />}
               value={applicationSearch}
               onChange={(event) => setApplicationSearch(event.target.value)}
               placeholder="Search drivers..."
@@ -172,43 +230,77 @@ export default function ApplicationsTab({
         </div>
       </div>
 
-      <DataTable
-        rows={filteredApplications}
-        columns={columns}
-        getRowId={(app) => app.id}
-        minWidth="1040px"
-        filters={[
-          {
-            id: 'status',
-            label: 'Status',
-            getValue: (app) => app.status,
-            options: ['Pending', 'Payment Review', 'Approved', 'Paid', 'Rejected', 'Cancelled'].map(
-              (status) => ({ label: status, value: status })
-            ),
-          },
-        ]}
-        bulkActions={[
-          {
-            icon: FileText,
-            label: 'Review Selected',
-            onClick: (rows) => rows[0] && setSelectedApplication(rows[0]),
-          },
-          {
-            icon: Download,
-            label: 'Export Selected',
-            onClick: exportApplications,
-          },
-        ]}
-        emptyState={{
-          actionLabel: applicationSearch ? 'Clear Search' : undefined,
-          description: applicationSearch
-            ? 'No driver applications match the current search and status filters.'
-            : 'New driver applications will appear here as soon as renters submit the application form.',
-          icon: Users,
-          onAction: applicationSearch ? () => setApplicationSearch('') : undefined,
-          title: applicationSearch ? 'No matching applications' : 'No real applications yet',
-        }}
-      />
+      <div className="flex flex-wrap gap-2">
+        <Button
+          appearance={statusFilters.length === 0 ? 'primary' : 'secondary'}
+          onClick={clearApplicationStatuses}
+          size="small"
+        >
+          All
+        </Button>
+        {APPLICATION_STATUS_OPTIONS.map((status) => {
+          const selected = statusFilters.includes(status);
+          return (
+            <Button
+              key={status}
+              appearance={selected ? 'primary' : 'secondary'}
+              onClick={() => toggleApplicationStatus(status)}
+              size="small"
+            >
+              {status}
+            </Button>
+          );
+        })}
+      </div>
+
+      {applicationsError ? (
+        renderErrorPanel(applicationsError)
+      ) : isLoadingApplications && applications.length === 0 ? (
+        renderLoadingPanel('Loading driver applications...')
+      ) : (
+        <DataTable
+          rows={applications}
+          columns={columns}
+          getRowId={(app) => app.id}
+          minWidth="1040px"
+          bulkActions={[
+            {
+              icon: FileText,
+              label: 'Review Selected',
+              onClick: (rows) => rows[0] && setSelectedApplication(rows[0]),
+            },
+            {
+              icon: Download,
+              label: 'Export Selected',
+              onClick: exportApplications,
+            },
+          ]}
+          emptyState={{
+            actionLabel: applicationSearch || hasActiveStatusFilter ? 'Clear Filters' : undefined,
+            description: emptyDescription,
+            icon: Users,
+            onAction:
+              applicationSearch || hasActiveStatusFilter
+                ? () => {
+                    setApplicationSearch('');
+                    clearApplicationStatuses();
+                  }
+                : undefined,
+            title: emptyTitle,
+          }}
+          pagination={{
+            isFetching: isFetchingApplications,
+            mode: 'server',
+            onPageChange: onApplicationPageChange,
+            onPageSizeChange: onApplicationPageSizeChange,
+            page: applicationsPage,
+            pageSize: applicationsPageSize,
+            pageSizeOptions: [10, 25, 50, 100],
+            totalItems: applicationsTotalItems,
+            totalPages: applicationsTotalPages,
+          }}
+        />
+      )}
     </motion.div>
   );
 }

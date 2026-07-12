@@ -3,13 +3,9 @@ import { z } from 'zod';
 
 import { db } from '../db/index.js';
 import { escapeHtml, getResend, sanitizeEmailHeaderValue, sendResendEmail } from '../email.js';
-import {
-  filterRealOperationalCustomers,
-  filterRealRentals,
-  getImportedApplicationIdSet,
-} from '../importedDataFilters.js';
 import { authenticateAdmin } from '../middleware/auth.js';
 import { buildTollTransferNoticePdf } from '../templates/tollTransferNoticePdf.js';
+import { loadRentalPrefillOptions } from './rentals.js';
 
 const router = express.Router();
 
@@ -109,41 +105,6 @@ const sendNoticeSchema = z.object({
   recipient_name: z.string().trim().max(120).optional().nullable(),
 });
 
-const normalizeSearch = (value: unknown) => String(value ?? '').trim().toLowerCase();
-
-const splitFullName = (value: string) => {
-  const parts = value.trim().split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) {
-    return { given_names: '', surname: parts[0] || '' };
-  }
-
-  return {
-    given_names: parts.slice(0, -1).join(' '),
-    surname: parts[parts.length - 1],
-  };
-};
-
-const parseAddressParts = (address: string | null | undefined) => {
-  const value = String(address || '').trim();
-  const match = value.match(/^(.*?)[,\s]+([A-Za-z ]+)\s+(NSW|ACT|VIC|QLD|SA|WA|TAS|NT)\s+(\d{4})$/i);
-
-  if (!match) {
-    return {
-      address: value,
-      postcode: '',
-      state: 'NSW',
-      suburb: '',
-    };
-  }
-
-  return {
-    address: match[1]?.replace(/,\s*$/, '').trim() || value,
-    postcode: match[4] || '',
-    state: (match[3] || 'NSW').toUpperCase(),
-    suburb: (match[2] || '').trim().toUpperCase(),
-  };
-};
-
 const auditNoticeAction = async ({
   action,
   actor,
@@ -191,124 +152,6 @@ const fetchNoticeById = async (id: number) => {
   }
 
   return data as Record<string, unknown>;
-};
-
-const loadRentalPrefillOptions = async (search: string) => {
-  const { data: rentals, error: rentalsError } = await db
-    .from('rentals')
-    .select('*')
-    .in('status', ['Active', 'Overdue'])
-    .order('created_at', { ascending: false })
-    .limit(100);
-
-  if (rentalsError) {
-    throw rentalsError;
-  }
-
-  const rentalRows = (rentals || []) as Array<Record<string, unknown>>;
-  const applicationIds = Array.from(
-    new Set(rentalRows.map((rental) => String(rental.application_id || '')).filter(Boolean))
-  );
-  const [applicationsResult, customersResult] = await Promise.all([
-    applicationIds.length
-      ? db
-          .from('applications')
-          .select('*')
-          .in('id', applicationIds)
-      : Promise.resolve({ data: [], error: null }),
-    db
-      .from('customers')
-      .select('id, full_name, phone, email, date_of_birth, street, city, state, postcode')
-      .limit(500),
-  ]);
-
-  if (applicationsResult.error) throw applicationsResult.error;
-  if (customersResult.error) throw customersResult.error;
-
-  const importedApplicationIds = getImportedApplicationIdSet(
-    (applicationsResult.data || []) as Array<Record<string, unknown>>,
-  );
-  const realRentalRows = filterRealRentals(rentalRows, importedApplicationIds);
-  const applicationsById = new Map<string, Record<string, unknown>>();
-  for (const application of applicationsResult.data || []) {
-    applicationsById.set(String(application.id), application as Record<string, unknown>);
-  }
-
-  const customerRows = filterRealOperationalCustomers(
-    (customersResult.data || []) as Array<Record<string, unknown>>,
-  );
-  const customerForApplication = (application: Record<string, unknown> | undefined) => {
-    if (!application) {
-      return null;
-    }
-
-    const email = normalizeSearch(application.email);
-    const phone = normalizeSearch(application.phone);
-    const name = normalizeSearch(application.name);
-
-    return (
-      customerRows.find(
-        (customer) =>
-          (email && normalizeSearch(customer.email) === email) ||
-          (phone && normalizeSearch(customer.phone) === phone) ||
-          (name && normalizeSearch(customer.full_name) === name)
-      ) || null
-    );
-  };
-
-  const query = normalizeSearch(search);
-
-  return realRentalRows
-    .map((rental) => {
-      const application = applicationsById.get(String(rental.application_id || ''));
-      const customer = customerForApplication(application);
-      const addressParts = parseAddressParts(
-        String(customer?.street || '') ||
-          String(application?.address || '')
-      );
-      const fullName = String(customer?.full_name || application?.name || '').trim();
-      const { given_names, surname } = splitFullName(fullName);
-      const vehicleRegistration = String(
-        rental.vehicle_registration ||
-          rental.vehicleRegistration ||
-          application?.approved_vehicle ||
-          application?.approvedVehicle ||
-          ''
-      )
-        .trim()
-        .toUpperCase();
-
-      return {
-        application_id: String(rental.application_id || ''),
-        applicant_name: fullName,
-        car_name: vehicleRegistration,
-        customer_id: customer?.id ? Number(customer.id) : null,
-        nominee_address: addressParts.address,
-        nominee_country: 'AUSTRALIA',
-        nominee_dob: customer?.date_of_birth || null,
-        nominee_full_name: fullName,
-        nominee_given_names: given_names,
-        nominee_phone: String(customer?.phone || application?.phone || ''),
-        nominee_postcode: customer?.postcode ? String(customer.postcode) : addressParts.postcode,
-        nominee_state: customer?.state ? String(customer.state) : addressParts.state,
-        nominee_suburb: customer?.city ? String(customer.city) : addressParts.suburb,
-        nominee_surname: surname,
-        rental_id: Number(rental.id),
-        rental_status: String(rental.status || ''),
-        vehicle_registration: vehicleRegistration,
-      };
-    })
-    .filter((option) => {
-      if (!query) return true;
-
-      return [
-        option.nominee_full_name,
-        option.nominee_phone,
-        option.vehicle_registration,
-        option.application_id,
-        option.car_name,
-      ].some((value) => normalizeSearch(value).includes(query));
-    });
 };
 
 const toRecordPayload = (payload: TollNoticePayload, req: express.Request) => ({

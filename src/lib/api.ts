@@ -51,8 +51,15 @@ export const verifyAdminSession = async (): Promise<AdminSessionResponse> => {
   return data;
 };
 
-export const fetchApplications = async (): Promise<Application[]> => {
-  const { data } = await api.get('/applications');
+export const fetchApplications = async (
+  params: AdminDatasetRequest & { statuses?: string[] } = {}
+): Promise<AdminDatasetResponse<Application>> => {
+  const queryParams: Record<string, string | number> = {};
+  if (params.page != null) queryParams.page = params.page;
+  if (params.pageSize != null) queryParams.pageSize = params.pageSize;
+  if (params.search != null) queryParams.search = params.search;
+  if (params.statuses && params.statuses.length > 0) queryParams.statuses = params.statuses.join(',');
+  const { data } = await api.get('/applications', { params: queryParams });
   return data;
 };
 
@@ -71,8 +78,10 @@ export const fetchStats = async (): Promise<DashboardStats> => {
   return data;
 };
 
-export const fetchRentals = async (): Promise<Rental[]> => {
-  const { data } = await api.get('/rentals');
+export const fetchRentals = async (
+  params: AdminDatasetRequest = {}
+): Promise<AdminDatasetResponse<Rental>> => {
+  const { data } = await api.get('/rentals', { params });
   return data;
 };
 
@@ -510,6 +519,7 @@ export interface WeeklyFinancials {
     arrival_date: string;
     status: string;
   }>;
+  recent_payouts_truncated?: boolean;
 }
 
 export interface WeeklyFinancialsRequest {

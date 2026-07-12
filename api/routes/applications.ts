@@ -20,6 +20,7 @@ import {
   getApplicationCreatedAtColumn,
   getApplicationDuplicateCheckColumns,
   getApplicationDocumentColumn,
+  getApplicationListSelectColumns,
   getApplicationSelectColumns,
   toApplicationWritePayload,
 } from "../schemaCompat.js";
@@ -53,13 +54,13 @@ import {
   sendResendEmail,
 } from "../email.js";
 import { normalizeUuid } from "../../shared/uuid.js";
-import { isImportedApplicationRecord } from "../importedDataFilters.js";
 import { recordAdminAuditEvent } from "../adminAudit.js";
 
 const router = express.Router();
 const APPLICATIONS_BUCKET = "applications";
 const DOCUMENT_URL_TTL_SECONDS = 60 * 15;
-const APPLICATION_LIST_DOCUMENT_SIGNING_LIMIT = 100;
+const DEFAULT_PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 100;
 const ALLOWED_APPLICATION_IMAGE_TYPES = new Set<string>(
   APPLICATION_IMAGE_CONTENT_TYPES,
 );
@@ -249,8 +250,69 @@ const createSignedDocumentUrl = async (path: string | null | undefined) => {
   return data.signedUrl;
 };
 
-const hasAvailableDocumentSigningCapacity = (index: number) =>
-  index < APPLICATION_LIST_DOCUMENT_SIGNING_LIMIT;
+const parsePositiveInt = (value: unknown, fallback: number) => {
+  const normalized = Array.isArray(value) ? value[0] : value;
+  const parsed = Number(normalized);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.floor(parsed);
+};
+
+const normalizeSearchTerm = (value: unknown) => {
+  const normalized = Array.isArray(value) ? value[0] : value;
+
+  if (typeof normalized !== "string") {
+    return "";
+  }
+
+  return normalized.replace(/[^a-zA-Z0-9@.+\-\s]/g, " ").replace(/\s+/g, " ").trim();
+};
+
+const parseStatusFilters = (value: unknown) => {
+  const normalized = Array.isArray(value) ? value.join(",") : String(value ?? "");
+
+  return normalized
+    .split(",")
+    .map((status) => status.trim())
+    .filter(Boolean);
+};
+
+const applyImportedApplicationFilters = (query: any) =>
+  query
+    .is("legacy_id", null)
+    .not("email", "ilike", "%@example.invalid")
+    .not("phone", "eq", "0000000000")
+    .not("license_number", "ilike", "legacy-%")
+    .not("experience", "ilike", "%imported from live fleet data%")
+    .not("experience", "ilike", "%legacy renter import%");
+
+const applyApplicationSearch = (query: any, searchTerm: string) => {
+  if (!searchTerm) {
+    return query;
+  }
+
+  const pattern = `%${searchTerm}%`;
+  return query.or(
+    [
+      `name.ilike.${pattern}`,
+      `email.ilike.${pattern}`,
+      `phone.ilike.${pattern}`,
+      `license_number.ilike.${pattern}`,
+      `approved_vehicle.ilike.${pattern}`,
+    ].join(","),
+  );
+};
+
+const applyApplicationStatusFilters = (query: any, statuses: string[]) => {
+  if (statuses.length === 0) {
+    return query;
+  }
+
+  return query.in("status", statuses);
+};
 
 type ApplicationPaymentApprovalRecord = {
   approved_bond?: number | null;
@@ -422,54 +484,71 @@ const uploadApplicationFile = async ({
   return uploadedPath;
 };
 
-router.get("/", authenticateAdmin, async (_req, res) => {
+router.get("/", authenticateAdmin, async (req, res) => {
   try {
-    const selectColumns = await getApplicationSelectColumns();
+    const requestedPage = parsePositiveInt(req.query.page, 1);
+    const pageSize = Math.min(
+      parsePositiveInt(req.query.pageSize, DEFAULT_PAGE_SIZE),
+      MAX_PAGE_SIZE,
+    );
+    const searchTerm = normalizeSearchTerm(req.query.search);
+    const statusFilters = parseStatusFilters(req.query.status || req.query.statuses);
+    const listSelectColumns = await getApplicationListSelectColumns();
     const orderColumn = await getApplicationCreatedAtColumn();
-    const { data, error } = await db
-      .from("applications")
-      .select(selectColumns)
-      .order(orderColumn, { ascending: false });
+
+    const countQuery = applyApplicationStatusFilters(
+      applyApplicationSearch(
+        applyImportedApplicationFilters(
+          db.from("applications").select("id", { count: "exact", head: true }),
+        ),
+        searchTerm,
+      ),
+      statusFilters,
+    );
+    const { count, error: countError } = await countQuery;
+
+    if (countError) {
+      return res.status(500).json({ error: "Failed to fetch applications" });
+    }
+
+    const totalItems = count || 0;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const page = Math.min(requestedPage, totalPages);
+    const rangeStart = (page - 1) * pageSize;
+    const rangeEnd = rangeStart + pageSize - 1;
+
+    const dataQuery = applyApplicationStatusFilters(
+      applyApplicationSearch(
+        applyImportedApplicationFilters(db.from("applications").select(listSelectColumns)),
+        searchTerm,
+      ),
+      statusFilters,
+    );
+    const { data, error } = await dataQuery
+      .order(orderColumn, { ascending: false })
+      .range(rangeStart, rangeEnd);
+
     if (error) {
       return res.status(500).json({ error: "Failed to fetch applications" });
     }
 
-    const rows = ((data || []) as Array<Record<string, any>>).filter(
-      (application) => !isImportedApplicationRecord(application),
-    );
-    const applications = await Promise.all(
-      rows.map(async (application, index) => {
-        const {
-          uber_screenshot: _legacyUberScreenshot,
-          uberScreenshot: _legacyUberScreenshotCamel,
-          ...rest
-        } = application;
+    const applications = ((data || []) as Array<Record<string, any>>).map((application) => {
+      const {
+        uber_screenshot: _legacyUberScreenshot,
+        uberScreenshot: _legacyUberScreenshotCamel,
+        ...rest
+      } = application;
+      return rest;
+    });
 
-        if (!hasAvailableDocumentSigningCapacity(index)) {
-          return {
-            ...rest,
-            license_photo: null,
-            license_back_photo: null,
-            passport_or_uber_profile_screenshot: null,
-          };
-        }
-
-        return {
-          ...rest,
-          license_photo: await createSignedDocumentUrl(
-            application.license_photo,
-          ),
-          license_back_photo: await createSignedDocumentUrl(
-            getApplicationBackPhotoValue(application),
-          ),
-          passport_or_uber_profile_screenshot: await createSignedDocumentUrl(
-            getApplicationPassportDocumentValue(application),
-          ),
-        };
-      }),
-    );
-
-    res.json(applications);
+    res.json({
+      items: applications,
+      page,
+      pageSize,
+      total: totalItems,
+      totalItems,
+      totalPages,
+    });
   } catch (error) {
     console.error("Fetch applications error:", error);
     res.status(500).json({ error: "Failed to process applications" });

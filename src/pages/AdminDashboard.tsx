@@ -98,16 +98,6 @@ const adminTabLabels: Record<string, string> = {
   maintenance: 'Maintenance',
 };
 
-const matchesSearch = (searchTerm: string, fields: Array<string | number | null | undefined>) => {
-  const normalizedSearch = searchTerm.trim().toLowerCase();
-
-  if (!normalizedSearch) {
-    return true;
-  }
-
-  return fields.some((field) => String(field ?? '').toLowerCase().includes(normalizedSearch));
-};
-
 const copyTextToClipboard = async (value: string) => {
   if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
     return false;
@@ -183,6 +173,11 @@ export default function AdminDashboard() {
   const [applicationSearch, setApplicationSearch] = useState('');
   const [rentalSearch, setRentalSearch] = useState('');
   const [tollNoticeInitialSearch, setTollNoticeInitialSearch] = useState('');
+  const [applicationPage, setApplicationPage] = useState(1);
+  const [applicationPageSize, setApplicationPageSize] = useState(OPERATIONAL_PAGE_SIZE);
+  const [applicationStatusFilters, setApplicationStatusFilters] = useState<string[]>([]);
+  const [rentalPage, setRentalPage] = useState(1);
+  const [rentalPageSize, setRentalPageSize] = useState(OPERATIONAL_PAGE_SIZE);
   const [customerPage, setCustomerPage] = useState(1);
   const [invoicePage, setInvoicePage] = useState(1);
   const [invoicePageSize, setInvoicePageSize] = useState(OPERATIONAL_PAGE_SIZE);
@@ -223,6 +218,8 @@ export default function AdminDashboard() {
   const deferredApplicationSearch = useDeferredValue(applicationSearch.trim());
   const deferredRentalSearch = useDeferredValue(rentalSearch.trim());
 
+  const approvedApplicationStatusFilters = ['Approved', 'Paid'];
+
   useEffect(() => {
     setCustomerPage(1);
   }, [deferredCustomerSearch]);
@@ -230,6 +227,14 @@ export default function AdminDashboard() {
   useEffect(() => {
     setInvoicePage(1);
   }, [deferredInvoiceSearch, invoicePageSize]);
+
+  useEffect(() => {
+    setApplicationPage(1);
+  }, [deferredApplicationSearch, applicationPageSize, applicationStatusFilters]);
+
+  useEffect(() => {
+    setRentalPage(1);
+  }, [deferredRentalSearch, rentalPageSize]);
 
   useEffect(() => {
     return () => {
@@ -279,16 +284,47 @@ export default function AdminDashboard() {
     enabled: shouldLoadStats,
   });
 
-  const applicationsQuery = useQuery<Application[]>({
-    queryKey: ['applications'],
-    queryFn: () => api.fetchApplications(),
+  const applicationsQuery = useQuery<AdminDatasetResponse<Application>>({
+    queryKey: [
+      'applications',
+      deferredApplicationSearch,
+      applicationPage,
+      applicationPageSize,
+      applicationStatusFilters.join('|'),
+    ],
+    queryFn: () =>
+      api.fetchApplications({
+        page: applicationPage,
+        pageSize: applicationPageSize,
+        search: deferredApplicationSearch,
+        statuses: applicationStatusFilters,
+      }),
     enabled: shouldLoadApplications,
+    placeholderData: (previousData) => previousData,
   });
 
-  const rentalsQuery = useQuery<Rental[]>({
-    queryKey: ['rentals'],
-    queryFn: () => api.fetchRentals(),
+  const approvedApplicationsQuery = useQuery<AdminDatasetResponse<Application>>({
+    queryKey: ['approved-applications'],
+    queryFn: () =>
+      api.fetchApplications({
+        page: 1,
+        pageSize: 100,
+        statuses: approvedApplicationStatusFilters,
+      }),
+    enabled: shouldLoadAgreements,
+    placeholderData: (previousData) => previousData,
+  });
+
+  const rentalsQuery = useQuery<AdminDatasetResponse<Rental>>({
+    queryKey: ['rentals', deferredRentalSearch, rentalPage, rentalPageSize],
+    queryFn: () =>
+      api.fetchRentals({
+        page: rentalPage,
+        pageSize: rentalPageSize,
+        search: deferredRentalSearch,
+      }),
     enabled: shouldLoadRentals,
+    placeholderData: (previousData) => previousData,
   });
 
   const customerDatasetQuery = useQuery<AdminDatasetResponse<OperationalCustomer>>({
@@ -336,6 +372,7 @@ export default function AdminDashboard() {
     mutationFn: ({ id, status }: { id: string, status: string }) => api.updateApplicationStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['applications'] });
+      queryClient.invalidateQueries({ queryKey: ['approved-applications'] });
       showNotification('Application status updated', 'success');
     },
     onError: (error) =>
@@ -347,6 +384,7 @@ export default function AdminDashboard() {
       api.cancelApplication(id, { cancel_reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['applications'] });
+      queryClient.invalidateQueries({ queryKey: ['approved-applications'] });
       queryClient.invalidateQueries({ queryKey: ['rentals'] });
       setSelectedApplication(null);
       setIsCancelApplicationModalOpen(false);
@@ -363,6 +401,7 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agreements'] });
       queryClient.invalidateQueries({ queryKey: ['applications'] });
+      queryClient.invalidateQueries({ queryKey: ['approved-applications'] });
       setIsAgreementModalOpen(false);
       setAgreementModalMode('draft');
       showNotification('Agreement saved successfully', 'success');
@@ -390,6 +429,9 @@ export default function AdminDashboard() {
     }) => api.approveApplicationForPayment(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['applications'] });
+      queryClient.invalidateQueries({ queryKey: ['approved-applications'] });
+      queryClient.invalidateQueries({ queryKey: ['agreements'] });
+      queryClient.invalidateQueries({ queryKey: ['rentals'] });
     },
   });
 
@@ -398,6 +440,7 @@ export default function AdminDashboard() {
       api.createVehicleCheckoutLink(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['applications'] });
+      queryClient.invalidateQueries({ queryKey: ['approved-applications'] });
     },
   });
 
@@ -405,6 +448,7 @@ export default function AdminDashboard() {
     mutationFn: (id: string) => api.retryApplicationPaymentActivation(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['applications'] });
+      queryClient.invalidateQueries({ queryKey: ['approved-applications'] });
       queryClient.invalidateQueries({ queryKey: ['rentals'] });
     },
   });
@@ -450,7 +494,9 @@ export default function AdminDashboard() {
 
   const handleGenerateAgreement = async () => {
     const application_id = selected_agreement_application_id;
-    const selectedApplication = applications.find((a) => a.id === application_id);
+    const selectedApplication =
+      approvedApplications.find((a) => a.id === application_id) ||
+      applications.find((a) => a.id === application_id);
 
     if (!application_id || !selectedApplication) {
       showNotification('Please select an application', 'error');
@@ -682,8 +728,12 @@ export default function AdminDashboard() {
   };
 
   const stats = statsQuery.data;
-  const applications = applicationsQuery.data || [];
-  const rentals = rentalsQuery.data || [];
+  const applicationsDataset = applicationsQuery.data;
+  const approvedApplicationsDataset = approvedApplicationsQuery.data;
+  const rentalsDataset = rentalsQuery.data;
+  const applications = applicationsDataset?.items || [];
+  const approvedApplications = approvedApplicationsDataset?.items || [];
+  const rentals = rentalsDataset?.items || [];
   const customerDataset = customerDatasetQuery.data;
   const invoiceDataset = invoiceDatasetQuery.data;
   const weeklyFinancials = weeklyFinancialsQuery.data;
@@ -712,32 +762,30 @@ export default function AdminDashboard() {
   const isLoadingInvoiceDataset = shouldLoadInvoices && invoiceDatasetQuery.isPending && !invoiceDataset;
   const isLoadingWeeklyFinancials =
     shouldLoadWeeklyFinancials && weeklyFinancialsQuery.isPending && !weeklyFinancials;
-  const approvedApplications = applications.filter(
-    (app) => app.status === 'Approved' || app.status === 'Paid'
-  );
-  const filteredApplications = applications.filter((app) =>
-    matchesSearch(deferredApplicationSearch, [
-      app.address,
-      app.email,
-      app.experience,
-      app.name,
-      app.phone,
-      app.status,
-      app.uber_status,
-    ])
-  );
-  const filteredRentals = rentals.filter((rental) =>
-    matchesSearch(deferredRentalSearch, [
-      rental.applicant_name,
-      rental.car_name,
-      rental.start_date,
-      rental.status,
-      rental.weekly_price,
-    ])
-  );
-  const selectedAgreementApplication = applications.find(
-    (app) => app.id === selected_agreement_application_id
-  );
+  const weeklyFinancialsError =
+    shouldLoadWeeklyFinancials && weeklyFinancialsQuery.isError && !weeklyFinancials
+      ? getApiErrorMessage(weeklyFinancialsQuery.error, 'Failed to load weekly financials.')
+      : null;
+  const applicationsError =
+    shouldLoadApplications && applicationsQuery.isError && !applicationsDataset
+      ? getApiErrorMessage(applicationsQuery.error, 'Failed to load applications.')
+      : null;
+  const rentalsError =
+    shouldLoadRentals && rentalsQuery.isError && !rentalsDataset
+      ? getApiErrorMessage(rentalsQuery.error, 'Failed to load rentals.')
+      : null;
+  const isLoadingApplications =
+    shouldLoadApplications && applicationsQuery.isPending && !applicationsDataset;
+  const isFetchingApplications = shouldLoadApplications && applicationsQuery.isFetching;
+  const isLoadingRentals = shouldLoadRentals && rentalsQuery.isPending && !rentalsDataset;
+  const isFetchingRentals = shouldLoadRentals && rentalsQuery.isFetching;
+  const applicationsTotalItems = applicationsDataset?.totalItems || 0;
+  const applicationsTotalPages = applicationsDataset?.totalPages || 1;
+  const rentalsTotalItems = rentalsDataset?.totalItems || 0;
+  const rentalsTotalPages = rentalsDataset?.totalPages || 1;
+  const selectedAgreementApplication =
+    approvedApplications.find((app) => app.id === selected_agreement_application_id) ||
+    applications.find((app) => app.id === selected_agreement_application_id);
   const canCopyVehicleCheckoutLink =
     Boolean(selectedAgreementApplication) &&
     selectedAgreementApplication?.status === 'Approved';
@@ -849,17 +897,37 @@ export default function AdminDashboard() {
           {activeTab === 'applications' && (
             <ApplicationsTab
               applicationSearch={applicationSearch}
+              applications={applications}
+              applicationsError={applicationsError}
+              applicationsPage={applicationPage}
+              applicationsPageSize={applicationPageSize}
+              applicationsTotalItems={applicationsTotalItems}
+              applicationsTotalPages={applicationsTotalPages}
+              clearApplicationStatuses={() => setApplicationStatusFilters([])}
+              isFetchingApplications={isFetchingApplications}
+              isLoadingApplications={isLoadingApplications}
+              onApplicationPageChange={setApplicationPage}
+              onApplicationPageSizeChange={(pageSize) => {
+                setApplicationPageSize(pageSize);
+                setApplicationPage(1);
+              }}
               setApplicationSearch={setApplicationSearch}
-              filteredApplications={filteredApplications}
               setSelectedApplication={setSelectedApplication}
+              statusFilters={applicationStatusFilters}
+              toggleApplicationStatus={(status) =>
+                setApplicationStatusFilters((current) =>
+                  current.includes(status)
+                    ? current.filter((item) => item !== status)
+                    : [...current, status]
+                )
+              }
             />
           )}
 
           {activeTab === 'rentals' && (
             <RentalsTab
-              rentalSearch={rentalSearch}
-              setRentalSearch={setRentalSearch}
-              filteredRentals={filteredRentals}
+              isFetchingRentals={isFetchingRentals}
+              isLoadingRentals={isLoadingRentals}
               onCancelSubscription={(payload) =>
                 cancelRentalSubscriptionMutation.mutateAsync(payload)
               }
@@ -868,6 +936,19 @@ export default function AdminDashboard() {
                   String(rental.application_id || rental.applicant_name || rental.car_name || '')
                 )
               }
+              onRentalPageChange={setRentalPage}
+              onRentalPageSizeChange={(pageSize) => {
+                setRentalPageSize(pageSize);
+                setRentalPage(1);
+              }}
+              rentalSearch={rentalSearch}
+              setRentalSearch={setRentalSearch}
+              rentals={rentals}
+              rentalsError={rentalsError}
+              rentalsPage={rentalPage}
+              rentalsPageSize={rentalPageSize}
+              rentalsTotalItems={rentalsTotalItems}
+              rentalsTotalPages={rentalsTotalPages}
             />
           )}
 
@@ -875,6 +956,7 @@ export default function AdminDashboard() {
             <FinancialsTab
               dateRange={financialDateRange}
               isLoadingWeeklyFinancials={isLoadingWeeklyFinancials}
+              weeklyFinancialsError={weeklyFinancialsError}
               weeklyFinancials={weeklyFinancials}
               onDateRangeChange={setFinancialDateRange}
               onRefresh={() => weeklyFinancialsQuery.refetch()}
@@ -1052,57 +1134,43 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4">
-                    <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Licence Front Photo</h4>
-                    {selectedApplication.license_photo ? (
-                    <Button
-                      type="button"
-                      appearance="primary"
-                      onClick={() => handleOpenApplicationDocument('license_photo')}
-                      disabled={openingDocument !== null}
-                      className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest"
-                      icon={
-                        openingDocument === 'license_photo' ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <ExternalLink className="w-4 h-4" />
-                        )
-                      }
+                  {[
+                    {
+                      document: 'license_photo' as const,
+                      label: 'Licence Front Photo',
+                      buttonLabel: 'Open Licence Front Photo',
+                    },
+                    {
+                      document: 'license_back_photo' as const,
+                      label: 'Licence Back Photo',
+                      buttonLabel: 'Open Licence Back Photo',
+                    },
+                  ].map(({ document, label, buttonLabel }) => (
+                    <div
+                      key={document}
+                      className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4"
                     >
-                      Open Licence Front Photo
-                    </Button>
-                    ) : (
-                      <div className="px-6 py-4 border border-white/10 rounded-2xl text-brand-grey text-xs font-light">
-                        No licence front photo uploaded.
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4">
-                    <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">Licence Back Photo</h4>
-                    {selectedApplication.license_back_photo ? (
-                    <Button
-                      type="button"
-                      appearance="secondary"
-                      onClick={() => handleOpenApplicationDocument('license_back_photo')}
-                      disabled={openingDocument !== null}
-                      className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest"
-                      icon={
-                        openingDocument === 'license_back_photo' ? (
-                          <Loader2 className="w-4 h-4 animate-spin text-brand-gold" />
-                        ) : (
-                          <ExternalLink className="w-4 h-4 text-brand-gold" />
-                        )
-                      }
-                    >
-                      Open Licence Back Photo
-                    </Button>
-                    ) : (
-                      <div className="px-6 py-4 border border-white/10 rounded-2xl text-brand-grey text-xs font-light">
-                        No licence back photo uploaded.
-                      </div>
-                    )}
-                  </div>
+                      <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">
+                        {label}
+                      </h4>
+                      <Button
+                        type="button"
+                        appearance={document === 'license_back_photo' ? 'secondary' : 'primary'}
+                        onClick={() => handleOpenApplicationDocument(document)}
+                        disabled={openingDocument !== null}
+                        className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest"
+                        icon={
+                          openingDocument === document ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-brand-gold" />
+                          ) : (
+                            <ExternalLink className="w-4 h-4 text-brand-gold" />
+                          )
+                        }
+                      >
+                        {buttonLabel}
+                      </Button>
+                    </div>
+                  ))}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1110,32 +1178,24 @@ export default function AdminDashboard() {
                     <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">
                       Passport or Uber Profile Screenshot
                     </h4>
-                    {selectedApplication.passport_or_uber_profile_screenshot ? (
-                      <Button
-                        type="button"
-                        appearance="primary"
-                        onClick={() =>
-                          handleOpenApplicationDocument(
-                            'passport_or_uber_profile_screenshot',
-                          )
-                        }
-                        disabled={openingDocument !== null}
-                        className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest"
-                        icon={
-                          openingDocument === 'passport_or_uber_profile_screenshot' ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <ExternalLink className="w-4 h-4" />
-                          )
-                        }
-                      >
-                        Open Passport or Uber Screenshot
-                      </Button>
-                    ) : (
-                      <div className="px-6 py-4 border border-white/10 rounded-2xl text-brand-grey text-xs font-light">
-                        No passport or Uber screenshot uploaded.
-                      </div>
-                    )}
+                    <Button
+                      type="button"
+                      appearance="primary"
+                      onClick={() =>
+                        handleOpenApplicationDocument('passport_or_uber_profile_screenshot')
+                      }
+                      disabled={openingDocument !== null}
+                      className="!min-h-12 !w-full !font-bold !uppercase !tracking-widest"
+                      icon={
+                        openingDocument === 'passport_or_uber_profile_screenshot' ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <ExternalLink className="w-4 h-4" />
+                        )
+                      }
+                    >
+                      Open Passport or Uber Screenshot
+                    </Button>
                   </div>
 
                   <div className="bg-brand-navy/60 border border-brand-gold/15 rounded-3xl p-6 space-y-3">

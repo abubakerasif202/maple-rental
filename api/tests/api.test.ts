@@ -14,6 +14,13 @@ const getFutureDateOnly = (days: number) =>
 const getPastDateOnly = (days: number) =>
   addDaysToDateOnly(getTodayInAustralia(), -days);
 
+const buildStripePayout = (index: number) => ({
+  id: `po_${index + 1}`,
+  amount: (index + 1) * 10000,
+  arrival_date: 1710000000 + index * 86400,
+  status: "paid" as const,
+});
+
 const PENDING_APPLICATION_ID = "11111111-1111-4111-8111-111111111111";
 const APPROVED_APPLICATION_ID = "22222222-2222-4222-8222-222222222222";
 const UNDERSCORE_APPLICATION_ID = "33333333-3333-4333-8333-333333333333";
@@ -357,6 +364,51 @@ vi.mock("../schemaCompat.js", async () => {
         "created_at:createdAt",
       ].join(", "),
     ),
+    getApplicationListSelectColumns: vi.fn(async () =>
+      [
+        "id",
+        "name",
+        "phone",
+        "email",
+        "license_number:licenseNumber",
+        "license_expiry:licenseExpiry",
+        "uber_status:uberStatus",
+        "experience",
+        "address",
+        "weekly_budget:weeklyBudget",
+        "intended_start_date:intendedStartDate",
+        "approved_bond:approvedBond",
+        "bond_payment_status:bondPaymentStatus",
+        "bond_payment_method:bondPaymentMethod",
+        "bond_notes:bondNotes",
+        "approved_vehicle:approvedVehicle",
+        "approved_weekly_price:approvedWeeklyPrice",
+        "payment_link_version:paymentLinkVersion",
+        "payment_link_sent_at:paymentLinkSentAt",
+        "approved_at:approvedAt",
+        "agreement_accepted_at:agreementAcceptedAt",
+        "agreement_signature:agreementSignature",
+        "agreement_template_version:agreementTemplateVersion",
+        "paid_at:paidAt",
+        "pending_checkout_session_id:pendingCheckoutSessionId",
+        "cancelled_at:cancelledAt",
+        "cancel_reason:cancelReason",
+        "status",
+        "created_at:createdAt",
+      ].join(", "),
+    ),
+    getApplicationImportedDataSelectColumns: vi.fn(async () =>
+      [
+        "id",
+        "legacy_id:legacyId",
+        "email",
+        "phone",
+        "license_number:licenseNumber",
+        "experience",
+        "status",
+        "source",
+      ].join(", "),
+    ),
   };
 });
 
@@ -485,7 +537,8 @@ vi.mock("../db/index.js", () => {
 
   type QueryFilter =
     | { type: "eq"; column: string; value: unknown }
-    | { type: "not"; column: string; value: unknown }
+    | { type: "is"; column: string; value: unknown }
+    | { type: "not"; column: string; operator: string; value: unknown }
     | { type: "gte"; column: string; value: unknown }
     | { type: "ilike"; column: string; pattern: string }
     | { type: "in"; column: string; values: unknown[] }
@@ -504,6 +557,15 @@ vi.mock("../db/index.js", () => {
               ) || String(row.email || "").toLowerCase().endsWith("@example.invalid") ||
                 String(row.phone || "") === "0000000000"
             : row[filter.column];
+          if (filter.value == null) {
+            return rowValue == null;
+          }
+
+          return String(rowValue) === String(filter.value);
+        }
+
+        if (filter.type === "is") {
+          const rowValue = row[filter.column];
           if (filter.value == null) {
             return rowValue == null;
           }
@@ -535,6 +597,26 @@ vi.mock("../db/index.js", () => {
         }
 
         if (filter.type === "not") {
+          if (filter.operator === "in") {
+            const values = String(filter.value || "")
+              .replace(/^\(|\)$/g, "")
+              .split(",")
+              .map((value) => value.trim().replace(/^"|"$/g, ""))
+              .filter(Boolean);
+
+            return !values.some((value) => String(row[filter.column]) === String(value));
+          }
+
+          if (filter.operator === "ilike") {
+            const source = String(row[filter.column] ?? "");
+            const escapedPattern = String(filter.value || "")
+              .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+              .replace(/[%*]/g, ".*")
+              .replace(/_/g, ".");
+
+            return !new RegExp(`^${escapedPattern}$`, "i").test(source);
+          }
+
           if (filter.value == null) {
             return row[filter.column] != null;
           }
@@ -738,6 +820,16 @@ vi.mock("../db/index.js", () => {
           range,
         ),
       ),
+      is: vi.fn((column: string, value: unknown) =>
+        createSelectQuery(
+          table,
+          columns,
+          options,
+          [...filters, { type: "is", column, value }],
+          order,
+          range,
+        ),
+      ),
       gte: vi.fn((column: string, value: unknown) =>
         createSelectQuery(
           table,
@@ -773,7 +865,7 @@ vi.mock("../db/index.js", () => {
           table,
           columns,
           options,
-          [...filters, { type: "not", column, value }],
+          [...filters, { type: "not", column, operator: _operator, value }],
           order,
           range,
         ),
@@ -1738,6 +1830,7 @@ const { createCheckoutToken, verifyCheckoutToken } =
   });
   mockStripe.payoutsList.mockResolvedValue({
     data: [],
+    has_more: false,
   });
   mockStripe.webhooksConstructEvent.mockReset();
   mockBeforeApplicationsUpdate.mockReset();
@@ -2655,21 +2748,84 @@ describe("Applications API", () => {
     expect(res.body.error).toBe("Validation failed");
   });
 
-  it("GET /api/applications returns signed document URLs for admins", async () => {
+  it("GET /api/applications returns paginated admin rows without eagerly signing documents", async () => {
+    mockStorageFrom.mockClear();
+    mockState.applications = [
+      {
+        ...mockState.applications[1],
+        id: "33333333-3333-4333-8333-333333333334",
+        created_at: "2026-03-06T00:00:00.000Z",
+        email: "latest@example.com",
+        name: "Latest Driver",
+        status: "Pending",
+      },
+      {
+        ...mockState.applications[1],
+        id: APPROVED_APPLICATION_ID,
+        created_at: "2026-03-05T00:00:00.000Z",
+      },
+      {
+        ...mockState.applications[0],
+        id: PENDING_APPLICATION_ID,
+        created_at: "2026-03-04T00:00:00.000Z",
+      },
+    ];
+
     const res = await request(app)
-      .get("/api/applications")
+      .get("/api/applications?page=2&pageSize=1")
       .set("Authorization", "Bearer fake-token");
 
     expect(res.status).toBe(200);
-    expect(res.body[0].license_photo).toBe(
-      "https://signed.example/applications/docs/license-2.png",
-    );
-    expect(res.body[1].license_photo).toBe(
-      "https://signed.example/applications/docs/license-1.png",
-    );
-    expect(res.body[1].license_back_photo).toBe(
-      "https://signed.example/applications/docs/license-back-1.png",
-    );
+    expect(res.body).toMatchObject({
+      page: 2,
+      pageSize: 1,
+      total: 3,
+      totalItems: 3,
+      totalPages: 3,
+    });
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].id).toBe(APPROVED_APPLICATION_ID);
+    expect(mockStorageFrom).not.toHaveBeenCalled();
+  });
+
+  it("GET /api/applications applies search, status filters, and page-size caps on the server", async () => {
+    mockState.applications = [
+      {
+        ...mockState.applications[0],
+        created_at: "2026-03-04T00:00:00.000Z",
+        status: "Pending",
+      },
+      {
+        ...mockState.applications[1],
+        created_at: "2026-03-05T00:00:00.000Z",
+        status: "Approved",
+      },
+      {
+        ...mockState.applications[1],
+        approved_vehicle: "Mazda CX-5",
+        created_at: "2026-03-06T00:00:00.000Z",
+        email: "mazda@example.com",
+        id: "33333333-3333-4333-8333-333333333335",
+        name: "Mazda Driver",
+        phone: "0412345000",
+        status: "Paid",
+      },
+    ];
+
+    const res = await request(app)
+      .get("/api/applications?page=1&pageSize=500&search=Mazda&status=Paid")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.pageSize).toBe(100);
+    expect(res.body.total).toBe(1);
+    expect(res.body.totalPages).toBe(1);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]).toMatchObject({
+      approved_vehicle: "Mazda CX-5",
+      email: "mazda@example.com",
+      status: "Paid",
+    });
   });
 
   it("GET /api/applications/:id/documents/:document rejects non-UUID ids", async () => {
@@ -2679,6 +2835,109 @@ describe("Applications API", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("Validation failed");
+  });
+
+  it("GET /api/rentals returns paginated rows and caps the page size", async () => {
+    mockState.rentals = [
+      {
+        id: 301,
+        application_id: APPROVED_APPLICATION_ID,
+        created_at: "2026-03-06T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "CZ55XY-3",
+      },
+      {
+        id: 302,
+        application_id: APPROVED_APPLICATION_ID,
+        created_at: "2026-03-05T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "CZ55XY-2",
+      },
+      {
+        id: 303,
+        application_id: PENDING_APPLICATION_ID,
+        created_at: "2026-03-04T00:00:00.000Z",
+        status: "Pending",
+        vehicle_registration: "CZ55XY-1",
+      },
+    ];
+
+    const res = await request(app)
+      .get("/api/rentals?page=2&pageSize=500")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.pageSize).toBe(100);
+    expect(res.body.total).toBe(3);
+    expect(res.body.totalPages).toBe(1);
+    expect(res.body.page).toBe(1);
+    expect(res.body.items).toHaveLength(3);
+  });
+
+  it("GET /api/rentals slices the requested page on the server", async () => {
+    mockState.rentals = [
+      {
+        id: 401,
+        application_id: APPROVED_APPLICATION_ID,
+        created_at: "2026-03-06T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "CZ55XY-4",
+      },
+      {
+        id: 402,
+        application_id: APPROVED_APPLICATION_ID,
+        created_at: "2026-03-05T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "CZ55XY-3",
+      },
+      {
+        id: 403,
+        application_id: APPROVED_APPLICATION_ID,
+        created_at: "2026-03-04T00:00:00.000Z",
+        status: "Active",
+        vehicle_registration: "CZ55XY-2",
+      },
+    ];
+
+    const res = await request(app)
+      .get("/api/rentals?page=2&pageSize=1")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      page: 2,
+      pageSize: 1,
+      total: 3,
+      totalPages: 3,
+    });
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]).toMatchObject({
+      id: 402,
+      vehicle_registration: "CZ55XY-3",
+    });
+  });
+
+  it("GET /api/rentals searches server-side across older records", async () => {
+    mockState.rentals = Array.from({ length: 120 }, (_, index) => ({
+      application_id:
+        index === 0 ? APPROVED_APPLICATION_ID : PENDING_APPLICATION_ID,
+      created_at: new Date(Date.UTC(2026, 2, 1 - index)).toISOString(),
+      id: 400 + index,
+      status: index === 0 ? "Active" : "Pending",
+      vehicle_registration: index === 0 ? "OLD-SEARCH-REGO" : `ZZ-${index}`,
+    }));
+
+    const res = await request(app)
+      .get("/api/rentals?search=OLD-SEARCH-REGO")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]).toMatchObject({
+      id: 400,
+      vehicle_registration: "OLD-SEARCH-REGO",
+    });
   });
 
   it("POST /api/applications supports camel-case Supabase application schemas", async () => {
@@ -3298,6 +3557,45 @@ describe("Operational history API", () => {
       estimated_platform_fees: 0,
       actual_payouts_weekly: 0,
       recent_payouts: [],
+      recent_payouts_truncated: false,
+    });
+  });
+
+  it("GET /api/financials/weekly paginates Stripe payouts beyond the first page", async () => {
+    mockState.applications = [];
+    mockState.rentals = [];
+
+    const firstPage = Array.from({ length: 10 }, (_, index) => buildStripePayout(index));
+    const secondPage = [buildStripePayout(10)];
+
+    mockStripe.payoutsList
+      .mockResolvedValueOnce({
+        data: firstPage,
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        data: secondPage,
+        has_more: false,
+      });
+
+    const res = await request(app)
+      .get("/api/financials/weekly?startDate=2026-05-18&endDate=2026-05-24")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(mockStripe.payoutsList).toHaveBeenCalledTimes(2);
+    expect(mockStripe.payoutsList.mock.calls[1]?.[0]).toMatchObject({
+      starting_after: "po_10",
+    });
+    expect(res.body).toMatchObject({
+      actual_payouts_weekly: 6600,
+      recent_payouts: firstPage.slice(0, 10).map((payout) => ({
+        id: payout.id,
+        amount: payout.amount / 100,
+        arrival_date: new Date(payout.arrival_date * 1000).toISOString().slice(0, 10),
+        status: payout.status,
+      })),
+      recent_payouts_truncated: true,
     });
   });
 
@@ -3849,6 +4147,40 @@ describe("Toll Transfer Notices API", () => {
       nominee_full_name: "Approved Driver",
       nominee_phone: "0499999999",
       vehicle_registration: "CZ55XY",
+    });
+  });
+
+  it("GET /api/toll-notices/rental-options can find older rentals beyond the previous capped lookup", async () => {
+    mockState.customers[0] = {
+      ...mockState.customers[0],
+      city: "Merrylands",
+      date_of_birth: "1999-09-24",
+      email: "approved@example.com",
+      full_name: "Approved Driver",
+      phone: "0499999999",
+      postcode: "2160",
+      source: "current",
+      state: "NSW",
+      street: "10 Driver Street",
+    };
+    mockState.rentals = Array.from({ length: 120 }, (_, index) => ({
+      application_id: APPROVED_APPLICATION_ID,
+      created_at: new Date(Date.UTC(2026, 2, 1 - index)).toISOString(),
+      id: 500 + index,
+      status: "Active",
+      vehicle_registration: index === 0 ? "OLD-TOLL-SEARCH" : `NOISE-${index}`,
+    }));
+
+    const res = await request(app)
+      .get("/api/toll-notices/rental-options?search=OLD-TOLL-SEARCH")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]).toMatchObject({
+      application_id: APPROVED_APPLICATION_ID,
+      nominee_full_name: "Approved Driver",
+      vehicle_registration: "OLD-TOLL-SEARCH",
     });
   });
 
