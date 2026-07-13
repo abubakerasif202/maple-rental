@@ -5,7 +5,10 @@ import {
   isMissingOperationalHistoryTableError,
   OPERATIONAL_HISTORY_UNAVAILABLE_MESSAGE,
 } from '../operationalHistory.js';
-import { filterRealOperationalInvoices } from '../importedDataFilters.js';
+import {
+  filterRealOperationalInvoices,
+  isEmptyOperationalCustomerRecord,
+} from '../importedDataFilters.js';
 
 const router = express.Router();
 const DEFAULT_PAGE_SIZE = 25;
@@ -57,14 +60,14 @@ router.get('/', authenticateAdmin, async (req, res) => {
   const searchTerm = normalizeSearchTerm(req.query.search);
 
   try {
-    const countQuery = applyCustomerSearch(
-      db.from('customers').select('id', { count: 'exact', head: true }).eq('is_imported', false),
+    const customerQuery = applyCustomerSearch(
+      db.from('customers').select('*').eq('is_imported', false),
       searchTerm,
     );
-    const { count, error: countError } = await countQuery;
-
-    if (countError) {
-      if (isMissingOperationalHistoryTableError(countError)) {
+    const { data: customers, error: customerRowsError } = await customerQuery
+      .order('full_name', { ascending: true });
+    if (customerRowsError) {
+      if (isMissingOperationalHistoryTableError(customerRowsError)) {
         return res.json({
           available: false,
           items: [],
@@ -76,22 +79,8 @@ router.get('/', authenticateAdmin, async (req, res) => {
         });
       }
 
-      throw countError;
+      throw customerRowsError;
     }
-
-    const totalItems = count || 0;
-    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-    const page = Math.min(requestedPage, totalPages);
-    const rangeStart = (page - 1) * pageSize;
-    const rangeEnd = rangeStart + pageSize - 1;
-    const customerQuery = applyCustomerSearch(
-      db.from('customers').select('*').eq('is_imported', false),
-      searchTerm,
-    );
-    const { data: customers, error: customerRowsError } = await customerQuery
-      .order('full_name', { ascending: true })
-      .range(rangeStart, rangeEnd);
-    if (customerRowsError) throw customerRowsError;
 
     const customerIds = (customers || [])
       .map((customer: any) => Number(customer.id))
@@ -155,15 +144,24 @@ router.get('/', authenticateAdmin, async (req, res) => {
       invoiceSummaryByCustomerId.set(customerId, currentSummary);
     }
 
-    const items = (customers || []).map((customer: any) => ({
-      ...customer,
-      invoice_count: invoiceSummaryByCustomerId.get(Number(customer.id))?.invoice_count || 0,
-      total_billed: invoiceSummaryByCustomerId.get(Number(customer.id))?.total_billed || 0,
-      outstanding_balance:
-        invoiceSummaryByCustomerId.get(Number(customer.id))?.outstanding_balance || 0,
-      last_invoice_date:
-        invoiceSummaryByCustomerId.get(Number(customer.id))?.last_invoice_date || null,
-    }));
+    const visibleCustomers = (customers || [])
+      .map((customer: any) => ({
+        ...customer,
+        invoice_count: invoiceSummaryByCustomerId.get(Number(customer.id))?.invoice_count || 0,
+        total_billed: invoiceSummaryByCustomerId.get(Number(customer.id))?.total_billed || 0,
+        outstanding_balance:
+          invoiceSummaryByCustomerId.get(Number(customer.id))?.outstanding_balance || 0,
+        last_invoice_date:
+          invoiceSummaryByCustomerId.get(Number(customer.id))?.last_invoice_date || null,
+      }))
+      .filter((customer) => !isEmptyOperationalCustomerRecord(customer));
+
+    const totalItems = visibleCustomers.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const page = Math.min(requestedPage, totalPages);
+    const rangeStart = (page - 1) * pageSize;
+    const rangeEnd = rangeStart + pageSize;
+    const items = visibleCustomers.slice(rangeStart, rangeEnd);
 
     res.json({
       available: true,

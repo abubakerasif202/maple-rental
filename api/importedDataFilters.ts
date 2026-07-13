@@ -38,6 +38,18 @@ const hasLegacyPhone = (record: DataRecord) => normalized(record.phone) === LEGA
 const hasLegacyId = (record: DataRecord, ...keys: string[]) =>
   keys.some((key) => record[key] != null && String(record[key]).trim() !== '');
 
+const hasContactOrRosterDetails = (record: DataRecord) =>
+  [
+    record.email,
+    record.phone,
+    record.company_name,
+    record.companyName,
+    record.staff_number,
+    record.staffNumber,
+    record.external_id,
+    record.externalId,
+  ].some((field) => normalized(field) !== '');
+
 const hasLegacyLicenseNumber = (record: DataRecord) =>
   normalized(value(record, 'license_number', 'licenseNumber')).startsWith('legacy-');
 
@@ -98,6 +110,13 @@ export const filterRealOperationalCustomers = <T extends DataRecord>(
     (customer) =>
       !isImportedOperationalCustomerRecord(customer, importedApplicationIds, importedRentalIds),
   );
+
+export const isEmptyOperationalCustomerRecord = (customer: DataRecord) =>
+  !hasContactOrRosterDetails(customer) &&
+  Number(customer.invoice_count || customer.invoiceCount || 0) <= 0 &&
+  Number(customer.total_billed || customer.totalBilled || 0) <= 0 &&
+  Number(customer.outstanding_balance || customer.outstandingBalance || 0) <= 0 &&
+  !value(customer, 'last_invoice_date', 'lastInvoiceDate');
 
 export const isImportedOperationalInvoiceRecord = (
   invoice: DataRecord,

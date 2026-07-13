@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { RefreshCw, DollarSign, TrendingUp, AlertCircle, ShieldCheck, Loader2 } from 'lucide-react';
+import { RefreshCw, DollarSign, TrendingUp, AlertCircle, ShieldCheck, Loader2, ReceiptText } from 'lucide-react';
 import { WeeklyFinancials } from '../../../lib/api';
 import DateRangePicker, { type DateRangeValue } from '../DateRangePicker';
 import EmptyState from '../EmptyState';
@@ -53,8 +53,10 @@ export default function FinancialsTab({
     }));
   const hasRevenue = Boolean(
     Number(weeklyFinancials?.projected_gross_weekly || 0) ||
-      Number(weeklyFinancials?.actual_payouts_weekly || 0)
+      Number(weeklyFinancials?.actual_payouts_weekly || 0) ||
+      Number(weeklyFinancials?.imported_balance_net || 0)
   );
+  const balanceTransactions = weeklyFinancials?.imported_balance_transactions || [];
 
   return (
     <motion.div
@@ -91,7 +93,7 @@ export default function FinancialsTab({
         renderErrorPanel(weeklyFinancialsError)
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 xl:grid-cols-5">
             <MetricCard
               helper="Total billed weekly"
               icon={DollarSign}
@@ -120,6 +122,13 @@ export default function FinancialsTab({
               numericValue={weeklyFinancials?.actual_payouts_weekly}
               sparklineData={payoutSparkline}
               value={formatCurrency(weeklyFinancials?.actual_payouts_weekly)}
+            />
+            <MetricCard
+              helper="Net from imported balance CSV rows"
+              icon={ReceiptText}
+              label="CSV Balance Net"
+              numericValue={weeklyFinancials?.imported_balance_net}
+              value={formatCurrency(weeklyFinancials?.imported_balance_net)}
             />
           </div>
 
@@ -235,6 +244,128 @@ export default function FinancialsTab({
                 )}
               </tbody>
             </table>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-5 sm:px-8 sm:py-6">
+              <div>
+                <h3 className="text-white font-bold uppercase tracking-widest text-xs">
+                  Stripe Balance Activity
+                </h3>
+                <p className="text-brand-grey text-xs font-light mt-2">
+                  Recent payments, fees, payouts, and adjustments imported from Stripe balance history CSV.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 p-4 md:hidden">
+              {balanceTransactions.map((transaction) => (
+                <article
+                  key={transaction.id}
+                  className="rounded-lg border border-white/10 bg-brand-navy/60 p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-all text-xs font-bold text-brand-gold">{transaction.id}</p>
+                      <p className="mt-1 text-xs text-brand-grey">
+                        {new Date(transaction.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-brand-grey">
+                      {transaction.type}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs text-brand-grey">
+                    {transaction.description || transaction.source || 'Stripe balance transaction'}
+                  </p>
+                  <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-brand-grey">Gross</p>
+                      <p className="font-bold text-white">{formatCurrency(transaction.amount)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-brand-grey">Fee</p>
+                      <p className="font-bold text-white">{formatCurrency(transaction.fee)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-brand-grey">Net</p>
+                      <p className="font-bold text-white">{formatCurrency(transaction.net)}</p>
+                    </div>
+                  </div>
+                </article>
+              ))}
+              {balanceTransactions.length === 0 && (
+                <EmptyState
+                  description="Import a Stripe balance history CSV to show transaction activity here."
+                  icon={ReceiptText}
+                  title="No imported balance activity"
+                />
+              )}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[860px] text-left">
+                <thead>
+                  <tr className="bg-white/5 border-b border-white/10">
+                    <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">
+                      Transaction
+                    </th>
+                    <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">
+                      Type
+                    </th>
+                    <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">
+                      Gross
+                    </th>
+                    <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">
+                      Fee
+                    </th>
+                    <th className="px-8 py-6 text-[10px] font-bold text-brand-grey uppercase tracking-widest">
+                      Net
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {balanceTransactions.map((transaction) => (
+                    <tr key={transaction.id} className="hover:bg-white/5 transition-all">
+                      <td className="px-8 py-6">
+                        <p className="break-all text-xs font-bold text-brand-gold">
+                          {transaction.id}
+                        </p>
+                        <p className="mt-1 text-[10px] text-brand-grey">
+                          {new Date(transaction.created_at).toLocaleDateString()} ·{' '}
+                          {transaction.description || transaction.source || 'Stripe balance transaction'}
+                        </p>
+                      </td>
+                      <td className="px-8 py-6">
+                        <span className="rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-brand-grey">
+                          {transaction.type}
+                        </span>
+                      </td>
+                      <td className="px-8 py-6 text-sm font-bold text-white">
+                        {formatCurrency(transaction.amount)}
+                      </td>
+                      <td className="px-8 py-6 text-sm font-bold text-white">
+                        {formatCurrency(transaction.fee)}
+                      </td>
+                      <td className="px-8 py-6 text-sm font-bold text-white">
+                        {formatCurrency(transaction.net)}
+                      </td>
+                    </tr>
+                  ))}
+                  {balanceTransactions.length === 0 && (
+                    <tr>
+                      <td colSpan={5}>
+                        <EmptyState
+                          description="Import a Stripe balance history CSV to show transaction activity here."
+                          icon={ReceiptText}
+                          title="No imported balance activity"
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </>

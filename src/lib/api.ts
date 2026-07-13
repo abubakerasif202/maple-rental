@@ -513,6 +513,20 @@ export interface WeeklyFinancials {
   projected_net_weekly: number;
   estimated_platform_fees: number;
   actual_payouts_weekly: number;
+  imported_balance_gross?: number;
+  imported_balance_net?: number;
+  imported_balance_transactions?: Array<{
+    id: string;
+    type: string;
+    amount: number;
+    fee: number;
+    net: number;
+    currency: string;
+    created_at: string;
+    description?: string | null;
+    source?: string | null;
+    transfer?: string | null;
+  }>;
   recent_payouts: Array<{
     id: string;
     amount: number;

@@ -5,6 +5,7 @@ import {
   filterRealOperationalCustomers,
   filterRealOperationalInvoices,
   filterRealRentals,
+  isEmptyOperationalCustomerRecord,
   isImportedApplicationRecord,
   isImportedRentalRecord,
 } from './importedDataFilters.js';
@@ -101,5 +102,39 @@ describe('importedDataFilters', () => {
         { id: 'inv-real', source: 'current', customer_id: 2 },
       ], new Set(['1'])).map((row) => row.id),
     ).toEqual(['inv-real']);
+  });
+
+  it('detects name-only operational customer rows without contact or invoice activity', () => {
+    expect(
+      isEmptyOperationalCustomerRecord({
+        id: 1,
+        full_name: 'Imported Name Only',
+        email: null,
+        phone: null,
+        staff_number: null,
+        external_id: null,
+        invoice_count: 0,
+        total_billed: 0,
+        outstanding_balance: 0,
+        last_invoice_date: null,
+      }),
+    ).toBe(true);
+
+    expect(
+      isEmptyOperationalCustomerRecord({
+        id: 2,
+        full_name: 'Real Customer',
+        email: 'real@example.com',
+        invoice_count: 0,
+      }),
+    ).toBe(false);
+
+    expect(
+      isEmptyOperationalCustomerRecord({
+        id: 3,
+        full_name: 'Invoice Customer',
+        invoice_count: 1,
+      }),
+    ).toBe(false);
   });
 });

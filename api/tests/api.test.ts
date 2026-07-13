@@ -220,6 +220,7 @@ const {
     manual_invoices: [] as Array<Record<string, any>>,
     manual_invoice_items: [] as Array<Record<string, any>>,
     stripe_webhook_events: [] as Array<Record<string, any>>,
+    stripe_balance_transactions: [] as Array<Record<string, any>>,
     queryLog: [] as Array<{
       columns?: string;
       filters: Array<Record<string, any>>;
@@ -472,6 +473,10 @@ vi.mock("../db/index.js", () => {
       return mockState.stripe_webhook_events;
     }
 
+    if (table === "stripe_balance_transactions") {
+      return mockState.stripe_balance_transactions;
+    }
+
     return [];
   };
 
@@ -538,6 +543,11 @@ vi.mock("../db/index.js", () => {
 
     if (table === "stripe_webhook_events") {
       mockState.stripe_webhook_events = rows;
+      return;
+    }
+
+    if (table === "stripe_balance_transactions") {
+      mockState.stripe_balance_transactions = rows;
     }
   };
 
@@ -1818,6 +1828,7 @@ beforeEach(() => {
     },
   ];
   mockState.stripe_webhook_events = [];
+  mockState.stripe_balance_transactions = [];
   mockState.toll_transfer_notices = [];
   mockState.toll_transfer_notice_audit_events = [];
   mockState.manual_invoices = [];
@@ -3962,6 +3973,38 @@ describe("Operational history API", () => {
     expect(res.body.items[0].full_name).toBe("Jordan Rider");
   });
 
+  it("GET /api/customers excludes name-only customer rows without invoice activity", async () => {
+    makeOperationalRowsCurrent();
+    mockState.customers.push({
+      id: 3,
+      external_id: null,
+      staff_number: null,
+      full_name: "Name Only Customer",
+      preferred_name: null,
+      company_name: null,
+      phone: null,
+      email: null,
+      date_of_birth: null,
+      street: null,
+      city: null,
+      postcode: null,
+      state: null,
+      source: "current",
+      created_at: "2026-03-05T00:00:00.000Z",
+      updated_at: "2026-03-05T00:00:00.000Z",
+    });
+
+    const res = await request(app)
+      .get("/api/customers")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.totalItems).toBe(2);
+    expect(res.body.items.map((customer: any) => customer.full_name)).not.toContain(
+      "Name Only Customer",
+    );
+  });
+
   it("GET /api/invoices returns invoice history for admins", async () => {
     makeOperationalRowsCurrent();
 
@@ -4090,6 +4133,20 @@ describe("Operational history API", () => {
   it("GET /api/financials/weekly paginates Stripe payouts beyond the first page", async () => {
     mockState.applications = [];
     mockState.rentals = [];
+    mockState.stripe_balance_transactions = [
+      {
+        id: "txn_csv_1",
+        type: "payment",
+        source: "py_csv_1",
+        amount: 300,
+        fee: 3.3,
+        net: 296.7,
+        currency: "aud",
+        created_at: "2026-07-07T15:01:00.000Z",
+        description: "Subscription update",
+        transfer: "po_csv_1",
+      },
+    ];
 
     const firstPage = Array.from({ length: 10 }, (_, index) => buildStripePayout(index));
     const secondPage = [buildStripePayout(10)];
@@ -4115,6 +4172,22 @@ describe("Operational history API", () => {
     });
     expect(res.body).toMatchObject({
       actual_payouts_weekly: 6600,
+      imported_balance_gross: 300,
+      imported_balance_net: 296.7,
+      imported_balance_transactions: [
+        {
+          id: "txn_csv_1",
+          type: "payment",
+          amount: 300,
+          fee: 3.3,
+          net: 296.7,
+          currency: "aud",
+          created_at: "2026-07-07T15:01:00.000Z",
+          description: "Subscription update",
+          source: "py_csv_1",
+          transfer: "po_csv_1",
+        },
+      ],
       recent_payouts: firstPage.slice(0, 10).map((payout) => ({
         id: payout.id,
         amount: payout.amount / 100,

@@ -20,6 +20,7 @@
     "migrate:application-indexes": "node scripts/migrate-application-indexes.js",
     "verify:schema-contract": "tsx scripts/verify-production-schema-contract.js",
     "verify-production-schema-contract": "npm run verify:schema-contract",
+    "import:stripe-admin-csv": "node scripts/import-stripe-admin-csv.js",
     "smoke:production:admin": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-production-admin-smoke.ps1",
     "stripe:setup": "tsx scripts/stripe-setup.ts",
     "stripe:handoff": "tsx scripts/stripe-setup.ts --require-live",

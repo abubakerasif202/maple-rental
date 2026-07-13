@@ -8,6 +8,7 @@ import {
   getRentalSelectColumns,
 } from '../schemaCompat.js';
 import { getOptionalStripeClient } from '../stripeClient.js';
+import { isMissingOperationalHistoryTableError } from '../operationalHistory.js';
 import {
   filterRealApplications,
   filterRealRentals,
@@ -17,6 +18,7 @@ import {
 const router = express.Router();
 const STRIPE_PAYOUTS_PAGE_SIZE = 100;
 const RECENT_PAYOUTS_LIMIT = 10;
+const RECENT_BALANCE_TRANSACTIONS_LIMIT = 10;
 
 const parseDateOnlyToStripeTimestamp = (value: unknown, endOfDay = false) => {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -120,18 +122,61 @@ router.get('/weekly', authenticateAdmin, async (req, res) => {
       created.lte = requestedEnd;
     }
 
+    const balanceTransactionQuery = db
+      .from('stripe_balance_transactions')
+      .select('*')
+      .gte('created_at', new Date(created.gte * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(RECENT_BALANCE_TRANSACTIONS_LIMIT);
+    const { data: balanceTransactions, error: balanceTransactionsError } =
+      await balanceTransactionQuery;
+
+    if (
+      balanceTransactionsError &&
+      !isMissingOperationalHistoryTableError(balanceTransactionsError)
+    ) {
+      throw balanceTransactionsError;
+    }
+
+    const importedBalanceTransactions =
+      balanceTransactionsError && isMissingOperationalHistoryTableError(balanceTransactionsError)
+        ? []
+        : ((balanceTransactions || []) as Array<Record<string, any>>);
+
     const payouts = await fetchAllStripePayouts(stripe, created);
     const recentPayouts = payouts.slice(0, RECENT_PAYOUTS_LIMIT);
 
     const actual_payouts_weekly = payouts
       .filter((payout) => payout.status === 'paid' || payout.status === 'in_transit')
       .reduce((sum, p) => sum + (p.amount / 100), 0);
+    const imported_balance_net = importedBalanceTransactions.reduce(
+      (sum, transaction) => sum + (Number(transaction.net) || 0),
+      0,
+    );
+    const imported_balance_gross = importedBalanceTransactions.reduce(
+      (sum, transaction) => sum + (Number(transaction.amount) || 0),
+      0,
+    );
 
     res.json({
       projected_gross_weekly,
       projected_net_weekly,
       estimated_platform_fees,
       actual_payouts_weekly,
+      imported_balance_gross,
+      imported_balance_net,
+      imported_balance_transactions: importedBalanceTransactions.map((transaction) => ({
+        id: transaction.id,
+        type: transaction.type,
+        amount: Number(transaction.amount) || 0,
+        fee: Number(transaction.fee) || 0,
+        net: Number(transaction.net) || 0,
+        currency: transaction.currency || 'aud',
+        created_at: transaction.created_at,
+        description: transaction.description || null,
+        source: transaction.source || null,
+        transfer: transaction.transfer || null,
+      })),
       recent_payouts: recentPayouts.map((p) => ({
         id: p.id,
         amount: p.amount / 100,
