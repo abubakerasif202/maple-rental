@@ -67,6 +67,18 @@ export const PRODUCTION_SCHEMA_CONTRACT_REQUIRED_COLUMNS = {
       label: 'stripe_subscription_id',
       acceptable: ['stripe_subscription_id', 'stripeSubscriptionId'],
     },
+    {
+      label: 'stripe_status_event_created_at',
+      acceptable: ['stripe_status_event_created_at'],
+    },
+    {
+      label: 'stripe_status_event_id',
+      acceptable: ['stripe_status_event_id'],
+    },
+    {
+      label: 'stripe_status_event_terminal',
+      acceptable: ['stripe_status_event_terminal'],
+    },
   ],
   customers: [
     { label: 'is_imported', acceptable: ['is_imported'] },

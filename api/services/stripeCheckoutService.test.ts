@@ -81,6 +81,112 @@ describe('stripeCheckoutService checkout helpers', () => {
     });
   });
 
+  it('reuses a complete checkout session instead of creating a replacement', async () => {
+    mockCheckoutSessionRetrieve.mockResolvedValueOnce({
+      id: 'cs_complete_vehicle',
+      metadata: {
+        application_id: '11111111-1111-4111-8111-111111111111',
+        checkout_kind: 'vehicle',
+        payment_link_version: '4',
+      },
+      status: 'complete',
+      url: null,
+    });
+
+    await expect(
+      resolvePendingCheckoutSession({
+        application: {
+          id: '11111111-1111-4111-8111-111111111111',
+          email: 'driver@example.com',
+          name: 'Driver One',
+          payment_link_version: 4,
+          pending_checkout_session_id: 'cs_complete_vehicle',
+          status: 'Approved',
+        },
+      })
+    ).resolves.toMatchObject({
+      retryKeySeed: null,
+      session: {
+        id: 'cs_complete_vehicle',
+        status: 'complete',
+      },
+    });
+  });
+
+  it('allows replacement only when Stripe confirms the pending session is missing', async () => {
+    mockCheckoutSessionRetrieve.mockRejectedValueOnce(
+      Object.assign(new Error('No such checkout.session'), {
+        code: 'resource_missing',
+        statusCode: 404,
+        type: 'StripeInvalidRequestError',
+      })
+    );
+
+    await expect(
+      resolvePendingCheckoutSession({
+        application: {
+          id: '11111111-1111-4111-8111-111111111111',
+          email: 'driver@example.com',
+          name: 'Driver One',
+          payment_link_version: 4,
+          pending_checkout_session_id: 'cs_missing_vehicle',
+          status: 'Approved',
+        },
+      })
+    ).resolves.toEqual({
+      retryKeySeed: 'cs_missing_vehicle',
+      session: null,
+    });
+  });
+
+  it('propagates transient Stripe reads instead of creating a second payable session', async () => {
+    const connectionError = Object.assign(new Error('Stripe connection timed out'), {
+      type: 'StripeConnectionError',
+    });
+    mockCheckoutSessionRetrieve.mockRejectedValueOnce(connectionError);
+
+    await expect(
+      resolvePendingCheckoutSession({
+        application: {
+          id: '11111111-1111-4111-8111-111111111111',
+          email: 'driver@example.com',
+          name: 'Driver One',
+          payment_link_version: 4,
+          pending_checkout_session_id: 'cs_unknown_vehicle',
+          status: 'Approved',
+        },
+      })
+    ).rejects.toBe(connectionError);
+  });
+
+  it('allows replacement after Stripe confirms the pending session is terminal', async () => {
+    mockCheckoutSessionRetrieve.mockResolvedValueOnce({
+      id: 'cs_expired_vehicle',
+      metadata: {
+        application_id: '11111111-1111-4111-8111-111111111111',
+        checkout_kind: 'vehicle',
+        payment_link_version: '4',
+      },
+      status: 'expired',
+    });
+
+    await expect(
+      resolvePendingCheckoutSession({
+        application: {
+          id: '11111111-1111-4111-8111-111111111111',
+          email: 'driver@example.com',
+          name: 'Driver One',
+          payment_link_version: 4,
+          pending_checkout_session_id: 'cs_expired_vehicle',
+          status: 'Approved',
+        },
+      })
+    ).resolves.toEqual({
+      retryKeySeed: 'cs_expired_vehicle',
+      session: null,
+    });
+  });
+
   it('expires an open pending checkout session', async () => {
     mockCheckoutSessionRetrieve.mockResolvedValueOnce({
       id: 'cs_open_vehicle',

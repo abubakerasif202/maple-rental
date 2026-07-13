@@ -375,6 +375,10 @@ export interface LeaseAgreementPayload {
   bondPaymentStatus?: string;
 }
 
+export interface AgreementTemplatePreviewPayload extends LeaseAgreementPayload {
+  content?: string;
+}
+
 export const createVehicleCheckoutLink = async (payload: {
   application_id: string;
 }): Promise<VehicleCheckoutLinkResponse> => {
@@ -486,7 +490,7 @@ export const activateAgreementTemplate = async (id: number): Promise<AgreementTe
 
 export const previewAgreementTemplate = async (
   id: number,
-  payload: LeaseAgreementPayload = {}
+  payload: AgreementTemplatePreviewPayload = {}
 ): Promise<{ agreement: string; agreementTemplateVersion: number }> => {
   const { data } = await api.post(`/admin/agreements/${id}/preview`, payload);
   return data;

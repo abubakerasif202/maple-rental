@@ -46,4 +46,5 @@ export const inquirySchema = z
     }
   });
 
-export type InquiryValues = z.infer<typeof inquirySchema>;
+export type InquiryFormValues = z.input<typeof inquirySchema>;
+export type InquiryValues = z.output<typeof inquirySchema>;

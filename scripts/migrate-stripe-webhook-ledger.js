@@ -10,16 +10,39 @@ dotenv.config();
 
 const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || '';
 
-const shouldUseRelaxedPostgresSsl = (value) => {
-  if (!value) {
-    return false;
+const getSecureConnectionOptions = (value) => {
+  const url = new URL(value);
+  const hostname = url.hostname.toLowerCase();
+  const private172Match = hostname.match(/^172\.(\d{1,3})\./);
+  const private172Octet = Number(private172Match?.[1]);
+  const privateHost =
+    hostname === 'localhost' ||
+    hostname === '::1' ||
+    hostname.startsWith('127.') ||
+    hostname.startsWith('10.') ||
+    hostname.startsWith('192.168.') ||
+    (Boolean(private172Match) && private172Octet >= 16 && private172Octet <= 31) ||
+    hostname.endsWith('.internal') ||
+    !hostname.includes('.');
+
+  if (privateHost) {
+    return { connectionString: value };
   }
 
-  try {
-    return new URL(value).hostname.endsWith('.pooler.supabase.com');
-  } catch {
-    return value.includes('.pooler.supabase.com');
+  const sslMode = (url.searchParams.get('sslmode') || '').toLowerCase();
+  if (sslMode === 'disable' || sslMode === 'no-verify') {
+    throw new Error('External PostgreSQL connections must use certificate-verified TLS.');
   }
+
+  for (const parameter of ['ssl', 'sslcert', 'sslkey', 'sslmode', 'sslrootcert', 'uselibpqcompat']) {
+    url.searchParams.delete(parameter);
+  }
+
+  const ca = (process.env.DATABASE_SSL_CA || '').replace(/\\n/g, '\n').trim();
+  return {
+    connectionString: url.toString(),
+    ssl: { ...(ca ? { ca } : {}), rejectUnauthorized: true },
+  };
 };
 
 if (!connectionString) {
@@ -27,12 +50,7 @@ if (!connectionString) {
   process.exit(1);
 }
 
-const client = new Client({
-  connectionString,
-  ...(shouldUseRelaxedPostgresSsl(connectionString)
-    ? { ssl: { rejectUnauthorized: false } }
-    : {}),
-});
+const client = new Client(getSecureConnectionOptions(connectionString));
 
 async function runMigration() {
   try {

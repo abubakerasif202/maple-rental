@@ -1,4 +1,6 @@
-CREATE TABLE IF NOT EXISTS stripe_balance_transactions (
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.stripe_balance_transactions (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,
   source TEXT,
@@ -21,12 +23,22 @@ CREATE TABLE IF NOT EXISTS stripe_balance_transactions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_stripe_balance_transactions_created_at
-  ON stripe_balance_transactions(created_at DESC);
+  ON public.stripe_balance_transactions(created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_stripe_balance_transactions_type
-  ON stripe_balance_transactions(type);
+  ON public.stripe_balance_transactions(type);
 
-ALTER TABLE stripe_balance_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.stripe_balance_transactions ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS admin_full_access ON stripe_balance_transactions;
-CREATE POLICY admin_full_access ON stripe_balance_transactions FOR ALL TO authenticated USING (is_admin());
+REVOKE ALL ON public.stripe_balance_transactions FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.stripe_balance_transactions TO authenticated;
+GRANT ALL ON public.stripe_balance_transactions TO service_role;
+
+DROP POLICY IF EXISTS admin_full_access ON public.stripe_balance_transactions;
+CREATE POLICY admin_full_access
+  ON public.stripe_balance_transactions
+  FOR ALL TO authenticated
+  USING (private.is_admin())
+  WITH CHECK (private.is_admin());
+
+COMMIT;

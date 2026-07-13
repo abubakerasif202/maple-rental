@@ -2,11 +2,10 @@ import type Stripe from 'stripe';
 
 import { db } from '../db/index.js';
 import { getStripeClient } from '../stripeClient.js';
-import { persistPendingCheckoutSessionIdIfCurrentVersion } from '../applicationPaymentState.js';
+import { clearPendingCheckoutSessionIdIfCurrent } from '../applicationPaymentState.js';
 import {
   getRentalStatusUpdatePayload,
   handleVehicleCheckoutCompletion,
-  updateRentalsBySubscriptionIdentity,
 } from '../paymentActivation.js';
 import { getTodayInAustralia } from '../../shared/applicationSubmission.js';
 
@@ -601,7 +600,11 @@ const clearPendingCheckoutSessionForTerminatedSession = async (
   const expectedPaymentLinkVersion = Number(session.metadata?.payment_link_version);
   const sessionId = typeof session.id === 'string' ? session.id : null;
   if (!applicationId || !sessionId || !Number.isFinite(expectedPaymentLinkVersion) || expectedPaymentLinkVersion <= 0) return;
-  const cleared = await persistPendingCheckoutSessionIdIfCurrentVersion({ applicationId, expectedPaymentLinkVersion, sessionId: null });
+  const cleared = await clearPendingCheckoutSessionIdIfCurrent({
+    applicationId,
+    expectedPaymentLinkVersion,
+    expectedSessionId: sessionId,
+  });
   if (!cleared) {
     console.log(`Stripe Webhook: ignored ${reason} for session ${sessionId}; payment link version has advanced for application ${applicationId}.`);
     return;
@@ -613,26 +616,46 @@ const shouldCompleteRentalAfterRequestedCancellation = (
   subscription: Stripe.Subscription
 ) => subscription.cancellation_details?.reason === 'cancellation_requested';
 
-const isMissingSubscriptionRentalIdentityError = (error: unknown) =>
-  error instanceof Error &&
-  (error.message.includes('No rental found for Stripe subscription') ||
-    error.message.includes('missing a Stripe subscription identity column'));
-
 const updateRentalBySubscriptionIdentityOrSkip = async (
   subscriptionId: string,
-  metadata: Record<string, string | undefined>,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  event: Stripe.Event,
+  terminal = false
 ) => {
-  try {
-    await updateRentalsBySubscriptionIdentity(subscriptionId, metadata, payload);
-  } catch (error) {
-    if (isMissingSubscriptionRentalIdentityError(error)) {
-      console.warn(
-        `Ignoring subscription lifecycle webhook for ${subscriptionId} because no strict Stripe rental identity could be resolved.`
-      );
-      return;
-    }
-    throw error;
+  if (!Number.isSafeInteger(event.created) || event.created <= 0) {
+    throw new Error(`Stripe event ${event.id} is missing a valid created timestamp.`);
+  }
+
+  const status = typeof payload.status === 'string' ? payload.status : '';
+  const endDateValue = payload.end_date ?? payload.endDate;
+  const endDate = typeof endDateValue === 'string' ? endDateValue : null;
+  const { data, error } = await db.rpc('apply_stripe_rental_status_event', {
+    p_end_date: endDate,
+    p_event_created_at: new Date(event.created * 1000).toISOString(),
+    p_event_id: event.id,
+    p_status: status,
+    p_subscription_id: subscriptionId,
+    p_terminal: terminal,
+  });
+
+  if (error) {
+    throw new Error(
+      `Failed to apply ordered rental status for Stripe subscription ${subscriptionId}: ${error.message || 'Unknown error'}`
+    );
+  }
+
+  const result = Array.isArray(data) ? data[0] : data;
+  if (!result?.matched) {
+    console.warn(
+      `Ignoring subscription lifecycle webhook for ${subscriptionId} because no strict Stripe rental identity could be resolved.`
+    );
+    return;
+  }
+
+  if (!result.applied) {
+    console.info(
+      `Ignored stale Stripe rental status event ${event.id} for subscription ${subscriptionId}.`
+    );
   }
 };
 
@@ -711,8 +734,8 @@ export const processStripeWebhookWorkItem = async (
           const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
           await updateRentalBySubscriptionIdentityOrSkip(
             subscriptionId,
-            subscription.metadata,
-            await getRentalStatusUpdatePayload('Overdue')
+            await getRentalStatusUpdatePayload('Overdue'),
+            event
           );
         }
         break;
@@ -723,11 +746,35 @@ export const processStripeWebhookWorkItem = async (
         const subscriptionId = typeof subscriptionReference === 'string' ? subscriptionReference : subscriptionReference?.id || null;
         if (subscriptionId) {
           const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+          if (
+            subscription.metadata.checkout_kind === 'vehicle' &&
+            Number(invoice.amount_paid || 0) > 0
+          ) {
+            const sessions = await getStripe().checkout.sessions.list({
+              limit: 1,
+              subscription: subscriptionId,
+            });
+            const session = sessions.data.find(
+              (candidate) =>
+                candidate.metadata?.checkout_kind === 'vehicle' &&
+                candidate.metadata?.application_id === subscription.metadata.application_id &&
+                candidate.metadata?.payment_link_version ===
+                  subscription.metadata.payment_link_version
+            );
+
+            if (!session) {
+              throw new Error(
+                `No matching vehicle Checkout Session found for Stripe subscription ${subscriptionId}.`
+              );
+            }
+
+            fulfillmentOutcome = await handleVehicleCheckoutCompletion(session);
+          }
           if (subscription.status === 'active') {
             await updateRentalBySubscriptionIdentityOrSkip(
               subscriptionId,
-              subscription.metadata,
-              await getRentalStatusUpdatePayload('Active')
+              await getRentalStatusUpdatePayload('Active'),
+              event
             );
           }
         }
@@ -738,8 +785,8 @@ export const processStripeWebhookWorkItem = async (
         if (subscription.status === 'active') {
           await updateRentalBySubscriptionIdentityOrSkip(
             subscription.id,
-            subscription.metadata,
-            await getRentalStatusUpdatePayload('Active')
+            await getRentalStatusUpdatePayload('Active'),
+            event
           );
         }
         break;
@@ -752,8 +799,9 @@ export const processStripeWebhookWorkItem = async (
           : 'Cancelled';
         await updateRentalBySubscriptionIdentityOrSkip(
           subscriptionId,
-          subscription.metadata,
-          await getRentalStatusUpdatePayload(nextRentalStatus, todayIsoDate())
+          await getRentalStatusUpdatePayload(nextRentalStatus, todayIsoDate()),
+          event,
+          true
         );
         break;
       }
@@ -764,14 +812,14 @@ export const processStripeWebhookWorkItem = async (
         if (status === 'past_due' || status === 'unpaid') {
           await updateRentalBySubscriptionIdentityOrSkip(
             subscriptionId,
-            subscription.metadata,
-            await getRentalStatusUpdatePayload('Overdue')
+            await getRentalStatusUpdatePayload('Overdue'),
+            event
           );
         } else if (status === 'active') {
           await updateRentalBySubscriptionIdentityOrSkip(
             subscriptionId,
-            subscription.metadata,
-            await getRentalStatusUpdatePayload('Active')
+            await getRentalStatusUpdatePayload('Active'),
+            event
           );
         }
         break;

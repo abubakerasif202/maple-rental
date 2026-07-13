@@ -34,6 +34,9 @@ export const isChunkLoadError = (error: unknown) => {
   return false;
 };
 
+export const getErrorDetails = (error: Error, isDevelopment: boolean) =>
+  isDevelopment && error.message ? error.message : null;
+
 const hasReloadedChunkFailure = () => {
   if (!canUseSessionStorage()) {
     return false;
@@ -86,7 +89,12 @@ export class ErrorBoundary extends Component<Props, State> {
       return;
     }
 
-    console.error('Route rendering error:', error);
+    if (import.meta.env.DEV) {
+      console.error('Route rendering error:', error);
+      return;
+    }
+
+    console.error('Route rendering error');
   }
 
   handleRefresh = () => {
@@ -107,6 +115,7 @@ export class ErrorBoundary extends Component<Props, State> {
     }
 
     const isChunkFailure = isChunkLoadError(this.state.error);
+    const errorDetails = getErrorDetails(this.state.error, import.meta.env.DEV);
 
     return (
       <div className="flex min-h-[70vh] items-center justify-center px-6 py-20">
@@ -141,9 +150,9 @@ export class ErrorBoundary extends Component<Props, State> {
                 Home
               </a>
             </div>
-            {this.state.error.message ? (
+            {errorDetails ? (
               <p className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-xs leading-6 text-white/50">
-                {this.state.error.message}
+                {errorDetails}
               </p>
             ) : null}
           </div>
@@ -152,4 +161,3 @@ export class ErrorBoundary extends Component<Props, State> {
     );
   }
 }
-

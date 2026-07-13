@@ -9,6 +9,18 @@ const navLinks = [
   { name: 'Contact', path: '/#contact' },
 ];
 
+export const isNavigationPathActive = (path: string, pathname: string, hash: string) => {
+  if (path === '/') {
+    return pathname === '/' && hash !== '#contact';
+  }
+
+  if (path === '/#contact') {
+    return pathname === '/' && hash === '#contact';
+  }
+
+  return pathname.startsWith(path.split('#')[0]);
+};
+
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
@@ -25,7 +37,7 @@ export default function Navbar() {
   }, [isOpen]);
 
   const isActive = (path: string) =>
-    path === '/' ? location.pathname === '/' : location.pathname.startsWith(path.split('#')[0]);
+    isNavigationPathActive(path, location.pathname, location.hash);
 
   return (
     <nav aria-label="Primary navigation" className="sticky top-0 z-50 border-b border-white/10 bg-brand-navy/88 backdrop-blur-xl">

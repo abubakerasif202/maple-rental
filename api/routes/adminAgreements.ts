@@ -2,8 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 
 import {
-  DEFAULT_AGREEMENT_TEMPLATE_KEY,
-  fetchActiveAgreementTemplate,
+  type AgreementTemplateRecord,
   fetchAgreementTemplateById,
   fetchAgreementTemplates,
 } from '../agreementTemplates.js';
@@ -24,6 +23,25 @@ const previewAgreementTemplateSchema = leaseAgreementSchema.extend({
 });
 const adminActorFromRequest = (req: express.Request) =>
   ('email' in (req.admin || {}) ? req.admin?.email : undefined) || 'admin';
+
+const getAgreementTemplateRpcResult = (
+  data: unknown,
+  error: { message?: string } | null,
+): AgreementTemplateRecord | null => {
+  if (error) {
+    throw error;
+  }
+
+  if (data == null) {
+    return null;
+  }
+
+  if (typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Agreement template transaction returned an invalid response.');
+  }
+
+  return data as AgreementTemplateRecord;
+};
 
 router.get('/', authenticateAdmin, async (_req, res) => {
   try {
@@ -56,27 +74,15 @@ router.get('/:id', authenticateAdmin, async (req, res) => {
 router.post('/', authenticateAdmin, async (req, res) => {
   try {
     const payload = agreementTemplateSchema.parse(req.body ?? {});
-    const activeTemplate = await fetchActiveAgreementTemplate(payload.template_key);
-    const version =
-      activeTemplate.template_key === payload.template_key ? activeTemplate.version + 1 : 1;
-
-    const insertPayload = {
-      active: false,
-      content: payload.content,
-      name: payload.name,
-      template_key: payload.template_key || DEFAULT_AGREEMENT_TEMPLATE_KEY,
-      updated_by: adminActorFromRequest(req),
-      version,
-    };
-
-    const { data, error } = await db
-      .from('agreement_templates')
-      .insert([insertPayload])
-      .select('id, template_key, name, content, version, active, updated_by, created_at, updated_at')
-      .single();
-
-    if (error) throw error;
-    res.status(201).json(data);
+    const result = await db.rpc('create_agreement_template_version', {
+      p_activate: false,
+      p_content: payload.content,
+      p_name: payload.name,
+      p_template_key: payload.template_key,
+      p_updated_by: adminActorFromRequest(req),
+    });
+    const template = getAgreementTemplateRpcResult(result.data, result.error);
+    res.status(201).json(template);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: error.issues });
@@ -95,37 +101,18 @@ router.put('/:id', authenticateAdmin, async (req, res) => {
     }
 
     const payload = updateAgreementTemplateSchema.parse(req.body ?? {});
-    const current = await fetchAgreementTemplateById(parsedParams.data.id);
-    if (!current || current.id === 0) {
+    const result = await db.rpc('revise_agreement_template', {
+      p_content: payload.content,
+      p_name: payload.name ?? null,
+      p_source_id: parsedParams.data.id,
+      p_updated_by: adminActorFromRequest(req),
+    });
+    const template = getAgreementTemplateRpcResult(result.data, result.error);
+    if (!template) {
       return res.status(404).json({ error: 'Agreement template not found' });
     }
 
-    if (current.active) {
-      const { error: deactivateError } = await db
-        .from('agreement_templates')
-        .update({ active: false })
-        .eq('template_key', current.template_key);
-
-      if (deactivateError) throw deactivateError;
-    }
-
-    const insertPayload = {
-      active: current.active,
-      content: payload.content,
-      name: payload.name ?? current.name,
-      template_key: current.template_key,
-      updated_by: adminActorFromRequest(req),
-      version: current.version + 1,
-    };
-
-    const { data, error } = await db
-      .from('agreement_templates')
-      .insert([insertPayload])
-      .select('id, template_key, name, content, version, active, updated_by, created_at, updated_at')
-      .single();
-
-    if (error) throw error;
-    res.json(data);
+    res.json(template);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: error.issues });
@@ -143,31 +130,16 @@ router.post('/:id/activate', authenticateAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Validation failed', details: parsedParams.error.issues });
     }
 
-    const template = await fetchAgreementTemplateById(parsedParams.data.id);
-    if (!template || template.id === 0) {
+    const result = await db.rpc('activate_agreement_template', {
+      p_template_id: parsedParams.data.id,
+      p_updated_by: adminActorFromRequest(req),
+    });
+    const template = getAgreementTemplateRpcResult(result.data, result.error);
+    if (!template) {
       return res.status(404).json({ error: 'Agreement template not found' });
     }
 
-    const { error: deactivateError } = await db
-      .from('agreement_templates')
-      .update({ active: false })
-      .eq('template_key', template.template_key);
-
-    if (deactivateError) throw deactivateError;
-
-    const { data, error } = await db
-      .from('agreement_templates')
-      .update({
-        active: true,
-        updated_by: adminActorFromRequest(req),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', template.id)
-      .select('id, template_key, name, content, version, active, updated_by, created_at, updated_at')
-      .single();
-
-    if (error) throw error;
-    res.json(data);
+    res.json(template);
   } catch (error) {
     console.error('Activate agreement template error:', error);
     res.status(500).json({ error: 'Failed to activate agreement template' });

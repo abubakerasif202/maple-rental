@@ -42,6 +42,7 @@ import {
 
 import * as api from '../lib/api';
 import { getApiErrorMessage } from '../lib/errorHandling';
+import { completeAdminLogout } from '../lib/adminLogout';
 import {
   Application,
   Rental,
@@ -52,6 +53,7 @@ import {
 } from '../types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Sidebar from '../components/admin/Sidebar';
+import AccessibleDialog from '../components/admin/AccessibleDialog';
 import { getTodayInAustralia } from '../../shared/applicationSubmission';
 
 const OverviewTab = lazy(() => import('../components/admin/tabs/OverviewTab'));
@@ -483,13 +485,19 @@ export default function AdminDashboard() {
 
   const handleLogout = async () => {
     try {
-      await api.logoutAdmin();
-    } catch (e) {
-      console.error('Logout error:', e);
+      await completeAdminLogout({
+        clearClientState: () => queryClient.clear(),
+        logout: api.logoutAdmin,
+        redirectToLogin: () => navigate('/admin/login', { replace: true }),
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+      const logoutError = getApiErrorMessage(error, 'Logout failed.');
+      showNotification(
+        `${logoutError} Your admin session is still active. Please retry.`,
+        'error'
+      );
     }
-
-    queryClient.clear();
-    navigate('/admin/login', { replace: true });
   };
 
   const handleGenerateAgreement = async () => {
@@ -1054,21 +1062,22 @@ export default function AdminDashboard() {
 
       {/* Application Review Modal */}
       <AnimatePresence>
-        {selectedApplication && (
+        {selectedApplication && !isCancelApplicationModalOpen && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-brand-navy/60 backdrop-blur-xl sm:items-center sm:p-6">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+            <AccessibleDialog
+              ariaLabelledBy="application-review-title"
+              onClose={() => setSelectedApplication(null)}
               className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-brand-navy shadow-2xl sm:rounded-3xl"
             >
               <div className="flex items-center justify-between border-b border-white/10 bg-white/5 p-4 sm:p-8">
                 <div>
-                  <h3 className="text-xl font-bold text-white uppercase tracking-tighter">Review Application</h3>
+                  <h3 id="application-review-title" className="text-xl font-bold text-white uppercase tracking-tighter">Review Application</h3>
                   <p className="text-[10px] text-brand-grey uppercase tracking-widest mt-1">Driver profile and submitted documents</p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setSelectedApplication(null)}
+                  aria-label="Close application review"
                   className="text-brand-grey hover:text-white p-2 bg-white/5 rounded-full"
                 >
                   <XCircle className="w-6 h-6" />
@@ -1570,7 +1579,7 @@ export default function AdminDashboard() {
                   </Button>
                 )}
               </div>
-            </motion.div>
+            </AccessibleDialog>
           </div>
         )}
       </AnimatePresence>
@@ -1578,15 +1587,18 @@ export default function AdminDashboard() {
       <AnimatePresence>
         {isCancelApplicationModalOpen && selectedApplication && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-brand-navy/60 backdrop-blur-xl sm:items-center sm:p-6">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+            <AccessibleDialog
+              ariaLabelledBy="cancel-application-title"
+              onClose={() => {
+                if (!cancelApplicationMutation.isPending) {
+                  setIsCancelApplicationModalOpen(false);
+                }
+              }}
               className="w-full max-w-2xl overflow-hidden rounded-t-3xl border border-white/10 bg-brand-navy shadow-2xl sm:rounded-3xl"
             >
               <div className="flex items-center justify-between border-b border-white/10 bg-white/5 p-4 sm:p-6">
                 <div>
-                  <h3 className="text-xl font-bold tracking-tighter text-white">
+                  <h3 id="cancel-application-title" className="text-xl font-bold tracking-tighter text-white">
                     Cancel rental application
                   </h3>
                   <p className="mt-1 text-[10px] uppercase tracking-widest text-brand-grey">
@@ -1594,7 +1606,10 @@ export default function AdminDashboard() {
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setIsCancelApplicationModalOpen(false)}
+                  aria-label="Close application cancellation"
+                  disabled={cancelApplicationMutation.isPending}
                   className="rounded-full bg-white/5 p-2 text-brand-grey hover:text-white"
                 >
                   <XCircle />
@@ -1607,10 +1622,14 @@ export default function AdminDashboard() {
                   and expire only the Stripe resources linked to this application.
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-brand-grey">
+                  <label
+                    htmlFor="application-cancellation-reason"
+                    className="text-[10px] font-bold uppercase tracking-widest text-brand-grey"
+                  >
                     Cancellation reason
                   </label>
                   <textarea
+                    id="application-cancellation-reason"
                     value={cancelApplicationReason}
                     onChange={(event) => setCancelApplicationReason(event.target.value)}
                     rows={4}
@@ -1622,12 +1641,15 @@ export default function AdminDashboard() {
 
               <div className="flex flex-col-reverse gap-3 border-t border-white/10 bg-white/5 p-4 sm:flex-row sm:p-6">
                 <button
+                  type="button"
                   onClick={() => setIsCancelApplicationModalOpen(false)}
+                  disabled={cancelApplicationMutation.isPending}
                   className="w-full rounded-full border border-white/10 px-6 py-4 text-xs font-bold uppercase tracking-widest text-white transition-all hover:bg-white/5 sm:flex-1"
                 >
                   Keep application
                 </button>
                 <button
+                  type="button"
                   onClick={() =>
                     cancelApplicationMutation.mutate({
                       id: selectedApplication.id,
@@ -1645,7 +1667,7 @@ export default function AdminDashboard() {
                   Cancel rental application
                 </button>
               </div>
-            </motion.div>
+            </AccessibleDialog>
           </div>
         )}
       </AnimatePresence>
@@ -1654,18 +1676,18 @@ export default function AdminDashboard() {
       <AnimatePresence>
         {isAgreementModalOpen && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-brand-navy/60 backdrop-blur-xl sm:items-center sm:p-6">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
+            <AccessibleDialog
+              animationScale={0.9}
+              ariaLabelledBy="lease-agreement-review-title"
+              onClose={closeAgreementModal}
               className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-brand-navy shadow-2xl sm:rounded-3xl"
             >
               <div className="flex items-center justify-between border-b border-white/10 bg-white/5 p-4 sm:p-8">
                 <div>
-                  <h3 className="text-xl font-bold text-white uppercase tracking-tighter">Review Lease Agreement</h3>
+                  <h3 id="lease-agreement-review-title" className="text-xl font-bold text-white uppercase tracking-tighter">Review Lease Agreement</h3>
                   <p className="text-[10px] text-brand-grey uppercase tracking-widest mt-1">Legally binding Markdown contract</p>
                 </div>
-                <button onClick={closeAgreementModal} className="rounded-full bg-white/5 p-2 text-brand-grey hover:text-white"><XCircle /></button>
+                <button type="button" onClick={closeAgreementModal} aria-label="Close lease agreement review" className="rounded-full bg-white/5 p-2 text-brand-grey hover:text-white"><XCircle /></button>
               </div>
               <div className="flex-1 overflow-y-auto bg-white/[0.02] p-4 sm:p-12">
                 <div className="prose prose-invert prose-brand max-w-none">
@@ -1676,6 +1698,7 @@ export default function AdminDashboard() {
               </div>
               <div className="flex flex-col-reverse gap-4 border-t border-white/10 bg-white/5 p-4 sm:flex-row sm:p-8">
                 <button
+                  type="button"
                   onClick={closeAgreementModal}
                   className="w-full border border-white/10 py-5 text-xs font-bold uppercase tracking-widest text-white transition-all hover:bg-white/5 sm:flex-1"
                 >
@@ -1683,6 +1706,7 @@ export default function AdminDashboard() {
                 </button>
                 {agreementModalMode === 'draft' && (
                   <button
+                    type="button"
                     onClick={() => {
                       const application_id = selected_agreement_application_id;
                       if (application_id) {
@@ -1704,7 +1728,7 @@ export default function AdminDashboard() {
                   </button>
                 )}
               </div>
-            </motion.div>
+            </AccessibleDialog>
           </div>
         )}
       </AnimatePresence>

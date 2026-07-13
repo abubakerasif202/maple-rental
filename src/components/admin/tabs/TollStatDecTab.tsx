@@ -529,7 +529,7 @@ export default function TollStatDecTab({ initialSearch = '' }: TollStatDecTabPro
     nominee_suburb: form.nominee_suburb.trim(),
     rental_id: form.rental_id || null,
     responsible_type: form.responsible_type,
-    toll_notice_number: form.toll_notice_number.trim() || null,
+    toll_notice_number: String(form.toll_notice_number || '').trim() || null,
     toll_trip_date: null,
     vehicle_registration: form.vehicle_registration.trim().toUpperCase(),
     witness_jp_number: form.witness_jp_number?.trim() || null,
@@ -537,13 +537,13 @@ export default function TollStatDecTab({ initialSearch = '' }: TollStatDecTabPro
     witness_qualification: form.witness_qualification?.trim() || null,
   });
 
-  const handleGenerate = async () => {
+  const handleGenerate = () => {
     setMessage(null);
     if (!validate()) {
       setMessage({ type: 'error', text: 'Complete the required fields before generating.' });
       return;
     }
-    await createMutation.mutateAsync(buildPayload());
+    createMutation.mutate(buildPayload());
   };
 
   const handleDownload = async (id: number) => {
@@ -809,7 +809,7 @@ export default function TollStatDecTab({ initialSearch = '' }: TollStatDecTabPro
                   : `${missingRequiredFields.length} required field${missingRequiredFields.length === 1 ? '' : 's'} remaining`}
               </span>
               <span className="font-mono text-[10px] uppercase tracking-widest text-white">
-                {display(form.vehicle_registration)} | {form.toll_notice_number.trim()}
+                {display(form.vehicle_registration)} | {String(form.toll_notice_number || '').trim()}
               </span>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">

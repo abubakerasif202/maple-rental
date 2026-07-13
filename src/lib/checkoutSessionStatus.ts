@@ -1,5 +1,6 @@
 export type CheckoutSessionStatusState =
   | 'complete_paid'
+  | 'scheduled'
   | 'processing'
   | 'pending_webhook'
   | 'manual_review'
@@ -99,6 +100,19 @@ export const getCheckoutStatusPresentation = ({
       state,
       title: 'Payment Successful',
       tone: 'success',
+    };
+  }
+
+  if (state === 'scheduled') {
+    return {
+      body: 'Your Stripe subscription is set up. No payment was due today; the first weekly payment is scheduled for your approved rental start date.',
+      isFailure: false,
+      shouldRefetch: false,
+      showSecurePaymentLink: false,
+      showSpinner: false,
+      state,
+      title: 'Payment Scheduled',
+      tone: 'processing',
     };
   }
 

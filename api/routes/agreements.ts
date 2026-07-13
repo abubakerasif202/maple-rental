@@ -220,7 +220,9 @@ router.post('/', authenticateAdmin, async (req, res) => {
       error = retry.error;
     }
 
-    if (error) throw error;
+    if (error || !inserted) {
+      throw error || new Error('Agreement insert did not return a record.');
+    }
     await recordAdminAuditEvent({
       action: 'lease_agreement_created',
       actor: req.admin?.email || null,

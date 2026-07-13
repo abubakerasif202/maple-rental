@@ -92,7 +92,7 @@ router.get('/', authenticateAdmin, async (req, res) => {
 
     const customerIds = (invoices || [])
       .map((invoice: any) => Number(invoice.customer_id))
-      .filter((customerId) => Number.isFinite(customerId));
+      .filter((customerId: number) => Number.isFinite(customerId));
 
     let customers: Array<Record<string, any>> = [];
     if (customerIds.length > 0) {

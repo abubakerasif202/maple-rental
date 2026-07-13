@@ -1,36 +1,12 @@
 import fs from 'node:fs';
-import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import pg from 'pg';
 import dotenv from 'dotenv';
 
 const { Client } = pg;
 dotenv.config();
 
-const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || '';
-if (!connectionString) {
-  console.error('Missing DATABASE_URL or SUPABASE_DB_URL environment variable.');
-  process.exit(1);
-}
-
-const args = new Map();
-for (const arg of process.argv.slice(2)) {
-  const [key, ...rest] = arg.split('=');
-  if (key?.startsWith('--')) {
-    args.set(key.slice(2), rest.join('='));
-  }
-}
-
-const customersPath = args.get('customers');
-const balancePath = args.get('balance');
-
-if (!customersPath || !balancePath) {
-  console.error(
-    'Usage: node scripts/import-stripe-admin-csv.js --customers="C:\\path\\unified_customers.csv" --balance="C:\\path\\balance_history.csv"',
-  );
-  process.exit(1);
-}
-
-const readCsv = (filePath) => {
+export const readCsv = (filePath) => {
   const content = fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '');
   const rows = [];
   let field = '';
@@ -88,7 +64,7 @@ const readCsv = (filePath) => {
   );
 };
 
-const nullable = (value) => {
+export const nullable = (value) => {
   const trimmed = String(value ?? '').trim();
   return trimmed ? trimmed : null;
 };
@@ -103,7 +79,7 @@ const decimal = (value, fallback = null) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const timestamp = (value) => {
+export const timestamp = (value) => {
   const trimmed = nullable(value);
   if (!trimmed) {
     return null;
@@ -113,24 +89,74 @@ const timestamp = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 };
 
-const migrationSql = fs.readFileSync(
-  path.join(process.cwd(), 'supabase', 'migrations', '20260714033000_stripe_csv_imports.sql'),
-  'utf8',
-);
+export const mapStripeCustomerRow = (row) => {
+  const externalId = nullable(row.id);
+  const fullName = nullable(row.Name) || nullable(row.Email) || externalId;
+  if (!externalId || !fullName) {
+    return null;
+  }
 
-const client = new Client({ connectionString });
+  return {
+    externalId,
+    fullName,
+    values: [
+      externalId,
+      fullName,
+      nullable(row.Email),
+      nullable(row['Address Line1']),
+      nullable(row['Address City']),
+      nullable(row['Address Postal Code']),
+      nullable(row['Address State']),
+      timestamp(row['Created (UTC)']),
+    ],
+  };
+};
 
-try {
+const parseArgs = (argv) => {
+  const args = new Map();
+  for (const arg of argv) {
+    const [key, ...rest] = arg.split('=');
+    if (key?.startsWith('--')) {
+      args.set(key.slice(2), rest.join('='));
+    }
+  }
+  return args;
+};
+
+export const runStripeAdminCsvImport = async ({ argv = process.argv.slice(2), env = process.env } = {}) => {
+  const connectionString = env.DATABASE_URL || env.SUPABASE_DB_URL || '';
+  if (!connectionString) {
+    throw new Error('Missing DATABASE_URL or SUPABASE_DB_URL environment variable.');
+  }
+
+  const args = parseArgs(argv);
+  const customersPath = args.get('customers');
+  const balancePath = args.get('balance');
+  if (!customersPath || !balancePath) {
+    throw new Error(
+      'Usage: node scripts/import-stripe-admin-csv.js --customers="C:\\path\\unified_customers.csv" --balance="C:\\path\\balance_history.csv"',
+    );
+  }
+
+  const client = new Client({ connectionString });
+
+  try {
   await client.connect();
   await client.query('BEGIN');
-  await client.query(migrationSql);
+  const requiredTables = await client.query(
+    `SELECT
+       to_regclass('public.customers') AS customers,
+       to_regclass('public.stripe_balance_transactions') AS balance_transactions`,
+  );
+  if (!requiredTables.rows[0]?.customers || !requiredTables.rows[0]?.balance_transactions) {
+    throw new Error('Required Stripe CSV import migrations have not been applied.');
+  }
 
   const customerRows = readCsv(customersPath);
   let importedCustomers = 0;
   for (const row of customerRows) {
-    const externalId = nullable(row.id);
-    const fullName = nullable(row.Name) || nullable(row.Email) || externalId;
-    if (!externalId || !fullName) {
+    const customer = mapStripeCustomerRow(row);
+    if (!customer) {
       continue;
     }
 
@@ -162,16 +188,7 @@ try {
           source = EXCLUDED.source,
           updated_at = CURRENT_TIMESTAMP
       `,
-      [
-        externalId,
-        fullName,
-        nullable(row.Email),
-        nullable(row['Address Line1']),
-        nullable(row['Address City']),
-        nullable(row['Address Postal Code']),
-        nullable(row['Address Country']),
-        timestamp(row['Created (UTC)']),
-      ],
+      customer.values,
     );
     importedCustomers += 1;
   }
@@ -253,10 +270,23 @@ try {
   await client.query('COMMIT');
   console.log(`Imported ${importedCustomers} Stripe customers.`);
   console.log(`Imported ${importedBalanceTransactions} Stripe balance transactions.`);
-} catch (error) {
-  await client.query('ROLLBACK').catch(() => undefined);
-  console.error('Stripe CSV import failed:', error);
-  process.exitCode = 1;
-} finally {
-  await client.end();
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    await client.end();
+  }
+};
+
+const isDirectExecution = process.argv[1]
+  ? pathToFileURL(process.argv[1]).href === import.meta.url
+  : false;
+
+if (isDirectExecution) {
+  try {
+    await runStripeAdminCsvImport();
+  } catch (error) {
+    console.error('Stripe CSV import failed:', error);
+    process.exitCode = 1;
+  }
 }

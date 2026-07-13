@@ -197,6 +197,7 @@ const {
   mockCheckDirectDatabaseHealth,
   mockCreateAuthClient,
   mockClosePostgresPool,
+  mockDbRpc,
   mockGetSupabaseAuthConfigurationIssues,
   mockGetSupabaseConfigurationIssues,
   mockHasDirectDatabaseConnection,
@@ -217,6 +218,7 @@ const {
     bookings: [] as Array<Record<string, any>>,
     toll_transfer_notices: [] as Array<Record<string, any>>,
     toll_transfer_notice_audit_events: [] as Array<Record<string, any>>,
+    toll_notice_delivery_attempts: [] as Array<Record<string, any>>,
     manual_invoices: [] as Array<Record<string, any>>,
     manual_invoice_items: [] as Array<Record<string, any>>,
     stripe_webhook_events: [] as Array<Record<string, any>>,
@@ -244,6 +246,7 @@ const {
   mockCheckDirectDatabaseHealth: vi.fn(),
   mockCreateAuthClient: vi.fn(),
   mockClosePostgresPool: vi.fn(async () => undefined),
+  mockDbRpc: vi.fn(),
   mockGetSupabaseAuthConfigurationIssues: vi.fn(() => []),
   mockGetSupabaseConfigurationIssues: vi.fn(() => []),
   mockHasDirectDatabaseConnection: vi.fn(() => false),
@@ -337,6 +340,13 @@ vi.mock("../schemaCompat.js", async () => {
         ", ",
       ),
     ),
+    getApplicationDocumentColumn: vi.fn(async (column: string) => {
+      if (column === "license_back_photo") return "uberScreenshot";
+      if (column === "passport_or_uber_profile_screenshot") {
+        return "passportOrUberProfileScreenshot";
+      }
+      return "licensePhoto";
+    }),
     getApplicationSelectColumns: vi.fn(async () =>
       [
         "id",
@@ -556,6 +566,7 @@ vi.mock("../db/index.js", () => {
     | { type: "is"; column: string; value: unknown }
     | { type: "not"; column: string; operator: string; value: unknown }
     | { type: "gte"; column: string; value: unknown }
+    | { type: "lte"; column: string; value: unknown }
     | { type: "ilike"; column: string; pattern: string }
     | { type: "in"; column: string; values: unknown[] }
     | {
@@ -630,6 +641,29 @@ vi.mock("../db/index.js", () => {
           }
 
           return String(left) >= String(right);
+        }
+
+        if (filter.type === "lte") {
+          const left = readValue(filter.column);
+          const right = filter.value;
+
+          if (left == null || right == null) {
+            return false;
+          }
+
+          const leftAsNumber = Number(left);
+          const rightAsNumber = Number(right);
+          if (Number.isFinite(leftAsNumber) && Number.isFinite(rightAsNumber)) {
+            return leftAsNumber <= rightAsNumber;
+          }
+
+          const leftAsTime = Date.parse(String(left));
+          const rightAsTime = Date.parse(String(right));
+          if (Number.isFinite(leftAsTime) && Number.isFinite(rightAsTime)) {
+            return leftAsTime <= rightAsTime;
+          }
+
+          return String(left) <= String(right);
         }
 
         if (filter.type === "not") {
@@ -988,6 +1022,16 @@ vi.mock("../db/index.js", () => {
           columns,
           options,
           [...filters, { type: "gte", column, value }],
+          order,
+          range,
+        ),
+      ),
+      lte: vi.fn((column: string, value: unknown) =>
+        createSelectQuery(
+          table,
+          columns,
+          options,
+          [...filters, { type: "lte", column, value }],
           order,
           range,
         ),
@@ -1406,6 +1450,7 @@ vi.mock("../db/index.js", () => {
 
   return {
     db: {
+      rpc: mockDbRpc,
       from: vi.fn((table: string) => ({
         select: vi.fn(
           (columns?: string, options?: { count?: string; head?: boolean }) =>
@@ -1831,6 +1876,7 @@ beforeEach(() => {
   mockState.stripe_balance_transactions = [];
   mockState.toll_transfer_notices = [];
   mockState.toll_transfer_notice_audit_events = [];
+  mockState.toll_notice_delivery_attempts = [];
   mockState.manual_invoices = [];
   mockState.manual_invoice_items = [];
 
@@ -1963,6 +2009,335 @@ beforeEach(() => {
   mockGetSupabaseAuthConfigurationIssues.mockReturnValue([]);
   mockGetSupabaseConfigurationIssues.mockReturnValue([]);
   mockHasDirectDatabaseConnection.mockReturnValue(true);
+  mockDbRpc.mockImplementation(
+    async (functionName: string, args: Record<string, unknown>) => {
+      const now = new Date().toISOString();
+
+      if (functionName === "create_manual_invoice_transaction") {
+        const invoiceInput = args.p_invoice as Record<string, unknown>;
+        const itemInputs = args.p_items as Array<Record<string, unknown>>;
+        const invoiceNumber = String(invoiceInput.invoice_number || "").toUpperCase();
+        if (
+          mockState.manual_invoices.some(
+            (invoice) => invoice.invoice_number === invoiceNumber,
+          )
+        ) {
+          return { data: null, error: { code: "23505", message: "duplicate" } };
+        }
+
+        const invoiceId = `00000000-0000-4000-8000-${String(
+          mockState.manual_invoices.length + 1,
+        ).padStart(12, "0")}`;
+        const items: Array<Record<string, any>> = itemInputs.map((item, index) => {
+          const quantity = Number(item.quantity || 0);
+          const unitPrice = Number(item.unit_price || 0);
+          const gst = Number(item.gst || 0);
+          return {
+            ...item,
+            amount: Number((quantity * unitPrice + gst).toFixed(2)),
+            id: `00000000-0000-4000-8001-${String(index + 1).padStart(12, "0")}`,
+            invoice_id: invoiceId,
+          };
+        });
+        const subtotal = Number(
+          items
+            .reduce(
+              (total, item) =>
+                total + Number(item.quantity || 0) * Number(item.unit_price || 0),
+              0,
+            )
+            .toFixed(2),
+        );
+        const gst = Number(
+          items.reduce((total, item) => total + Number(item.gst || 0), 0).toFixed(2),
+        );
+        const invoice = {
+          ...invoiceInput,
+          created_at: now,
+          gst,
+          id: invoiceId,
+          invoice_number: invoiceNumber,
+          items,
+          subtotal,
+          total_inc_gst: Number((subtotal + gst).toFixed(2)),
+          updated_at: now,
+        };
+        mockState.manual_invoices.push(invoice);
+        mockState.manual_invoice_items.push(...items);
+        return { data: invoice, error: null };
+      }
+
+      if (functionName === "aggregate_stripe_balance_transactions") {
+        const start = String(args.p_start || "");
+        const end = String(args.p_end || "");
+        const rows = mockState.stripe_balance_transactions.filter((transaction) => {
+          const createdAt = String(transaction.created_at || "");
+          return createdAt >= start && createdAt <= end;
+        });
+        return {
+          data: {
+            count: rows.length,
+            gross: rows.reduce((total, row) => total + Number(row.amount || 0), 0),
+            net: rows.reduce((total, row) => total + Number(row.net || 0), 0),
+          },
+          error: null,
+        };
+      }
+
+      if (functionName === "list_current_customer_invoice_summaries") {
+        const importedSources = new Set(["demo", "imported", "legacy", "legacy-import", "test"]);
+        const isImported = (row: Record<string, any>) =>
+          row.is_imported === true ||
+          (row.is_imported == null && importedSources.has(String(row.source || "").toLowerCase()));
+        const currentInvoices = mockState.invoices.filter((invoice) => !isImported(invoice));
+        const search = String(args.p_search || "").trim().toLowerCase();
+        const eligible: Array<Record<string, any>> = mockState.customers
+          .filter((customer) => !isImported(customer))
+          .map((customer): Record<string, any> => {
+            const invoices = currentInvoices.filter(
+              (invoice) => invoice.customer_id === customer.id,
+            );
+            return {
+              ...customer,
+              invoice_count: invoices.length,
+              last_invoice_date:
+                invoices
+                  .map((invoice) => invoice.invoice_date)
+                  .filter(Boolean)
+                  .sort()
+                  .at(-1) || null,
+              outstanding_balance: invoices.reduce(
+                (total, invoice) => total + Number(invoice.balance || 0),
+                0,
+              ),
+              total_billed: invoices.reduce(
+                (total, invoice) => total + Number(invoice.amount || 0),
+                0,
+              ),
+            };
+          })
+          .filter((customer) => {
+            const searchable = [
+              customer.full_name,
+              customer.email,
+              customer.phone,
+              customer.company_name,
+              customer.staff_number,
+              customer.external_id,
+            ];
+            const matchesSearch =
+              !search || searchable.some((value) => String(value || "").toLowerCase().includes(search));
+            const hasOperationalData =
+              searchable.slice(1).some((value) => String(value || "").trim()) ||
+              customer.invoice_count > 0 ||
+              customer.total_billed > 0 ||
+              customer.outstanding_balance > 0 ||
+              customer.last_invoice_date != null;
+            return matchesSearch && hasOperationalData;
+          })
+          .sort((left, right) =>
+            String(left.full_name || "").localeCompare(String(right.full_name || "")) ||
+            Number(left.id) - Number(right.id),
+          );
+        const pageSize = Math.max(1, Math.min(Number(args.p_page_size) || 25, 100));
+        const totalItems = eligible.length;
+        const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+        const page = Math.min(Math.max(1, Number(args.p_page) || 1), totalPages);
+        return {
+          data: {
+            items: eligible.slice((page - 1) * pageSize, page * pageSize),
+            page,
+            pageSize,
+            totalItems,
+            totalPages,
+          },
+          error: null,
+        };
+      }
+
+      if (
+        functionName === "create_agreement_template_version" ||
+        functionName === "revise_agreement_template"
+      ) {
+        const source =
+          functionName === "revise_agreement_template"
+            ? mockState.agreement_templates.find(
+                (template) => template.id === Number(args.p_source_id),
+              )
+            : null;
+        if (functionName === "revise_agreement_template" && !source) {
+          return { data: null, error: null };
+        }
+        const templateKey = String(source?.template_key || args.p_template_key || "");
+        const active = source ? source.active === true : args.p_activate === true;
+        if (active) {
+          mockState.agreement_templates.forEach((template) => {
+            if (template.template_key === templateKey) template.active = false;
+          });
+        }
+        const versions = mockState.agreement_templates
+          .filter((template) => template.template_key === templateKey)
+          .map((template) => Number(template.version || 0));
+        const created = {
+          active,
+          content: String(args.p_content || ""),
+          created_at: now,
+          id:
+            Math.max(0, ...mockState.agreement_templates.map((template) => Number(template.id))) +
+            1,
+          name: String(args.p_name || source?.name || ""),
+          template_key: templateKey,
+          updated_at: now,
+          updated_by: String(args.p_updated_by || ""),
+          version: Math.max(0, ...versions) + 1,
+        };
+        mockState.agreement_templates.push(created);
+        return { data: created, error: null };
+      }
+
+      if (functionName === "activate_agreement_template") {
+        const selected = mockState.agreement_templates.find(
+          (template) => template.id === Number(args.p_template_id),
+        );
+        if (!selected) return { data: null, error: null };
+        mockState.agreement_templates.forEach((template) => {
+          if (template.template_key === selected.template_key) template.active = false;
+        });
+        selected.active = true;
+        selected.updated_at = now;
+        selected.updated_by = String(args.p_updated_by || "");
+        return { data: selected, error: null };
+      }
+
+      if (functionName === "claim_toll_notice_delivery") {
+        const noticeId = Number(args.p_notice_id);
+        const recipientEmail = String(args.p_recipient_email || "").trim().toLowerCase();
+        const contentHash = String(args.p_content_hash || "");
+        let attempt = mockState.toll_notice_delivery_attempts.find(
+          (candidate) =>
+            candidate.toll_transfer_notice_id === noticeId &&
+            candidate.recipient_email === recipientEmail &&
+            candidate.content_hash === contentHash,
+        );
+        if (!attempt) {
+          const id = `00000000-0000-4000-8002-${String(
+            mockState.toll_notice_delivery_attempts.length + 1,
+          ).padStart(12, "0")}`;
+          attempt = {
+            attempt_count: 0,
+            content_hash: contentHash,
+            created_at: now,
+            id,
+            idempotency_key: `toll-notice-${id}`,
+            recipient_email: recipientEmail,
+            status: "pending",
+            toll_transfer_notice_id: noticeId,
+            updated_at: now,
+          };
+          mockState.toll_notice_delivery_attempts.push(attempt);
+        }
+        const claimed = ["pending", "failed"].includes(String(attempt.status));
+        if (claimed) {
+          attempt.attempt_count = Number(attempt.attempt_count || 0) + 1;
+          attempt.error_message = null;
+          attempt.status = "sending";
+          attempt.updated_at = now;
+        }
+        return { data: { ...attempt, claimed }, error: null };
+      }
+
+      if (functionName === "finalize_toll_notice_delivery") {
+        const attempt = mockState.toll_notice_delivery_attempts.find(
+          (candidate) => candidate.id === args.p_attempt_id,
+        );
+        if (!attempt) {
+          return { data: null, error: { message: "Delivery attempt not found" } };
+        }
+        attempt.provider_message_id = args.p_provider_message_id || null;
+        attempt.sent_at = now;
+        attempt.status = "sent";
+        attempt.updated_at = now;
+        const notice = mockState.toll_transfer_notices.find(
+          (candidate) => candidate.id === attempt.toll_transfer_notice_id,
+        );
+        if (!notice) return { data: null, error: { message: "Notice not found" } };
+        notice.sent_at = notice.sent_at || now;
+        notice.sent_to = attempt.recipient_email;
+        notice.status = "sent";
+        notice.updated_at = now;
+        const alreadyAudited = mockState.toll_transfer_notice_audit_events.some(
+          (event) =>
+            event.action === "send_email" &&
+            event.metadata?.delivery_attempt_id === attempt.id,
+        );
+        if (!alreadyAudited) {
+          mockState.toll_transfer_notice_audit_events.push({
+            action: "send_email",
+            actor: args.p_actor,
+            created_at: now,
+            metadata: {
+              delivery_attempt_id: attempt.id,
+              provider_message_id: attempt.provider_message_id,
+              recipient_email: attempt.recipient_email,
+            },
+            toll_transfer_notice_id: notice.id,
+          });
+        }
+        return { data: notice, error: null };
+      }
+
+      if (functionName === "fail_toll_notice_delivery") {
+        const attempt = mockState.toll_notice_delivery_attempts.find(
+          (candidate) => candidate.id === args.p_attempt_id,
+        );
+        if (attempt) {
+          attempt.error_message = String(args.p_error_message || "Unknown delivery failure");
+          attempt.status = "failed";
+          attempt.updated_at = now;
+        }
+        return { data: null, error: null };
+      }
+
+      if (functionName !== "apply_stripe_rental_status_event") {
+        return {
+          data: null,
+          error: { message: `Unexpected database RPC in test: ${functionName}` },
+        };
+      }
+
+      const subscriptionId = String(args.p_subscription_id || "");
+      const rental = mockState.rentals.find(
+        (candidate) => candidate.stripe_subscription_id === subscriptionId,
+      );
+      if (!rental) {
+        return { data: [{ matched: false, applied: false }], error: null };
+      }
+
+      const incomingCreatedAt = String(args.p_event_created_at || "");
+      const existingCreatedAt = rental.stripe_status_event_created_at
+        ? String(rental.stripe_status_event_created_at)
+        : null;
+      const incomingTerminal = args.p_terminal === true;
+      const applied =
+        !existingCreatedAt ||
+        existingCreatedAt < incomingCreatedAt ||
+        (existingCreatedAt === incomingCreatedAt &&
+          incomingTerminal &&
+          rental.stripe_status_event_terminal !== true);
+
+      if (applied) {
+        rental.status = String(args.p_status || rental.status);
+        if (args.p_end_date) {
+          rental.end_date = String(args.p_end_date);
+        }
+        rental.stripe_status_event_created_at = incomingCreatedAt;
+        rental.stripe_status_event_id = String(args.p_event_id || "");
+        rental.stripe_status_event_terminal = incomingTerminal;
+      }
+
+      return { data: [{ matched: true, applied }], error: null };
+    },
+  );
   mockWithPostgresAdvisoryLock.mockImplementation(
     async (_lockKey: string, callback: () => Promise<unknown>) => callback(),
   );
@@ -3039,6 +3414,21 @@ describe("Applications API", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("Validation failed");
+  });
+
+  it("GET /api/applications/:id/documents/:document rejects external document URLs", async () => {
+    const externalDocumentUrl = "https://attacker.example/documents/admin-phishing.html";
+    mockState.applications[0].license_photo = externalDocumentUrl;
+    mockState.applications[0].licensePhoto = externalDocumentUrl;
+    mockStorageFrom.mockClear();
+
+    const res = await request(app)
+      .get(`/api/applications/${PENDING_APPLICATION_ID}/documents/license_photo`)
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe("Document not found");
+    expect(mockStorageFrom).not.toHaveBeenCalled();
   });
 
   it("GET /api/rentals returns paginated rows and caps the page size", async () => {
@@ -4142,7 +4532,7 @@ describe("Operational history API", () => {
         fee: 3.3,
         net: 296.7,
         currency: "aud",
-        created_at: "2026-07-07T15:01:00.000Z",
+        created_at: "2026-05-20T15:01:00.000Z",
         description: "Subscription update",
         transfer: "po_csv_1",
       },
@@ -4182,7 +4572,7 @@ describe("Operational history API", () => {
           fee: 3.3,
           net: 296.7,
           currency: "aud",
-          created_at: "2026-07-07T15:01:00.000Z",
+          created_at: "2026-05-20T15:01:00.000Z",
           description: "Subscription update",
           source: "py_csv_1",
           transfer: "po_csv_1",
@@ -5193,6 +5583,9 @@ describe("Toll Transfer Notices API", () => {
         ],
         to: "tolls@example.invalid",
       }),
+      {
+        idempotencyKey: expect.stringMatching(/^toll-notice-/),
+      },
     );
     expect(mockState.toll_transfer_notices[0]).toMatchObject({
       sent_to: "tolls@example.invalid",
@@ -6430,6 +6823,44 @@ describe("Stripe API", () => {
     },
   );
 
+  it("GET /api/stripe/checkout-sessions/:id returns scheduled before a future first payment", async () => {
+    const futureStartDate = getFutureDateOnly(30);
+    mockStripe.checkoutSessionsRetrieve.mockResolvedValueOnce({
+      id: "cs_future_scheduled",
+      status: "complete",
+      payment_status: "no_payment_required",
+      payment_method_types: ["card"],
+      metadata: {
+        application_id: APPROVED_APPLICATION_ID,
+        checkout_kind: "vehicle",
+        payment_link_version: "1",
+        rental_subscription_start_date: futureStartDate,
+      },
+      customer: "cus_future",
+      subscription: "sub_future",
+    });
+
+    const token = createCheckoutToken({
+      applicationId: APPROVED_APPLICATION_ID,
+      purpose: "vehicle",
+      version: 1,
+    });
+    const res = await request(app)
+      .get("/api/stripe/checkout-sessions/cs_future_scheduled")
+      .query({
+        application_id: APPROVED_APPLICATION_ID,
+        checkout_token: token.token,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      internal_status: "scheduled",
+      payment_status: "no_payment_required",
+      state: "scheduled",
+      status: "complete",
+    });
+  });
+
   it("GET /api/stripe/checkout-sessions/:id returns failed for expired checkout sessions", async () => {
     mockStripe.checkoutSessionsRetrieve.mockResolvedValueOnce({
       id: "cs_expired_vehicle",
@@ -6848,6 +7279,48 @@ describe("Stripe API", () => {
     expect(res.text).toBe("400 Bad Request: Invalid Signature");
   });
 
+  it("POST /api/stripe/webhook accepts the previous secret during rotation", async () => {
+    const priorPreviousSecret = process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS;
+    process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS = "previous-webhook-secret";
+    mockStripe.webhooksConstructEvent
+      .mockImplementationOnce(() => {
+        throw new Error("Primary webhook secret did not match");
+      })
+      .mockReturnValueOnce({
+        id: "evt_previous_secret",
+        type: "unhandled.test_event",
+        data: { object: { id: "obj_previous_secret" } },
+      });
+
+    try {
+      const res = await request(app)
+        .post("/api/stripe/webhook")
+        .set("stripe-signature", "test-signature")
+        .set("Content-Type", "application/json")
+        .send("{}");
+
+      expect(res.status).toBe(200);
+      expect(mockStripe.webhooksConstructEvent).toHaveBeenNthCalledWith(
+        1,
+        expect.any(Buffer),
+        "test-signature",
+        "test-webhook-secret",
+      );
+      expect(mockStripe.webhooksConstructEvent).toHaveBeenNthCalledWith(
+        2,
+        expect.any(Buffer),
+        "test-signature",
+        "previous-webhook-secret",
+      );
+    } finally {
+      if (priorPreviousSecret === undefined) {
+        delete process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS;
+      } else {
+        process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS = priorPreviousSecret;
+      }
+    }
+  });
+
   it("POST /api/stripe/webhook records payment-only completion without direct DB access", async () => {
     mockHasDirectDatabaseConnection.mockReturnValue(false);
     mockStripe.webhooksConstructEvent.mockReturnValue({
@@ -6941,6 +7414,7 @@ describe("Stripe API", () => {
       metadata: { application_id: APPROVED_APPLICATION_ID, car_id: "1" },
     });
     mockStripe.webhooksConstructEvent.mockReturnValue({
+      created: 1_780_000_001,
       id: "evt_test_3",
       type: "invoice.payment_failed",
       data: {
@@ -6975,6 +7449,7 @@ describe("Stripe API", () => {
       },
     ];
     mockStripe.webhooksConstructEvent.mockReturnValue({
+      created: 1_780_000_002,
       id: "evt_subscription_created",
       type: "customer.subscription.created",
       data: {
@@ -6999,6 +7474,61 @@ describe("Stripe API", () => {
     expect(mockState.rentals[0].status).toBe("Active");
   });
 
+  it("POST /api/stripe/webhook ignores an older subscription status event", async () => {
+    mockState.rentals = [
+      {
+        id: 20,
+        application_id: APPROVED_APPLICATION_ID,
+        bond_paid: 500,
+        car_id: 1,
+        status: "Active",
+        stripe_subscription_id: "sub_ordered",
+        weekly_price: 250,
+        start_date: "2026-03-01",
+      },
+    ];
+    mockStripe.webhooksConstructEvent
+      .mockReturnValueOnce({
+        created: 1_780_000_200,
+        id: "evt_newer_overdue",
+        type: "customer.subscription.updated",
+        data: {
+          object: {
+            id: "sub_ordered",
+            status: "past_due",
+            metadata: { application_id: APPROVED_APPLICATION_ID },
+          },
+        },
+      })
+      .mockReturnValueOnce({
+        created: 1_780_000_100,
+        id: "evt_older_active",
+        type: "customer.subscription.updated",
+        data: {
+          object: {
+            id: "sub_ordered",
+            status: "active",
+            metadata: { application_id: APPROVED_APPLICATION_ID },
+          },
+        },
+      });
+
+    for (let requestIndex = 0; requestIndex < 2; requestIndex += 1) {
+      const response = await request(app)
+        .post("/api/stripe/webhook")
+        .set("stripe-signature", "test-signature")
+        .set("Content-Type", "application/json")
+        .send("{}");
+      expect(response.status).toBe(200);
+    }
+
+    expect(mockState.rentals[0]).toMatchObject({
+      status: "Overdue",
+      stripe_status_event_id: "evt_newer_overdue",
+      stripe_status_event_terminal: false,
+    });
+  });
+
   it("POST /api/stripe/webhook handles invoice.payment_succeeded by restoring active rental state", async () => {
     mockState.rentals = [
       {
@@ -7018,6 +7548,7 @@ describe("Stripe API", () => {
       metadata: { application_id: APPROVED_APPLICATION_ID, car_id: "1" },
     });
     mockStripe.webhooksConstructEvent.mockReturnValue({
+      created: 1_780_000_003,
       id: "evt_invoice_paid",
       type: "invoice.payment_succeeded",
       data: {
@@ -7036,6 +7567,161 @@ describe("Stripe API", () => {
 
     expect(res.status).toBe(200);
     expect(mockState.rentals[0].status).toBe("Active");
+  });
+
+  it("POST /api/stripe/webhook marks a future-start application Paid on its first successful invoice", async () => {
+    mockState.applications[1].status = "Approved";
+    mockState.applications[1].pending_checkout_session_id = "cs_future_start";
+    mockState.cars[0].status = "Available";
+    mockState.rentals = [];
+    mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
+      id: "sub_future_start",
+      status: "active",
+      metadata: {
+        application_id: APPROVED_APPLICATION_ID,
+        checkout_kind: "vehicle",
+        payment_link_version: "1",
+      },
+    });
+    mockStripe.checkoutSessionsList.mockResolvedValueOnce({
+      data: [
+        {
+          id: "cs_future_start",
+          status: "complete",
+          payment_status: "no_payment_required",
+          customer: "cus_future_start",
+          subscription: "sub_future_start",
+          metadata: {
+            application_id: APPROVED_APPLICATION_ID,
+            checkout_kind: "vehicle",
+            payment_link_version: "1",
+          },
+        },
+      ],
+      has_more: false,
+    });
+    mockStripe.webhooksConstructEvent.mockReturnValue({
+      created: 1_780_000_004,
+      id: "evt_future_start_invoice_paid",
+      type: "invoice.payment_succeeded",
+      data: {
+        object: {
+          amount_paid: 25000,
+          id: "in_future_start_paid",
+          subscription: "sub_future_start",
+        },
+      },
+    });
+
+    const res = await request(app)
+      .post("/api/stripe/webhook")
+      .set("stripe-signature", "test-signature")
+      .set("Content-Type", "application/json")
+      .send("{}");
+
+    expect(res.status).toBe(200);
+    expect(mockStripe.checkoutSessionsList).toHaveBeenCalledWith({
+      limit: 1,
+      subscription: "sub_future_start",
+    });
+    expect(mockState.applications[1].status).toBe("Paid");
+    expect(mockState.applications[1].paid_at).toEqual(expect.any(String));
+    expect(mockState.applications[1].pending_checkout_session_id).toBeNull();
+    expect(mockState.cars[0].status).toBe("Available");
+    expect(mockState.rentals).toHaveLength(0);
+  });
+
+  it("POST /api/stripe/webhook does not fulfill a future-start application from a zero-dollar invoice", async () => {
+    mockState.applications[1].status = "Approved";
+    mockState.applications[1].pending_checkout_session_id = "cs_future_zero";
+    mockState.rentals = [];
+    mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
+      id: "sub_future_zero",
+      status: "active",
+      metadata: {
+        application_id: APPROVED_APPLICATION_ID,
+        checkout_kind: "vehicle",
+        payment_link_version: "1",
+      },
+    });
+    mockStripe.webhooksConstructEvent.mockReturnValue({
+      created: 1_780_000_005,
+      id: "evt_future_zero_invoice",
+      type: "invoice.payment_succeeded",
+      data: {
+        object: {
+          amount_paid: 0,
+          id: "in_future_zero",
+          subscription: "sub_future_zero",
+        },
+      },
+    });
+
+    const res = await request(app)
+      .post("/api/stripe/webhook")
+      .set("stripe-signature", "test-signature")
+      .set("Content-Type", "application/json")
+      .send("{}");
+
+    expect(res.status).toBe(200);
+    expect(mockStripe.checkoutSessionsList).not.toHaveBeenCalled();
+    expect(mockState.applications[1].status).toBe("Approved");
+    expect(mockState.applications[1].paid_at).toBeNull();
+    expect(mockState.applications[1].pending_checkout_session_id).toBe("cs_future_zero");
+    expect(mockState.rentals).toHaveLength(0);
+  });
+
+  it("POST /api/stripe/webhook clears a pending session only when the terminating session is current", async () => {
+    mockState.applications[1].status = "Approved";
+    mockState.applications[1].payment_link_version = 1;
+    mockState.applications[1].pending_checkout_session_id = "cs_replacement";
+    mockStripe.webhooksConstructEvent
+      .mockReturnValueOnce({
+        id: "evt_delayed_old_expiration",
+        type: "checkout.session.expired",
+        data: {
+          object: {
+            id: "cs_superseded",
+            metadata: {
+              application_id: APPROVED_APPLICATION_ID,
+              checkout_kind: "vehicle",
+              payment_link_version: "1",
+            },
+          },
+        },
+      })
+      .mockReturnValueOnce({
+        id: "evt_current_expiration",
+        type: "checkout.session.expired",
+        data: {
+          object: {
+            id: "cs_replacement",
+            metadata: {
+              application_id: APPROVED_APPLICATION_ID,
+              checkout_kind: "vehicle",
+              payment_link_version: "1",
+            },
+          },
+        },
+      });
+
+    const delayedResponse = await request(app)
+      .post("/api/stripe/webhook")
+      .set("stripe-signature", "test-signature")
+      .set("Content-Type", "application/json")
+      .send("{}");
+
+    expect(delayedResponse.status).toBe(200);
+    expect(mockState.applications[1].pending_checkout_session_id).toBe("cs_replacement");
+
+    const currentResponse = await request(app)
+      .post("/api/stripe/webhook")
+      .set("stripe-signature", "test-signature")
+      .set("Content-Type", "application/json")
+      .send("{}");
+
+    expect(currentResponse.status).toBe(200);
+    expect(mockState.applications[1].pending_checkout_session_id).toBeNull();
   });
 
   it("POST /api/stripe/webhook sends stale checkout sessions to manual review instead of activating the wrong car", async () => {
@@ -7420,6 +8106,7 @@ describe("Stripe API", () => {
       }),
     );
     mockStripe.webhooksConstructEvent.mockReturnValue({
+      created: 1_780_000_005,
       id: "evt_permanent_failure",
       type: "invoice.payment_failed",
       data: {
@@ -7458,6 +8145,7 @@ describe("Stripe API", () => {
       }),
     );
     mockStripe.webhooksConstructEvent.mockReturnValue({
+      created: 1_780_000_006,
       id: "evt_transient_failure",
       type: "invoice.payment_failed",
       data: {
@@ -7637,6 +8325,7 @@ describe("Stripe API", () => {
       },
     ];
     mockStripe.webhooksConstructEvent.mockReturnValue({
+      created: 1_780_000_007,
       id: "evt_test_10",
       type: "customer.subscription.deleted",
       data: {
@@ -7686,6 +8375,7 @@ describe("Stripe API", () => {
       },
     ];
     mockStripe.webhooksConstructEvent.mockReturnValue({
+      created: 1_780_000_008,
       id: "evt_test_11",
       type: "customer.subscription.deleted",
       data: {

@@ -7,6 +7,32 @@ import { processStripeWebhookEvent } from '../services/stripeWebhookService.js';
 const router = express.Router();
 const getStripe = () => getStripeClient();
 
+const constructStripeEvent = (body: Buffer, signature: string) => {
+  const webhookSecrets = Array.from(
+    new Set(
+      [
+        process.env.STRIPE_WEBHOOK_SECRET,
+        process.env.STRIPE_WEBHOOK_SECRET_PREVIOUS,
+      ]
+        .map((secret) => secret?.trim())
+        .filter((secret): secret is string => Boolean(secret))
+    )
+  );
+
+  let lastError: unknown;
+  for (const webhookSecret of webhookSecrets) {
+    try {
+      return getStripe().webhooks.constructEvent(body, signature, webhookSecret);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Stripe webhook signature verification failed.');
+};
+
 const getSafeStripeEventLogContext = (event: Stripe.Event) => {
   const payload = event.data.object as
     | { id?: unknown; metadata?: Record<string, unknown> | null }
@@ -40,11 +66,7 @@ router.post('/', async (request, response) => {
   let event: Stripe.Event;
 
   try {
-    event = getStripe().webhooks.constructEvent(
-      request.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
+    event = constructStripeEvent(request.body, sig);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error(`Stripe Webhook Error: ${message}`);

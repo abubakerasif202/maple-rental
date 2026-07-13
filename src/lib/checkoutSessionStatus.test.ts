@@ -37,6 +37,24 @@ describe('checkout session status presentation', () => {
     expect(presentation.shouldRefetch).toBe(false);
   });
 
+  it('shows a stable scheduled state before a future first payment', () => {
+    const presentation = getCheckoutStatusPresentation({
+      data: {
+        ...baseStatus,
+        internal_status: 'scheduled',
+        payment_status: 'no_payment_required',
+        state: 'scheduled',
+      },
+      hasVerificationContext: true,
+      isError: false,
+    });
+
+    expect(presentation.title).toBe('Payment Scheduled');
+    expect(presentation.isFailure).toBe(false);
+    expect(presentation.shouldRefetch).toBe(false);
+    expect(presentation.showSpinner).toBe(false);
+  });
+
   it('shows BECS direct debit processing copy without treating unpaid complete checkout as failure', () => {
     const presentation = getCheckoutStatusPresentation({
       data: {

@@ -5,15 +5,10 @@ import {
   isMissingOperationalHistoryTableError,
   OPERATIONAL_HISTORY_UNAVAILABLE_MESSAGE,
 } from '../operationalHistory.js';
-import {
-  filterRealOperationalInvoices,
-  isEmptyOperationalCustomerRecord,
-} from '../importedDataFilters.js';
 
 const router = express.Router();
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
-const customerInvoiceColumns = 'customer_id, amount, balance, invoice_date';
 
 const parsePositiveInt = (value: unknown, fallback: number) => {
   const normalized = Array.isArray(value) ? value[0] : value;
@@ -36,38 +31,20 @@ const normalizeSearchTerm = (value: unknown) => {
   return normalized.replace(/[^a-zA-Z0-9@.+\-\s]/g, ' ').replace(/\s+/g, ' ').trim();
 };
 
-const applyCustomerSearch = (query: any, searchTerm: string) => {
-  if (!searchTerm) {
-    return query;
-  }
-
-  const pattern = `%${searchTerm}%`;
-  return query.or(
-    [
-      `full_name.ilike.${pattern}`,
-      `email.ilike.${pattern}`,
-      `phone.ilike.${pattern}`,
-      `company_name.ilike.${pattern}`,
-      `staff_number.ilike.${pattern}`,
-      `external_id.ilike.${pattern}`,
-    ].join(',')
-  );
-};
-
 router.get('/', authenticateAdmin, async (req, res) => {
   const requestedPage = parsePositiveInt(req.query.page, 1);
   const pageSize = Math.min(parsePositiveInt(req.query.pageSize, DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
   const searchTerm = normalizeSearchTerm(req.query.search);
 
   try {
-    const customerQuery = applyCustomerSearch(
-      db.from('customers').select('*').eq('is_imported', false),
-      searchTerm,
-    );
-    const { data: customers, error: customerRowsError } = await customerQuery
-      .order('full_name', { ascending: true });
-    if (customerRowsError) {
-      if (isMissingOperationalHistoryTableError(customerRowsError)) {
+    const { data, error } = await db.rpc('list_current_customer_invoice_summaries', {
+      p_page: requestedPage,
+      p_page_size: pageSize,
+      p_search: searchTerm,
+    });
+
+    if (error) {
+      if (isMissingOperationalHistoryTableError(error)) {
         return res.json({
           available: false,
           items: [],
@@ -79,97 +56,16 @@ router.get('/', authenticateAdmin, async (req, res) => {
         });
       }
 
-      throw customerRowsError;
+      throw error;
     }
 
-    const customerIds = (customers || [])
-      .map((customer: any) => Number(customer.id))
-      .filter((customerId) => Number.isFinite(customerId));
-
-    let invoices: Array<Record<string, any>> = [];
-    if (customerIds.length > 0) {
-      const { data: invoiceRows, error: invoicesError } = await db
-        .from('invoices')
-        .select(customerInvoiceColumns)
-        .in('customer_id', customerIds);
-
-      if (invoicesError) {
-        if (isMissingOperationalHistoryTableError(invoicesError)) {
-          return res.json({
-            available: false,
-            items: [],
-            message: OPERATIONAL_HISTORY_UNAVAILABLE_MESSAGE,
-            page: 1,
-            pageSize,
-            totalItems: 0,
-            totalPages: 1,
-          });
-        }
-
-        throw invoicesError;
-      }
-
-      invoices = filterRealOperationalInvoices(
-        (invoiceRows || []) as Array<Record<string, any>>,
-      );
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('Customer summary transaction returned an invalid response.');
     }
-
-    const invoiceSummaryByCustomerId = new Map<
-      number,
-      { invoice_count: number; total_billed: number; outstanding_balance: number; last_invoice_date: string | null }
-    >();
-
-    for (const invoice of invoices || []) {
-      if (!invoice.customer_id) {
-        continue;
-      }
-
-      const customerId = Number(invoice.customer_id);
-      const currentSummary = invoiceSummaryByCustomerId.get(customerId) || {
-        invoice_count: 0,
-        total_billed: 0,
-        outstanding_balance: 0,
-        last_invoice_date: null,
-      };
-
-      currentSummary.invoice_count += 1;
-      currentSummary.total_billed += Number(invoice.amount) || 0;
-      currentSummary.outstanding_balance += Number(invoice.balance) || 0;
-
-      const invoiceDate = typeof invoice.invoice_date === 'string' ? invoice.invoice_date : null;
-      if (invoiceDate && (!currentSummary.last_invoice_date || invoiceDate > currentSummary.last_invoice_date)) {
-        currentSummary.last_invoice_date = invoiceDate;
-      }
-
-      invoiceSummaryByCustomerId.set(customerId, currentSummary);
-    }
-
-    const visibleCustomers = (customers || [])
-      .map((customer: any) => ({
-        ...customer,
-        invoice_count: invoiceSummaryByCustomerId.get(Number(customer.id))?.invoice_count || 0,
-        total_billed: invoiceSummaryByCustomerId.get(Number(customer.id))?.total_billed || 0,
-        outstanding_balance:
-          invoiceSummaryByCustomerId.get(Number(customer.id))?.outstanding_balance || 0,
-        last_invoice_date:
-          invoiceSummaryByCustomerId.get(Number(customer.id))?.last_invoice_date || null,
-      }))
-      .filter((customer) => !isEmptyOperationalCustomerRecord(customer));
-
-    const totalItems = visibleCustomers.length;
-    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-    const page = Math.min(requestedPage, totalPages);
-    const rangeStart = (page - 1) * pageSize;
-    const rangeEnd = rangeStart + pageSize;
-    const items = visibleCustomers.slice(rangeStart, rangeEnd);
 
     res.json({
       available: true,
-      items,
-      page,
-      pageSize,
-      totalItems,
-      totalPages,
+      ...(data as Record<string, unknown>),
     });
   } catch (error) {
     console.error('Customer history fetch error:', error);

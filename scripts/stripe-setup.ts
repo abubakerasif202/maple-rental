@@ -376,43 +376,58 @@ const verifyStripeAccountConfiguration = async (
         { expectedWebhookUrl }
       );
     } else {
-      const enabledEndpoint =
-        matchingWebhookEndpoints.find(
-          (endpoint) => !('status' in endpoint) || endpoint.status === 'enabled'
-        ) || matchingWebhookEndpoints[0];
-      const enabledEvents = enabledEndpoint.enabled_events || [];
-      const missingEvents = enabledEvents.includes('*')
-        ? []
-        : EXPECTED_WEBHOOK_EVENTS.filter((eventName) => !enabledEvents.includes(eventName));
-
-      addCheck(
-        'stripe_webhook_endpoint',
-        missingEvents.length === 0 ? 'pass' : statusForReadinessCheck(false),
-        missingEvents.length === 0
-          ? 'Stripe webhook endpoint is configured with the required events.'
-          : 'Stripe webhook endpoint is missing required events.',
-        {
-          expectedWebhookUrl,
-          matchingEndpointCount: matchingWebhookEndpoints.length,
-          missingEvents,
-          webhookStatus: 'status' in enabledEndpoint ? enabledEndpoint.status || null : null,
-        }
+      const enabledEndpoint = matchingWebhookEndpoints.find(
+        (endpoint) => !('status' in endpoint) || endpoint.status === 'enabled'
       );
+      if (!enabledEndpoint) {
+        addCheck(
+          'stripe_webhook_endpoint',
+          statusForReadinessCheck(false),
+          'The matching Stripe webhook endpoint is disabled.',
+          {
+            expectedWebhookUrl,
+            matchingEndpointCount: matchingWebhookEndpoints.length,
+            webhookStatus: 'disabled',
+          }
+        );
+      } else {
+        const enabledEvents = enabledEndpoint.enabled_events || [];
+        const missingEvents = enabledEvents.includes('*')
+          ? []
+          : EXPECTED_WEBHOOK_EVENTS.filter((eventName) =>
+              enabledEvents.includes(eventName)
+            );
 
-      const webhookApiVersion = enabledEndpoint.api_version || null;
-      addCheck(
-        'stripe_webhook_api_version',
-        webhookApiVersion === STRIPE_API_VERSION
-          ? 'pass'
-          : statusForReadinessCheck(false),
-        webhookApiVersion === STRIPE_API_VERSION
-          ? 'Stripe webhook endpoint API version matches the application.'
-          : 'Stripe webhook endpoint API version does not match the application.',
-        {
-          applicationApiVersion: STRIPE_API_VERSION,
-          webhookApiVersion,
-        }
-      );
+        addCheck(
+          'stripe_webhook_endpoint',
+          missingEvents.length === 0 ? 'pass' : statusForReadinessCheck(false),
+          missingEvents.length === 0
+            ? 'Stripe webhook endpoint is configured with the required events.'
+            : 'Stripe webhook endpoint is missing required events.',
+          {
+            expectedWebhookUrl,
+            matchingEndpointCount: matchingWebhookEndpoints.length,
+            missingEvents,
+            webhookStatus:
+              'status' in enabledEndpoint ? enabledEndpoint.status || null : null,
+          }
+        );
+
+        const webhookApiVersion = enabledEndpoint.api_version || null;
+        addCheck(
+          'stripe_webhook_api_version',
+          webhookApiVersion === STRIPE_API_VERSION
+            ? 'pass'
+            : statusForReadinessCheck(false),
+          webhookApiVersion === STRIPE_API_VERSION
+            ? 'Stripe webhook endpoint API version matches the application.'
+            : 'Stripe webhook endpoint API version does not match the application.',
+          {
+            applicationApiVersion: STRIPE_API_VERSION,
+            webhookApiVersion,
+          }
+        );
+      }
     }
 
     const overlappingWebhookEndpoints = webhookEndpoints

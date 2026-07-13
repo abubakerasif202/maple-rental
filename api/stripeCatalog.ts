@@ -32,7 +32,12 @@ const readEnvCatalog = (): ResolvedStripeCatalog | null => {
     return null;
   }
 
-  return Object.fromEntries(entries) as ResolvedStripeCatalog;
+  return Object.fromEntries(
+    entries as Array<[
+      StripeCatalogProductKey,
+      { productId: string; source: 'env' },
+    ]>
+  ) as ResolvedStripeCatalog;
 };
 
 const matchesCatalogDefinition = (

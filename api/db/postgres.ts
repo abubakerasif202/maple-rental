@@ -29,6 +29,9 @@ const REQUIRED_PAYMENT_SCHEMA_COLUMNS: Record<string, string[]> = {
     'bond_paid',
     'stripe_subscription_id',
     'stripe_customer_id',
+    'stripe_status_event_created_at',
+    'stripe_status_event_id',
+    'stripe_status_event_terminal',
   ],
   stripe_webhook_events: [
     'id',
@@ -90,22 +93,66 @@ export const getDirectDatabaseConfig = (): DirectDatabaseConfig => {
 export const getDirectDatabaseConnectionString = () =>
   getDirectDatabaseConfig().connectionString;
 
-export const shouldUseRelaxedPostgresSsl = (connectionString: string) => {
-  if (!connectionString) {
-    return false;
+const isPrivatePostgresHostname = (hostname: string) => {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (
+    normalized === 'localhost' ||
+    normalized === '::1' ||
+    normalized.startsWith('127.') ||
+    normalized.startsWith('10.') ||
+    normalized.startsWith('192.168.') ||
+    normalized.endsWith('.internal') ||
+    !normalized.includes('.')
+  ) {
+    return true;
   }
 
-  try {
-    return new URL(connectionString).hostname.endsWith('.pooler.supabase.com');
-  } catch {
-    return connectionString.includes('.pooler.supabase.com');
-  }
+  const match = normalized.match(/^172\.(\d{1,3})\./);
+  const secondOctet = Number(match?.[1]);
+  return Boolean(match) && secondOctet >= 16 && secondOctet <= 31;
 };
 
-const getPostgresSslConfig = (connectionString: string) =>
-  shouldUseRelaxedPostgresSsl(connectionString)
-    ? { rejectUnauthorized: false as const }
-    : undefined;
+const POSTGRES_SSL_QUERY_PARAMETERS = [
+  'ssl',
+  'sslcert',
+  'sslkey',
+  'sslmode',
+  'sslrootcert',
+  'uselibpqcompat',
+] as const;
+
+export const getSecurePostgresConnectionOptions = (connectionString: string) => {
+  let url: URL;
+  try {
+    url = new URL(connectionString);
+  } catch {
+    throw new Error('PostgreSQL connection string must be a valid URL.');
+  }
+
+  if (isPrivatePostgresHostname(url.hostname)) {
+    return { connectionString };
+  }
+
+  const sslMode = (url.searchParams.get('sslmode') || '').toLowerCase();
+  if (sslMode === 'disable' || sslMode === 'no-verify') {
+    throw new Error('External PostgreSQL connections must use certificate-verified TLS.');
+  }
+
+  // node-postgres lets connection-string SSL parameters replace the explicit
+  // SSL object, so remove them before enforcing the verified configuration.
+  for (const parameter of POSTGRES_SSL_QUERY_PARAMETERS) {
+    url.searchParams.delete(parameter);
+  }
+
+  const ca = (process.env.DATABASE_SSL_CA || '').replace(/\\n/g, '\n').trim();
+  return {
+    connectionString: url.toString(),
+    ssl: {
+      ...(ca ? { ca } : {}),
+      rejectUnauthorized: true as const,
+    },
+  };
+};
 
 const inferPostgresConnectionMode = (
   connectionString: string
@@ -212,14 +259,13 @@ const getPostgresPool = () => {
     // Note: Session-based features like pg_advisory_lock() are not reliable in transaction mode.
     // Session mode holds connections longer, especially around advisory locks, so tune DB_POOL_SIZE
     // against your Supabase pool limits and Render instance count in production.
-    const ssl = getPostgresSslConfig(connectionString);
+    const secureConnection = getSecurePostgresConnectionOptions(connectionString);
     postgresPool = new Pool({
-      connectionString,
+      ...secureConnection,
       max:
         configuredPoolSize ?? (connectionMode === 'transaction' ? 20 : 10),
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
-      ...(ssl ? { ssl } : {}),
     });
     postgresPoolConnectionString = connectionString;
   }
@@ -324,23 +370,33 @@ export const withPostgresAdvisoryLock = async <T>(
 
   const client = await pool.connect();
   const [keyPartOne, keyPartTwo] = toAdvisoryLockKeyParts(lockKey);
-  let releaseReason: unknown;
+  let releaseReason: Error | boolean | undefined;
+  let lockAcquired = false;
 
   try {
-    await client.query('SELECT pg_advisory_lock($1, $2)', [
-      keyPartOne,
-      keyPartTwo,
-    ]);
+    const result = await client.query<{ acquired: boolean }>(
+      'SELECT pg_try_advisory_lock($1, $2) AS acquired',
+      [keyPartOne, keyPartTwo]
+    );
+    lockAcquired = result.rows[0]?.acquired === true;
+    if (!lockAcquired) {
+      throw Object.assign(
+        new Error('This operation is already being processed. Please retry shortly.'),
+        { status: 409 }
+      );
+    }
 
     return await callback();
   } finally {
     try {
-      await client.query('SELECT pg_advisory_unlock($1, $2)', [
-        keyPartOne,
-        keyPartTwo,
-      ]);
+      if (lockAcquired) {
+        await client.query('SELECT pg_advisory_unlock($1, $2)', [
+          keyPartOne,
+          keyPartTwo,
+        ]);
+      }
     } catch (unlockError) {
-      releaseReason = unlockError ?? true;
+      releaseReason = unlockError instanceof Error ? unlockError : true;
       console.error('Failed to release PostgreSQL advisory lock:', unlockError);
     }
 

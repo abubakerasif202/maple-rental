@@ -53,7 +53,6 @@ export const manualInvoiceItemInputSchema = z.object({
   quantity: z.coerce.number().finite().positive(),
   unit_price: moneySchema,
   gst: moneySchema.default(0),
-  amount: moneySchema.optional(),
 });
 
 export const manualInvoiceInputSchema = z.object({
@@ -89,7 +88,7 @@ export const calculateManualInvoiceItems = (
     const quantity = Number(item.quantity);
     const unitPrice = roundMoney(Number(item.unit_price));
     const gst = roundMoney(Number(item.gst || 0));
-    const amount = roundMoney(item.amount ?? quantity * unitPrice + gst);
+    const amount = roundMoney(quantity * unitPrice + gst);
 
     return {
       description: item.description.trim(),
@@ -109,15 +108,6 @@ export const calculateManualInvoiceTotals = (items: ManualInvoiceItem[]) => {
   const total_inc_gst = roundMoney(items.reduce((sum, item) => sum + item.amount, 0));
 
   return { subtotal, gst, total_inc_gst };
-};
-
-const assertSupabaseWrite = (
-  result: { error: { message?: string } | null } | null | undefined,
-  message: string
-) => {
-  if (result?.error) {
-    throw new Error(`${message}: ${result.error.message || 'Unknown Supabase error'}`);
-  }
 };
 
 const getManualInvoiceItems = async (invoiceId: string) => {
@@ -191,24 +181,7 @@ export const createManualInvoice = async ({
   input: ManualInvoiceInput;
 }) => {
   const invoiceNumber = normalizeInvoiceNumber(input.invoice_number);
-  const duplicate = await db
-    .from('manual_invoices')
-    .select('id')
-    .eq('invoice_number', invoiceNumber)
-    .maybeSingle();
-
-  if (duplicate.error) {
-    throw duplicate.error;
-  }
-
-  if (duplicate.data?.id) {
-    const error = new Error('Invoice number already exists.');
-    (error as Error & { status?: number }).status = 409;
-    throw error;
-  }
-
   const items = calculateManualInvoiceItems(input.items);
-  const totals = calculateManualInvoiceTotals(items);
   const invoicePayload = {
     invoice_number: invoiceNumber,
     status: input.status,
@@ -220,31 +193,40 @@ export const createManualInvoice = async ({
     rental_period_reference: input.rental_period_reference || null,
     notes: input.notes || null,
     additional_details: input.additional_details || null,
-    ...totals,
     created_by: adminEmail || null,
   };
-  const inserted = await db
-    .from('manual_invoices')
-    .insert([invoicePayload])
-    .select()
-    .single();
-  assertSupabaseWrite(inserted, 'Failed to create manual invoice');
 
-  const invoiceId = String(inserted.data?.id || '');
-  if (!invoiceId) {
-    throw new Error('Manual invoice insert did not return an id.');
+  const { data, error } = await db.rpc('create_manual_invoice_transaction', {
+    p_invoice: invoicePayload,
+    p_items: items,
+  });
+
+  if (error) {
+    if (error.code === '23505') {
+      const duplicateError = new Error('Invoice number already exists.');
+      (duplicateError as Error & { status?: number }).status = 409;
+      throw duplicateError;
+    }
+
+    throw error;
   }
 
-  const itemRows = items.map((item) => ({
-    ...item,
-    invoice_id: invoiceId,
-  }));
-  const itemsResult = await db.from('manual_invoice_items').insert(itemRows);
-  assertSupabaseWrite(itemsResult, 'Failed to create manual invoice items');
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Manual invoice transaction did not return an invoice.');
+  }
 
+  const invoice = data as unknown as ManualInvoice;
   return {
-    id: invoiceId,
-    ...invoicePayload,
-    items: itemRows,
-  } as ManualInvoice;
+    ...invoice,
+    subtotal: Number(invoice.subtotal || 0),
+    gst: Number(invoice.gst || 0),
+    total_inc_gst: Number(invoice.total_inc_gst || 0),
+    items: (invoice.items || []).map((item) => ({
+      ...item,
+      amount: Number(item.amount || 0),
+      gst: Number(item.gst || 0),
+      quantity: Number(item.quantity || 0),
+      unit_price: Number(item.unit_price || 0),
+    })),
+  };
 };

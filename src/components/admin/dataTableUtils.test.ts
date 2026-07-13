@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyDataTableFilters,
   paginateDataTableRows,
+  shouldApplyDataTableClientTransforms,
   sortDataTableRows,
   toggleSelectedRows,
 } from './dataTableUtils.js';
@@ -21,6 +22,11 @@ const rows: TestRow[] = [
 ];
 
 describe('data table utilities', () => {
+  it('disables page-local filters and sorting for server pagination', () => {
+    expect(shouldApplyDataTableClientTransforms(true)).toBe(false);
+    expect(shouldApplyDataTableClientTransforms(false)).toBe(true);
+  });
+
   it('sorts rows by the requested column and direction', () => {
     const sorted = sortDataTableRows(rows, {
       columnId: 'amount',

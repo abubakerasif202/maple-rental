@@ -48,7 +48,9 @@ afterEach(() => {
 
 describe('withPostgresAdvisoryLock', () => {
   it('releases the pool client without a destroy reason when unlocking succeeds', async () => {
-    mockClient.query.mockResolvedValue(undefined);
+    mockClient.query.mockImplementation(async (sql: string) =>
+      sql.includes('pg_try_advisory_lock') ? { rows: [{ acquired: true }] } : { rows: [] }
+    );
 
     const { closePostgresPool, withPostgresAdvisoryLock } = await import('./postgres.js');
     const result = await withPostgresAdvisoryLock('vehicle-checkout:test', async () => 'ok');
@@ -68,7 +70,7 @@ describe('withPostgresAdvisoryLock', () => {
         throw unlockError;
       }
 
-      return undefined;
+      return { rows: [{ acquired: true }] };
     });
 
     const { closePostgresPool, withPostgresAdvisoryLock } = await import('./postgres.js');
@@ -78,6 +80,23 @@ describe('withPostgresAdvisoryLock', () => {
     expect(mockPool.connect).toHaveBeenCalledTimes(1);
     expect(mockClient.query).toHaveBeenCalledTimes(2);
     expect(mockClient.release).toHaveBeenCalledWith(unlockError);
+
+    await closePostgresPool();
+  });
+
+  it('fails fast and releases the client when the advisory lock is contended', async () => {
+    const callback = vi.fn(async () => 'ok');
+    mockClient.query.mockResolvedValue({ rows: [{ acquired: false }] });
+
+    const { closePostgresPool, withPostgresAdvisoryLock } = await import('./postgres.js');
+    await expect(withPostgresAdvisoryLock('vehicle-checkout:test', callback)).rejects.toMatchObject({
+      message: 'This operation is already being processed. Please retry shortly.',
+      status: 409,
+    });
+
+    expect(callback).not.toHaveBeenCalled();
+    expect(mockClient.query).toHaveBeenCalledTimes(1);
+    expect(mockClient.release).toHaveBeenCalledWith();
 
     await closePostgresPool();
   });

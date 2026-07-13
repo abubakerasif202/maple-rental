@@ -80,4 +80,40 @@ describe('postgres pool configuration', () => {
     );
     expect(poolCtor.getLastPoolOptions()?.max).toBe(10);
   });
+
+  it('enforces certificate verification for external PostgreSQL hosts', async () => {
+    process.env.DATABASE_URL =
+      'postgresql://postgres.example:secret@aws-0-ap-southeast-2.pooler.supabase.com:5432/app?sslmode=require';
+    process.env.DATABASE_SSL_CA = 'line-one\\nline-two';
+    const { withPostgresTransaction } = await import('./postgres.js');
+
+    await expect(withPostgresTransaction(async () => 'ok')).resolves.toBe('ok');
+    expect(poolCtor.getLastPoolOptions()).toMatchObject({
+      connectionString:
+        'postgresql://postgres.example:secret@aws-0-ap-southeast-2.pooler.supabase.com:5432/app',
+      ssl: {
+        ca: 'line-one\nline-two',
+        rejectUnauthorized: true,
+      },
+    });
+  });
+
+  it('rejects external connection strings that disable certificate verification', async () => {
+    process.env.DATABASE_URL =
+      'postgresql://postgres.example:secret@db.example.com:5432/app?sslmode=no-verify';
+    const { withPostgresTransaction } = await import('./postgres.js');
+
+    await expect(withPostgresTransaction(async () => 'ok')).rejects.toThrow(
+      'External PostgreSQL connections must use certificate-verified TLS.'
+    );
+    expect(poolCtor.mockPool.connect).not.toHaveBeenCalled();
+  });
+
+  it('does not require TLS for explicit private-network hosts', async () => {
+    process.env.DATABASE_URL = 'postgresql://postgres.example:secret@maple-db.internal:5432/app';
+    const { withPostgresTransaction } = await import('./postgres.js');
+
+    await expect(withPostgresTransaction(async () => 'ok')).resolves.toBe('ok');
+    expect(poolCtor.getLastPoolOptions()).not.toHaveProperty('ssl');
+  });
 });

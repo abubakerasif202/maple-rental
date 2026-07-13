@@ -66,6 +66,7 @@ export type VehiclePaymentContextResponse = {
 
 export type VehicleCheckoutLifecycleState =
   | 'complete_paid'
+  | 'scheduled'
   | 'processing'
   | 'pending_webhook'
   | 'manual_review'
@@ -106,6 +107,16 @@ type PendingCheckoutSessionResolution = {
   retryKeySeed: string | null;
   session: Stripe.Checkout.Session | null;
 };
+
+const isStripeResourceMissingError = (
+  error: unknown
+): error is { code?: string; statusCode?: number } =>
+  Boolean(
+    error &&
+      typeof error === 'object' &&
+      String((error as { code?: string }).code || '') === 'resource_missing' &&
+      Number((error as { statusCode?: number }).statusCode || 0) === 404
+  );
 
 type VerifiedCheckoutSessionContext = {
   metadataMatch: CheckoutSessionMetadataMatch;
@@ -585,6 +596,17 @@ const getVehicleCheckoutLifecycleState = ({
     return 'failed';
   }
 
+  if (
+    applicationStatus !== 'Paid' &&
+    applicationStatus !== 'Payment Review' &&
+    session.status === 'complete' &&
+    session.payment_status === 'no_payment_required' &&
+    isValidDateOnly(session.metadata?.rental_subscription_start_date || '') &&
+    String(session.metadata?.rental_subscription_start_date) > getTodayInAustralia()
+  ) {
+    return 'scheduled';
+  }
+
   if (isDirectDebitProcessingSession(session)) {
     return 'processing';
   }
@@ -732,7 +754,10 @@ export const resolvePendingCheckoutSession = async ({
       };
     }
   } catch (error) {
-    console.warn(`Unable to reuse checkout session ${pendingSessionId}:`, error);
+    if (!isStripeResourceMissingError(error)) {
+      throw error;
+    }
+    console.warn(`Pending checkout session ${pendingSessionId} no longer exists in Stripe.`);
   }
 
   return {

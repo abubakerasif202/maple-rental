@@ -71,6 +71,9 @@ describe('schemaContract', () => {
                 vehicle_registration: { type: 'string' },
                 stripe_customer_id: { type: 'string' },
                 stripe_subscription_id: { type: 'string' },
+                stripe_status_event_created_at: { type: 'string' },
+                stripe_status_event_id: { type: 'string' },
+                stripe_status_event_terminal: { type: 'boolean' },
               },
             },
             stripe_webhook_events: {
@@ -131,6 +134,9 @@ describe('schemaContract', () => {
                 vehicleRegistration: { type: 'string' },
                 stripeCustomerId: { type: 'string' },
                 stripeSubscriptionId: { type: 'string' },
+                stripe_status_event_created_at: { type: 'string' },
+                stripe_status_event_id: { type: 'string' },
+                stripe_status_event_terminal: { type: 'boolean' },
               },
             },
             stripe_webhook_events: {
@@ -221,6 +227,9 @@ describe('schemaContract', () => {
                 vehicle_registration: { type: 'string' },
                 stripe_customer_id: { type: 'string' },
                 stripe_subscription_id: { type: 'string' },
+                stripe_status_event_created_at: { type: 'string' },
+                stripe_status_event_id: { type: 'string' },
+                stripe_status_event_terminal: { type: 'boolean' },
               },
             },
             stripe_webhook_events: {

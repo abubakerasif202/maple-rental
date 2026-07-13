@@ -66,4 +66,57 @@ describe('migration safety guards', () => {
     expect(hardeningMigration).toContain('REVOKE ALL');
     expect(hardeningMigration).not.toContain('DROP FUNCTION IF EXISTS public.is_admin() CASCADE');
   });
+
+  it('retires direct anonymous application inserts after server mediation', () => {
+    const migration = fs.readFileSync(
+      path.resolve(
+        process.cwd(),
+        'supabase/migrations/20260714190000_retire_anonymous_application_inserts.sql'
+      ),
+      'utf8'
+    );
+
+    expect(migration).toContain(
+      'DROP POLICY IF EXISTS public_submit_application ON public.applications'
+    );
+    expect(migration).toContain(
+      'REVOKE INSERT ON TABLE public.applications FROM anon'
+    );
+    expect(migration).not.toMatch(/GRANT\s+INSERT[\s\S]+TO\s+anon/i);
+  });
+
+  it('orders Stripe rental status changes with a service-role-only watermark function', () => {
+    const migration = fs.readFileSync(
+      path.resolve(
+        process.cwd(),
+        'supabase/migrations/20260715021000_order_stripe_rental_status_events.sql'
+      ),
+      'utf8'
+    );
+
+    expect(migration).toContain('stripe_status_event_created_at');
+    expect(migration).toContain('stripe_status_event_id');
+    expect(migration).toContain('stripe_status_event_terminal');
+    expect(migration).toContain('rental.stripe_status_event_created_at < p_event_created_at');
+    expect(migration).toContain('AND p_terminal');
+    expect(migration).toContain('FROM PUBLIC, anon, authenticated');
+    expect(migration).toContain('TO service_role');
+  });
+
+  it('resolves repository-owned hosted database advisor findings', () => {
+    const migration = fs.readFileSync(
+      path.resolve(
+        process.cwd(),
+        'supabase/migrations/20260715022000_harden_hosted_database_advisories.sql'
+      ),
+      'utf8'
+    );
+
+    expect(migration).toContain('idx_document_retention_holds_application_id');
+    expect(migration).toContain('ALTER EXTENSION pg_trgm SET SCHEMA extensions');
+    expect(migration).toContain("to_regprocedure('public.rls_auto_enable()')");
+    expect(migration).toContain(
+      'FROM PUBLIC, anon, authenticated, service_role'
+    );
+  });
 });

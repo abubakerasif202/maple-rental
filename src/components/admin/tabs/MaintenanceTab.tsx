@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle, Database, Download, Loader2, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import * as api from '../../../lib/api';
 import { getApiErrorMessage } from '../../../lib/errorHandling';
+import { invalidateMaintenanceResetQueries } from './maintenanceResetUtils';
 
 const CONFIRMATION_PHRASE = 'RESET IMPORTED DATA AND FINANCIALS';
 
@@ -22,6 +23,7 @@ const downloadJsonBackup = (payload: Record<string, unknown>) => {
 };
 
 export default function MaintenanceTab() {
+  const queryClient = useQueryClient();
   const [confirmText, setConfirmText] = useState('');
   const [dryRunToken, setDryRunToken] = useState<string | undefined>();
   const [dryRunResult, setDryRunResult] = useState<api.ImportedDataResetResponse | null>(null);
@@ -48,10 +50,28 @@ export default function MaintenanceTab() {
       setLastDeletedCounts(data.deleted || null);
       setConfirmText('');
       setDryRunToken(undefined);
-      setStatusMessage('Reset complete. Counts refreshed from the database.');
-      const refreshed = await api.resetImportedDataDryRun();
-      setDryRunResult(refreshed);
-      setDryRunToken(refreshed.dryRunToken);
+      setDryRunResult(null);
+      setStatusMessage('Reset complete. Refreshing dashboard data and maintenance counts.');
+
+      const dashboardRefreshSucceeded = await invalidateMaintenanceResetQueries(queryClient);
+
+      try {
+        const refreshed = await api.resetImportedDataDryRun();
+        setDryRunResult(refreshed);
+        setDryRunToken(refreshed.dryRunToken);
+        setStatusMessage(
+          dashboardRefreshSucceeded
+            ? 'Reset complete. Counts refreshed from the database.'
+            : 'Reset complete. Counts refreshed, but some dashboard data could not be refreshed. Reload the dashboard.',
+        );
+      } catch (error) {
+        console.error('Maintenance reset count refresh failed:', error);
+        setStatusMessage(
+          dashboardRefreshSucceeded
+            ? 'Reset complete, but maintenance counts could not be refreshed. Run Dry Run to reload them.'
+            : 'Reset complete, but dashboard data and maintenance counts could not be refreshed. Reload the dashboard, then run Dry Run.',
+        );
+      }
     },
   });
 
@@ -125,10 +145,14 @@ export default function MaintenanceTab() {
       {resetEnabled ? (
         <>
           <div className="space-y-3">
-            <label className="block text-xs font-semibold uppercase tracking-widest text-brand-grey">
+            <label
+              htmlFor="maintenance-reset-confirmation"
+              className="block text-xs font-semibold uppercase tracking-widest text-brand-grey"
+            >
               Confirmation phrase
             </label>
             <input
+              id="maintenance-reset-confirmation"
               value={confirmText}
               onChange={(event) => setConfirmText(event.target.value)}
               className="min-h-11 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white outline-none focus:border-brand-gold"

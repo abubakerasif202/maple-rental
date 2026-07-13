@@ -137,3 +137,34 @@ export const persistPendingCheckoutSessionIdIfCurrentVersion = async ({
 
   return Boolean(updatedApplication);
 };
+
+export const clearPendingCheckoutSessionIdIfCurrent = async ({
+  applicationId,
+  expectedPaymentLinkVersion,
+  expectedSessionId,
+}: {
+  applicationId: string;
+  expectedPaymentLinkVersion: number;
+  expectedSessionId: string;
+}) => {
+  const compat = await getSchemaCompat();
+  const selectColumns = await getApplicationSelectColumns();
+  const mappedPayload = await toApplicationPaymentWritePayload({
+    pending_checkout_session_id: null,
+  });
+
+  const { data, error } = await db
+    .from('applications')
+    .update(mappedPayload)
+    .eq('id', applicationId)
+    .eq(compat.applicationPaymentLinkVersionColumn, expectedPaymentLinkVersion)
+    .eq(compat.applicationPendingCheckoutSessionColumn, expectedSessionId)
+    .select(selectColumns)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return Boolean(data);
+};

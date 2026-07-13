@@ -225,7 +225,7 @@ const createSignedDocumentUrl = async (path: string | null | undefined) => {
 
   const storagePath = extractStoragePath(path);
   if (!storagePath) {
-    return path;
+    return null;
   }
 
   const { data, error } = await db.storage
@@ -582,14 +582,17 @@ router.get("/:id/documents/:document", authenticateAdmin, async (req, res) => {
       return res.status(404).json({ error: "Application not found" });
     }
 
+    const applicationRecord = application as unknown as Record<string, unknown>;
     const documentValue =
-      application[document] ??
+      applicationRecord[document] ??
       (document === "license_back_photo"
-        ? getApplicationBackPhotoValue(application)
+        ? getApplicationBackPhotoValue(applicationRecord)
         : document === "passport_or_uber_profile_screenshot"
-          ? getApplicationPassportDocumentValue(application)
+          ? getApplicationPassportDocumentValue(applicationRecord)
         : null);
-    const signedUrl = await createSignedDocumentUrl(documentValue);
+    const signedUrl = await createSignedDocumentUrl(
+      typeof documentValue === "string" ? documentValue : null,
+    );
     if (!signedUrl) {
       return res.status(404).json({ error: "Document not found" });
     }

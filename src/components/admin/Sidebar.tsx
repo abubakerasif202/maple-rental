@@ -43,7 +43,9 @@ export default function Sidebar({
 
   return (
     <>
-      <div
+      <button
+        type="button"
+        aria-label="Close admin navigation"
         onClick={onClose}
         className={`fixed inset-0 z-30 bg-brand-navy/70 backdrop-blur-sm transition-opacity lg:hidden ${
           isOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'

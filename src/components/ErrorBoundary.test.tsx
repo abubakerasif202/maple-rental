@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isChunkLoadError } from './ErrorBoundary';
+import { getErrorDetails, isChunkLoadError } from './ErrorBoundary';
 
 describe('isChunkLoadError', () => {
   it.each([
@@ -17,3 +17,14 @@ describe('isChunkLoadError', () => {
   });
 });
 
+describe('getErrorDetails', () => {
+  it('does not expose raw exception messages in production', () => {
+    expect(getErrorDetails(new Error('Sensitive internal detail'), false)).toBeNull();
+  });
+
+  it('keeps raw exception messages available during development', () => {
+    expect(getErrorDetails(new Error('Useful development detail'), true)).toBe(
+      'Useful development detail',
+    );
+  });
+});

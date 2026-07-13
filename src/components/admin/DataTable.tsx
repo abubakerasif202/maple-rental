@@ -13,6 +13,7 @@ import EmptyState from './EmptyState';
 import {
   applyDataTableFilters,
   paginateDataTableRows,
+  shouldApplyDataTableClientTransforms,
   sortDataTableRows,
   toggleSelectedRows,
   type DataTableSortDirection,
@@ -141,6 +142,11 @@ export default function DataTable<T>({
   } | null>(null);
 
   const isServerPagination = pagination?.mode === 'server';
+  const applyClientTransforms = shouldApplyDataTableClientTransforms(isServerPagination);
+  const availableFilters = useMemo(
+    () => (applyClientTransforms ? filters : []),
+    [applyClientTransforms, filters]
+  );
   const page = isServerPagination ? pagination?.page ?? 1 : localPage;
   const pageSize = isServerPagination ? pagination?.pageSize ?? defaultPageSize : localPageSize;
   const pageSizeOptions = pagination?.pageSizeOptions ?? [10, 25, 50];
@@ -166,7 +172,11 @@ export default function DataTable<T>({
   }, [activeFilters, isServerPagination, sortState]);
 
   const sortedRows = useMemo(() => {
-    const filterConfigs = filters.map((filterConfig) => ({
+    if (!applyClientTransforms) {
+      return rows;
+    }
+
+    const filterConfigs = availableFilters.map((filterConfig) => ({
       getValue: filterConfig.getValue,
       selectedValues: activeFilters[filterConfig.id] ?? [],
     }));
@@ -185,7 +195,7 @@ export default function DataTable<T>({
           }
         : null
     );
-  }, [activeFilters, columns, filters, rows, sortState]);
+  }, [activeFilters, applyClientTransforms, availableFilters, columns, rows, sortState]);
 
   const clientPagination = useMemo(
     () => paginateDataTableRows(sortedRows, { page: localPage, pageSize: localPageSize }),
@@ -204,7 +214,11 @@ export default function DataTable<T>({
     : clientPagination.totalItems;
 
   const handleSort = (column: DataTableColumn<T>) => {
-    if (column.sortable === false || (!column.sortValue && !column.accessor)) {
+    if (
+      !applyClientTransforms ||
+      column.sortable === false ||
+      (!column.sortValue && !column.accessor)
+    ) {
       return;
     }
 
@@ -262,7 +276,7 @@ export default function DataTable<T>({
     <div className="space-y-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-3">
-          {filters.map((filterConfig) => {
+          {availableFilters.map((filterConfig) => {
             const selectedValues = activeFilters[filterConfig.id] ?? [];
 
             return (
@@ -444,7 +458,9 @@ export default function DataTable<T>({
                 </th>
                 {columns.map((column) => {
                   const isSortable =
-                    column.sortable !== false && Boolean(column.sortValue || column.accessor);
+                    applyClientTransforms &&
+                    column.sortable !== false &&
+                    Boolean(column.sortValue || column.accessor);
                   const isSorted = sortState?.columnId === column.id;
 
                   return (

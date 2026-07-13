@@ -18,7 +18,7 @@ import {
   User,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldPath } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Seo from "../components/Seo";
@@ -80,9 +80,9 @@ const dateOnlySchema = (requiredMessage: string, invalidMessage: string) =>
 
 const applicationFileSchema = (label: string) =>
   z
-    .custom<File>((value) => value instanceof File, {
-      message: `${label} is required`,
-    })
+    .instanceof(File)
+    .nullable()
+    .pipe(z.instanceof(File, { error: `${label} is required` }))
     .refine(
       (file) => ALLOWED_IMAGE_UPLOAD_TYPES.has(file.type),
       `Please upload a JPG or PNG smaller than ${MAX_UPLOAD_SIZE_MB} MB.`,
@@ -94,9 +94,9 @@ const applicationFileSchema = (label: string) =>
 
 const applicationDocumentFileSchema = (label: string) =>
   z
-    .custom<File>((value) => value instanceof File, {
-      message: `${label} is required`,
-    })
+    .instanceof(File)
+    .nullable()
+    .pipe(z.instanceof(File, { error: `${label} is required` }))
     .refine(
       (file) => ALLOWED_DOCUMENT_UPLOAD_TYPES.has(file.type),
       `Please upload a JPG, PNG, or PDF smaller than ${MAX_UPLOAD_SIZE_MB} MB.`,
@@ -387,7 +387,7 @@ export default function Apply() {
   };
 
   const goToNextStep = async () => {
-    const fieldsToValidate =
+    const fieldsToValidate: FieldPath<ApplyValues>[] =
       step === 1
         ? ["name", "phone", "email", "address", "intended_start_date"]
         : [
@@ -400,7 +400,7 @@ export default function Apply() {
             "passport_or_uber_profile_screenshot",
           ];
 
-    const isValid = await trigger(fieldsToValidate as any);
+    const isValid = await trigger(fieldsToValidate);
 
     if (isValid) {
       setPageError(null);

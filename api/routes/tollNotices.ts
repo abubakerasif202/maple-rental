@@ -1,8 +1,9 @@
+import { createHash } from 'node:crypto';
 import express from 'express';
 import { z } from 'zod';
 
 import { db } from '../db/index.js';
-import { escapeHtml, getResend, sanitizeEmailHeaderValue, sendResendEmail } from '../email.js';
+import { escapeHtml, getResend, sanitizeEmailHeaderValue } from '../email.js';
 import { authenticateAdmin } from '../middleware/auth.js';
 import { buildTollTransferNoticePdf } from '../templates/tollTransferNoticePdf.js';
 import { loadRentalPrefillOptions } from './rentals.js';
@@ -139,6 +140,38 @@ const getAdminEmail = (req: express.Request) =>
 
 const getSafeNoticeValue = (notice: Record<string, unknown>, key: string) =>
   String(notice[key] ?? '').trim();
+
+type TollDeliveryAttempt = {
+  claimed: boolean;
+  id: string;
+  idempotency_key: string;
+  status: 'pending' | 'sending' | 'sent' | 'failed';
+};
+
+const getTollDeliveryContentHash = (
+  notice: Record<string, unknown>,
+  recipientEmail: string,
+) => createHash('sha256').update(JSON.stringify({
+  nomineeFullName: getSafeNoticeValue(notice, 'nominee_full_name'),
+  noticeId: Number(notice.id),
+  recipientEmail: recipientEmail.trim().toLowerCase(),
+  tollNoticeNumber: getSafeNoticeValue(notice, 'toll_notice_number'),
+  updatedAt: getSafeNoticeValue(notice, 'updated_at'),
+  vehicleRegistration: getSafeNoticeValue(notice, 'vehicle_registration'),
+})).digest('hex');
+
+const parseTollDeliveryAttempt = (data: unknown): TollDeliveryAttempt => {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Toll notice delivery claim returned an invalid response.');
+  }
+
+  const attempt = data as Partial<TollDeliveryAttempt>;
+  if (!attempt.id || !attempt.idempotency_key || !attempt.status) {
+    throw new Error('Toll notice delivery claim is incomplete.');
+  }
+
+  return attempt as TollDeliveryAttempt;
+};
 
 const fetchNoticeById = async (id: number) => {
   const { data, error } = await db
@@ -288,6 +321,33 @@ router.post('/:id/send', authenticateAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Toll transfer notice not found' });
     }
 
+    const recipientEmail = payload.recipient_email.trim().toLowerCase();
+    const contentHash = getTollDeliveryContentHash(notice, recipientEmail);
+    const claimResult = await db.rpc('claim_toll_notice_delivery', {
+      p_content_hash: contentHash,
+      p_notice_id: id,
+      p_recipient_email: recipientEmail,
+    });
+    if (claimResult.error) {
+      throw claimResult.error;
+    }
+
+    const deliveryAttempt = parseTollDeliveryAttempt(claimResult.data);
+    if (!deliveryAttempt.claimed) {
+      if (deliveryAttempt.status === 'sent') {
+        return res.json({
+          id,
+          sent_at: notice.sent_at || null,
+          sent_to: notice.sent_to || recipientEmail,
+          status: 'sent',
+        });
+      }
+
+      return res.status(409).json({
+        error: 'Toll notice email delivery is already in progress. Retry shortly.',
+      });
+    }
+
     const pdf = await buildTollTransferNoticePdf(notice as any);
     const resend = await getResend();
     const tollNoticeNumber = getSafeNoticeValue(notice, 'toll_notice_number');
@@ -299,58 +359,68 @@ router.post('/:id/send', authenticateAdmin, async (req, res) => {
     const safeNomineeName = escapeHtml(nomineeName || 'not supplied');
     const subjectNoticeNumber = sanitizeEmailHeaderValue(tollNoticeNumber || String(id));
 
-    await sendResendEmail(resend, {
-      attachments: [
-        {
-          content: pdf,
-          contentType: 'application/pdf',
-          filename: `toll-transfer-notice-${id}.pdf`,
-        },
-      ],
-      from: 'Maple Rentals <noreply@maplerentals.com.au>',
-      html: `
-        <div style="font-family: sans-serif; max-width: 640px; margin: 0 auto; color: #1a202c;">
-          <h2 style="color: #D4AF37;">Toll Transfer Notice</h2>
-          <p>Hi ${safeRecipientName},</p>
-          <p>Please find the attached toll transfer notice statutory declaration.</p>
-          <ul>
-            <li><strong>Toll notice number:</strong> ${safeTollNoticeNumber}</li>
-            <li><strong>Vehicle registration:</strong> ${safeVehicleRegistration}</li>
-            <li><strong>Nominated driver/customer:</strong> ${safeNomineeName}</li>
-          </ul>
-          <p>Regards,<br /><strong>Maple Rentals</strong></p>
-        </div>
-      `,
-      subject: `Toll Transfer Notice ${subjectNoticeNumber}`,
-      to: payload.recipient_email,
-    });
+    let providerMessageId: string | null = null;
+    try {
+      const delivery = await resend.emails.send({
+        attachments: [
+          {
+            content: pdf,
+            contentType: 'application/pdf',
+            filename: `toll-transfer-notice-${id}.pdf`,
+          },
+        ],
+        from: 'Maple Rentals <noreply@maplerentals.com.au>',
+        html: `
+          <div style="font-family: sans-serif; max-width: 640px; margin: 0 auto; color: #1a202c;">
+            <h2 style="color: #D4AF37;">Toll Transfer Notice</h2>
+            <p>Hi ${safeRecipientName},</p>
+            <p>Please find the attached toll transfer notice statutory declaration.</p>
+            <ul>
+              <li><strong>Toll notice number:</strong> ${safeTollNoticeNumber}</li>
+              <li><strong>Vehicle registration:</strong> ${safeVehicleRegistration}</li>
+              <li><strong>Nominated driver/customer:</strong> ${safeNomineeName}</li>
+            </ul>
+            <p>Regards,<br /><strong>Maple Rentals</strong></p>
+          </div>
+        `,
+        subject: `Toll Transfer Notice ${subjectNoticeNumber}`,
+        to: recipientEmail,
+      }, {
+        idempotencyKey: deliveryAttempt.idempotency_key,
+      });
 
-    const sentAt = new Date().toISOString();
-    const { data, error } = await db
-      .from('toll_transfer_notices')
-      .update({
-        sent_at: sentAt,
-        sent_to: payload.recipient_email,
-        status: 'sent',
-        updated_at: sentAt,
-      })
-      .eq('id', id)
-      .select('id, status, sent_to, sent_at')
-      .single();
-
-    if (error || !data) {
-      return res.status(404).json({ error: 'Toll transfer notice not found' });
+      if (delivery.error) {
+        throw new Error(`Resend email delivery failed: ${delivery.error.message}`);
+      }
+      providerMessageId = delivery.data?.id || null;
+    } catch (deliveryError) {
+      const failureResult = await db.rpc('fail_toll_notice_delivery', {
+        p_attempt_id: deliveryAttempt.id,
+        p_error_message: deliveryError instanceof Error
+          ? deliveryError.message
+          : 'Unknown email delivery failure',
+      });
+      if (failureResult.error) {
+        console.warn('Failed to persist toll notice delivery failure', {
+          attemptId: deliveryAttempt.id,
+          reason: failureResult.error.message,
+        });
+      }
+      throw deliveryError;
     }
 
-    await auditNoticeAction({
-      action: 'send_email',
-      actor: getAdminEmail(req),
-      metadata: {
-        recipient_email: payload.recipient_email,
-        toll_notice_number: tollNoticeNumber,
-      },
-      noticeId: id,
+    const finalization = await db.rpc('finalize_toll_notice_delivery', {
+      p_actor: getAdminEmail(req),
+      p_attempt_id: deliveryAttempt.id,
+      p_provider_message_id: providerMessageId,
     });
+    if (finalization.error) {
+      throw finalization.error;
+    }
+    if (!finalization.data || typeof finalization.data !== 'object' || Array.isArray(finalization.data)) {
+      throw new Error('Toll notice delivery finalization returned an invalid response.');
+    }
+    const data = finalization.data as Record<string, unknown>;
 
     res.json({
       id: Number(data.id),

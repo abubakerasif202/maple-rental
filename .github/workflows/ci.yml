@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.20.2
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+      - name: Verify ordered migration contracts
+        run: >-
+          npx vitest run
+          api/schemaContractMigrations.test.ts
+          api/migrationSafety.test.ts
+          api/dataWorkflowMigrations.test.ts
+      - run: npm audit --omit=dev --audit-level=moderate

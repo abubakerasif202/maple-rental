@@ -11,6 +11,8 @@ import {
 import { Rental } from '../../../types';
 import DataTable, { type DataTableColumn } from '../DataTable';
 import type { CancelSubscriptionResponse } from '../../../lib/api';
+import { encodeCsvRows } from '../../../lib/csv';
+import AccessibleDialog from '../AccessibleDialog';
 
 interface RentalsTabProps {
   isFetchingRentals: boolean;
@@ -121,11 +123,7 @@ export default function RentalsTab({
       rental.status,
       rental.stripe_subscription_id || '',
     ]);
-    const csv = [headers, ...csvRows]
-      .map((row) =>
-        row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','),
-      )
-      .join('\n');
+    const csv = encodeCsvRows([headers, ...csvRows]);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -344,10 +342,14 @@ export default function RentalsTab({
 
       {cancelTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-brand-navy p-6 shadow-2xl">
+          <AccessibleDialog
+            ariaLabelledBy="cancel-subscription-title"
+            onClose={closeCancelModal}
+            className="w-full max-w-2xl rounded-2xl border border-white/10 bg-brand-navy p-6 shadow-2xl"
+          >
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-xl font-bold text-white">Cancel Stripe subscription</h3>
+                <h3 id="cancel-subscription-title" className="text-xl font-bold text-white">Cancel Stripe subscription</h3>
                 <p className="text-sm text-brand-grey">
                   {cancelTarget.applicant_name || 'Unknown driver'} • Rental #{cancelTarget.id}
                 </p>
@@ -355,6 +357,8 @@ export default function RentalsTab({
               <button
                 type="button"
                 onClick={closeCancelModal}
+                aria-label="Close subscription cancellation"
+                disabled={isCancellingSubscription}
                 className="text-sm text-brand-grey transition-colors hover:text-white"
               >
                 Close
@@ -409,6 +413,7 @@ export default function RentalsTab({
                 <button
                   type="button"
                   onClick={closeCancelModal}
+                  disabled={isCancellingSubscription}
                   className="rounded-xl border border-white/10 px-4 py-3 text-xs font-bold uppercase tracking-widest text-white transition-all hover:bg-white/10"
                 >
                   Close
@@ -423,7 +428,7 @@ export default function RentalsTab({
                 </button>
               </div>
             </div>
-          </div>
+          </AccessibleDialog>
         </div>
       )}
     </motion.div>

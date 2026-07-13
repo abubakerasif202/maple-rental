@@ -5,7 +5,11 @@ import { User, Mail, Phone, Send, CheckCircle2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { submitInquiry } from '../lib/api';
-import { inquirySchema, type InquiryValues } from '../../shared/inquiry';
+import {
+  inquirySchema,
+  type InquiryFormValues,
+  type InquiryValues,
+} from '../../shared/inquiry';
 
 export default function InquiryForm() {
   const [isSuccess, setIsSuccess] = useState(false);
@@ -16,7 +20,7 @@ export default function InquiryForm() {
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<InquiryValues>({
+  } = useForm<InquiryFormValues, unknown, InquiryValues>({
     resolver: zodResolver(inquirySchema),
   });
 

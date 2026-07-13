@@ -19,6 +19,8 @@ const router = express.Router();
 const STRIPE_PAYOUTS_PAGE_SIZE = 100;
 const RECENT_PAYOUTS_LIMIT = 10;
 const RECENT_BALANCE_TRANSACTIONS_LIMIT = 10;
+const MAX_REPORT_DAYS = 366;
+const SECONDS_PER_DAY = 24 * 60 * 60;
 
 const parseDateOnlyToStripeTimestamp = (value: unknown, endOfDay = false) => {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -42,11 +44,13 @@ const parseDateOnlyToStripeTimestamp = (value: unknown, endOfDay = false) => {
   return Math.floor(date.getTime() / 1000);
 };
 
-const fetchAllStripePayouts = async (
+const fetchStripePayoutSummary = async (
   stripe: Stripe,
   created: { gte: number; lte?: number }
 ) => {
-  const payouts: Stripe.Payout[] = [];
+  const recentPayouts: Stripe.Payout[] = [];
+  let actualPayouts = 0;
+  let payoutCount = 0;
   let startingAfter: string | undefined;
 
   while (true) {
@@ -56,7 +60,15 @@ const fetchAllStripePayouts = async (
       ...(startingAfter ? { starting_after: startingAfter } : {}),
     });
 
-    payouts.push(...page.data);
+    for (const payout of page.data) {
+      payoutCount += 1;
+      if (recentPayouts.length < RECENT_PAYOUTS_LIMIT) {
+        recentPayouts.push(payout);
+      }
+      if (payout.status === 'paid' || payout.status === 'in_transit') {
+        actualPayouts += payout.amount / 100;
+      }
+    }
 
     if (!page.has_more || page.data.length === 0) {
       break;
@@ -68,7 +80,11 @@ const fetchAllStripePayouts = async (
     }
   }
 
-  return payouts;
+  return {
+    actualPayouts,
+    recentPayouts,
+    recentPayoutsTruncated: payoutCount > recentPayouts.length,
+  };
 };
 
 router.get('/weekly', authenticateAdmin, async (req, res) => {
@@ -113,23 +129,52 @@ router.get('/weekly', authenticateAdmin, async (req, res) => {
 
     const requestedStart = parseDateOnlyToStripeTimestamp(req.query.startDate);
     const requestedEnd = parseDateOnlyToStripeTimestamp(req.query.endDate, true);
-    const sevenDaysAgo = Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60);
-    const created: { gte: number; lte?: number } = {
-      gte: requestedStart ?? sevenDaysAgo,
-    };
-
-    if (requestedEnd) {
-      created.lte = requestedEnd;
+    if (req.query.startDate !== undefined && requestedStart === null) {
+      return res.status(400).json({ error: 'startDate must be a valid YYYY-MM-DD date.' });
+    }
+    if (req.query.endDate !== undefined && requestedEnd === null) {
+      return res.status(400).json({ error: 'endDate must be a valid YYYY-MM-DD date.' });
     }
 
+    const now = Math.floor(Date.now() / 1000);
+    const sevenDaysAgo = now - (7 * SECONDS_PER_DAY);
+    const created: { gte: number; lte: number } = {
+      gte: requestedStart ?? sevenDaysAgo,
+      lte: requestedEnd ?? now,
+    };
+
+    if (created.lte < created.gte) {
+      return res.status(400).json({ error: 'endDate must not precede startDate.' });
+    }
+    if (created.lte - created.gte > MAX_REPORT_DAYS * SECONDS_PER_DAY) {
+      return res.status(400).json({ error: `Date range cannot exceed ${MAX_REPORT_DAYS} days.` });
+    }
+
+    const rangeStart = new Date(created.gte * 1000).toISOString();
+    const rangeEnd = new Date(created.lte * 1000).toISOString();
     const balanceTransactionQuery = db
       .from('stripe_balance_transactions')
       .select('*')
-      .gte('created_at', new Date(created.gte * 1000).toISOString())
+      .gte('created_at', rangeStart)
+      .lte('created_at', rangeEnd)
       .order('created_at', { ascending: false })
       .limit(RECENT_BALANCE_TRANSACTIONS_LIMIT);
-    const { data: balanceTransactions, error: balanceTransactionsError } =
-      await balanceTransactionQuery;
+    const [balanceTransactionsResult, balanceTotalsResult, payoutSummary] = await Promise.all([
+      balanceTransactionQuery,
+      db.rpc('aggregate_stripe_balance_transactions', {
+        p_end: rangeEnd,
+        p_start: rangeStart,
+      }),
+      fetchStripePayoutSummary(stripe, created),
+    ]);
+    const {
+      data: balanceTransactions,
+      error: balanceTransactionsError,
+    } = balanceTransactionsResult;
+    const {
+      data: balanceTotals,
+      error: balanceTotalsError,
+    } = balanceTotalsResult;
 
     if (
       balanceTransactionsError &&
@@ -137,26 +182,21 @@ router.get('/weekly', authenticateAdmin, async (req, res) => {
     ) {
       throw balanceTransactionsError;
     }
+    if (balanceTotalsError && !isMissingOperationalHistoryTableError(balanceTotalsError)) {
+      throw balanceTotalsError;
+    }
 
     const importedBalanceTransactions =
       balanceTransactionsError && isMissingOperationalHistoryTableError(balanceTransactionsError)
         ? []
         : ((balanceTransactions || []) as Array<Record<string, any>>);
-
-    const payouts = await fetchAllStripePayouts(stripe, created);
-    const recentPayouts = payouts.slice(0, RECENT_PAYOUTS_LIMIT);
-
-    const actual_payouts_weekly = payouts
-      .filter((payout) => payout.status === 'paid' || payout.status === 'in_transit')
-      .reduce((sum, p) => sum + (p.amount / 100), 0);
-    const imported_balance_net = importedBalanceTransactions.reduce(
-      (sum, transaction) => sum + (Number(transaction.net) || 0),
-      0,
-    );
-    const imported_balance_gross = importedBalanceTransactions.reduce(
-      (sum, transaction) => sum + (Number(transaction.amount) || 0),
-      0,
-    );
+    const importedBalanceTotals =
+      balanceTotalsError && isMissingOperationalHistoryTableError(balanceTotalsError)
+        ? null
+        : (balanceTotals as Record<string, unknown> | null);
+    const actual_payouts_weekly = payoutSummary.actualPayouts;
+    const imported_balance_net = Number(importedBalanceTotals?.net) || 0;
+    const imported_balance_gross = Number(importedBalanceTotals?.gross) || 0;
 
     res.json({
       projected_gross_weekly,
@@ -177,13 +217,13 @@ router.get('/weekly', authenticateAdmin, async (req, res) => {
         source: transaction.source || null,
         transfer: transaction.transfer || null,
       })),
-      recent_payouts: recentPayouts.map((p) => ({
+      recent_payouts: payoutSummary.recentPayouts.map((p) => ({
         id: p.id,
         amount: p.amount / 100,
         arrival_date: new Date(p.arrival_date * 1000).toISOString().slice(0, 10),
         status: p.status,
       })),
-      recent_payouts_truncated: payouts.length > recentPayouts.length,
+      recent_payouts_truncated: payoutSummary.recentPayoutsTruncated,
     });
   } catch (err) {
     console.error('Financials fetch error:', err);

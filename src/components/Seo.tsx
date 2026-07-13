@@ -20,11 +20,12 @@ type SeoProps = {
 const ensureMetaTag = (selector: string, attributes: Record<string, string>) => {
   let element = document.head.querySelector(selector);
   if (!(element instanceof HTMLMetaElement)) {
-    element = document.createElement('meta');
+    const created = document.createElement('meta');
     Object.entries(attributes).forEach(([key, value]) => {
-      element.setAttribute(key, value);
+      created.setAttribute(key, value);
     });
-    document.head.appendChild(element);
+    document.head.appendChild(created);
+    element = created;
   }
 
   return element;

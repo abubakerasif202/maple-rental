@@ -25,6 +25,9 @@ export interface DataTablePaginationResult<T> {
   totalPages: number;
 }
 
+export const shouldApplyDataTableClientTransforms = (isServerPagination: boolean) =>
+  !isServerPagination;
+
 const toComparableValue = (value: DataTableValue) => {
   if (value instanceof Date) {
     return value.getTime();

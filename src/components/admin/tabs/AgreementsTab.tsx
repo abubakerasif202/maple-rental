@@ -6,6 +6,7 @@ import { Application } from '../../../types';
 import * as api from '../../../lib/api';
 import EmptyState from '../EmptyState';
 import MarkdownTemplateEditor from '../MarkdownTemplateEditor';
+import AccessibleDialog from '../AccessibleDialog';
 
 interface AgreementsTabProps {
   approvedApplications: Application[];
@@ -16,13 +17,13 @@ interface AgreementsTabProps {
   handleGenerateAgreement: () => void;
   canCopyVehicleCheckoutLink: boolean;
   generateCheckoutLinkMutation: UseMutationResult<
-    any,
+    api.VehicleCheckoutLinkResponse,
     Error,
     { application_id: string },
     unknown
   >;
   handleCopyVehicleCheckoutLink: () => void;
-  savedAgreements: any[];
+  savedAgreements: api.SavedLeaseAgreement[];
   setAgreementModalMode: (mode: 'draft' | 'saved') => void;
   setAgreementContent: (content: string) => void;
   setIsAgreementModalOpen: (val: boolean) => void;
@@ -58,7 +59,7 @@ export default function AgreementsTab({
     queryKey: ['agreement-templates'],
     queryFn: () => api.fetchAgreementTemplates(),
   });
-  const templates = templatesQuery.data || [];
+  const templates = useMemo(() => templatesQuery.data || [], [templatesQuery.data]);
   const selectedTemplate = useMemo(
     () =>
       templates.find((template) => template.id === selectedTemplateId) ||
@@ -84,7 +85,7 @@ export default function AgreementsTab({
     }
 
     setEditorContent(selectedTemplate.content);
-  }, [selectedTemplate?.id]);
+  }, [selectedTemplate, selectedTemplateId]);
 
   const saveTemplateMutation = useMutation({
     mutationFn: () => {
@@ -183,7 +184,7 @@ export default function AgreementsTab({
 
       return api.previewAgreementTemplate(selectedTemplate.id, {
         content: editorContent,
-      } as api.LeaseAgreementPayload);
+      });
     },
     onSuccess: (response) => {
       setPreviewContent(response.agreement);
@@ -366,10 +367,14 @@ export default function AgreementsTab({
       <div className="bg-white/5 border border-white/10 p-8 rounded-3xl">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-brand-grey uppercase tracking-widest">
+            <label
+              htmlFor="agreement-application"
+              className="text-[10px] font-bold text-brand-grey uppercase tracking-widest"
+            >
               Select Approved Application
             </label>
             <select
+              id="agreement-application"
               value={selected_agreement_application_id}
               onChange={(e) => {
                 const applicationId = e.target.value;
@@ -440,7 +445,7 @@ export default function AgreementsTab({
 
       <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/5">
         <div className="space-y-3 p-4 md:hidden">
-          {savedAgreements.map((agreement: any) => (
+          {savedAgreements.map((agreement) => (
             <article
               key={agreement.id}
               className="rounded-lg border border-white/10 bg-brand-navy/60 p-4"
@@ -503,7 +508,7 @@ export default function AgreementsTab({
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {savedAgreements.map((agreement: any) => (
+            {savedAgreements.map((agreement) => (
               <tr
                 key={agreement.id}
                 className="hover:bg-white/5 transition-all group"
@@ -558,10 +563,14 @@ export default function AgreementsTab({
 
       {previewContent && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-brand-navy/60 backdrop-blur-xl sm:items-center sm:p-6">
-          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-brand-navy shadow-2xl sm:rounded-3xl">
+          <AccessibleDialog
+            ariaLabelledBy="agreement-preview-title"
+            onClose={() => setPreviewContent(null)}
+            className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-brand-navy shadow-2xl sm:rounded-3xl"
+          >
             <div className="flex items-center justify-between border-b border-white/10 bg-white/5 p-5 sm:p-7">
               <div>
-                <h3 className="text-xl font-bold uppercase tracking-tighter text-white">
+                <h3 id="agreement-preview-title" className="text-xl font-bold uppercase tracking-tighter text-white">
                   Agreement Preview
                 </h3>
                 <p className="mt-1 text-[10px] uppercase tracking-widest text-brand-grey">
@@ -571,6 +580,7 @@ export default function AgreementsTab({
               <button
                 type="button"
                 onClick={() => setPreviewContent(null)}
+                aria-label="Close agreement preview"
                 className="min-h-11 rounded-full bg-white/5 px-4 text-brand-grey hover:text-white"
               >
                 Close
@@ -581,7 +591,7 @@ export default function AgreementsTab({
                 {previewContent}
               </pre>
             </div>
-          </div>
+          </AccessibleDialog>
         </div>
       )}
     </motion.div>
