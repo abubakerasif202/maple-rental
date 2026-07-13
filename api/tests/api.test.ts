@@ -7263,7 +7263,7 @@ describe("Stripe API", () => {
   });
 
   it("POST /api/stripe/webhook returns a generic signature failure message", async () => {
-    mockStripe.webhooksConstructEvent.mockImplementationOnce(() => {
+    mockStripe.webhooksConstructEvent.mockImplementation(() => {
       throw new Error(
         "No signatures found matching the expected signature for payload",
       );
