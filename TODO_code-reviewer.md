@@ -54,7 +54,7 @@
 - [x] **CR-IMPL-1.1 [Review Findings Implemented]**:
   - **Status**: All High, Medium, and Low findings below have been remediated in the worktree with focused regression coverage.
   - **Payment Contract**: Checkout fulfillment remains payment-only: `carId: null`, application status becomes `Paid`, and no car or rental row is mutated automatically.
-  - **Validation**: Node `20.20.2`; strict TypeScript and ESLint passed; 54 test files and 471 tests passed; client/server production builds passed; production dependency audit reported zero vulnerabilities; `git diff --check` passed.
+  - **Validation**: Node `20.20.2`; strict TypeScript and ESLint passed; 55 test files and 474 tests passed; client/server production builds passed; production dependency audit reported zero vulnerabilities; `git diff --check` passed.
 
 - [x] **CR-IMPL-1.2 [Apply Migrations To Isolated Local Supabase]**:
   - **Status**: Completed against the isolated WSL2 Supabase stack on 2026-07-14. Supabase CLI `2.109.1` applied every migration through `20260715022000`, and the application schema contract passed against the local Data API.

@@ -16,6 +16,10 @@ import {
   inspectStripeCatalog,
 } from '../api/stripeCatalog.js';
 import { createStripeClient, readStripeSecretKey } from '../api/stripeClient.js';
+import {
+  EXPECTED_STRIPE_WEBHOOK_EVENTS,
+  getMissingStripeWebhookEvents,
+} from '../api/stripeWebhookConfig.js';
 
 const args = new Set(process.argv.slice(2));
 const requireLiveKey = args.has('--require-live');
@@ -30,18 +34,6 @@ if (!requireLiveKey && process.env.NODE_ENV !== 'production') {
     quiet: true,
   });
 }
-
-const EXPECTED_WEBHOOK_EVENTS = [
-  'checkout.session.completed',
-  'checkout.session.async_payment_succeeded',
-  'checkout.session.async_payment_failed',
-  'checkout.session.expired',
-  'customer.subscription.created',
-  'customer.subscription.updated',
-  'customer.subscription.deleted',
-  'invoice.payment_succeeded',
-  'invoice.payment_failed',
-] as const;
 
 type CheckStatus = 'pass' | 'warn' | 'fail';
 
@@ -392,11 +384,7 @@ const verifyStripeAccountConfiguration = async (
         );
       } else {
         const enabledEvents = enabledEndpoint.enabled_events || [];
-        const missingEvents = enabledEvents.includes('*')
-          ? []
-          : EXPECTED_WEBHOOK_EVENTS.filter((eventName) =>
-              enabledEvents.includes(eventName)
-            );
+        const missingEvents = getMissingStripeWebhookEvents(enabledEvents);
 
         addCheck(
           'stripe_webhook_endpoint',
@@ -440,7 +428,7 @@ const verifyStripeAccountConfiguration = async (
         const enabledEvents = endpoint.enabled_events || [];
         return (
           enabledEvents.includes('*') ||
-          EXPECTED_WEBHOOK_EVENTS.some((eventName) =>
+          EXPECTED_STRIPE_WEBHOOK_EVENTS.some((eventName) =>
             enabledEvents.includes(eventName)
           )
         );
