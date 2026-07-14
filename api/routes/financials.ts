@@ -82,6 +82,19 @@ const buildStatusDistribution = (statuses: Record<string, number>) =>
     .sort((left, right) => right[1] - left[1])
     .map(([label, value]) => ({ label, value }));
 
+const readOptionalRows = async <T>(
+  queryFactory: () => PromiseLike<{ data: T[] | null; error: unknown }>
+) => {
+  const result = await queryFactory();
+  const error = result.error as { code?: string } | null | undefined;
+
+  if (error && !isMissingOperationalHistoryTableError(error)) {
+    throw result.error;
+  }
+
+  return (result.data || []) as T[];
+};
+
 const fetchStripePayoutSummary = async (
   stripe: Stripe,
   created: { gte: number; lte?: number }
@@ -287,30 +300,22 @@ const loadDashboardSummary = async () => {
   const rentalSelectColumns = await getRentalSelectColumns({ includeStripeFields: true });
   const applicationSelectColumns = await getApplicationSelectColumns();
   const importedApplicationSelectColumns = await getApplicationImportedDataSelectColumns();
-  const [applicationsResult, rentalsResult, invoicesResult, agreementsResult, auditResult] =
+  const [applicationRows, rentalRows, invoiceRows, agreementRows, auditRows, importedApplicationRows, customerCountResult] =
     await Promise.all([
-      db.from('applications').select(applicationSelectColumns),
-      db.from('rentals').select(rentalSelectColumns),
-      db.from('invoices').select('id, balance, amount, status, invoice_date, due_label, customer_name, car_registration'),
-      db.from('lease_agreements').select('id, application_id, status, created_at'),
-      db.from('admin_audit_events').select('id, action, actor, created_at, target_type, target_id, metadata').order('created_at', { ascending: false }).limit(RECENT_ACTIVITY_LIMIT),
+      readOptionalRows<Record<string, any>>(() => db.from('applications').select(applicationSelectColumns)),
+      readOptionalRows<Record<string, any>>(() => db.from('rentals').select(rentalSelectColumns)),
+      readOptionalRows<Record<string, any>>(() => db.from('invoices').select('id, balance, amount, status, invoice_date, due_label, customer_name, car_registration')),
+      readOptionalRows<Record<string, any>>(() => db.from('lease_agreements').select('id, application_id, status, created_at')),
+      readOptionalRows<Record<string, any>>(() => db.from('admin_audit_events').select('id, action, actor, created_at, target_type, target_id, metadata').order('created_at', { ascending: false }).limit(RECENT_ACTIVITY_LIMIT)),
+      readOptionalRows<Record<string, any>>(() => db.from('applications').select(importedApplicationSelectColumns)),
+      db.from('customers').select('id', { count: 'exact', head: true }),
     ]);
 
-  for (const result of [applicationsResult, rentalsResult, invoicesResult, agreementsResult, auditResult]) {
-    if (result.error) {
-      throw result.error;
-    }
+  if (customerCountResult.error && !isMissingOperationalHistoryTableError(customerCountResult.error)) {
+    throw customerCountResult.error;
   }
 
-  const applicationRows = (applicationsResult.data || []) as Array<Record<string, any>>;
-  const rentalRows = (rentalsResult.data || []) as Array<Record<string, any>>;
-  const invoiceRows = (invoicesResult.data || []) as Array<Record<string, any>>;
-  const agreementRows = (agreementsResult.data || []) as Array<Record<string, any>>;
-  const auditRows = (auditResult.data || []) as Array<Record<string, any>>;
-  const importedApplicationIds = getImportedApplicationIdSet(
-    (await db.from('applications').select(importedApplicationSelectColumns)).data ||
-      [],
-  );
+  const importedApplicationIds = getImportedApplicationIdSet(importedApplicationRows);
   const realApplications = filterRealApplications(applicationRows);
   const realRentals = filterRealRentals(rentalRows, importedApplicationIds);
   const statusCounts = realApplications.reduce<Record<string, number>>((acc, row) => {
@@ -440,7 +445,7 @@ const loadDashboardSummary = async () => {
     status_distribution: buildStatusDistribution(statusCounts),
     summary_generated_at: new Date().toISOString(),
     total_applications: realApplications.length,
-    total_customers: (await db.from('customers').select('id', { count: 'exact', head: true })).count || 0,
+    total_customers: Number(customerCountResult.count) || 0,
     total_weekly_income: totalWeeklyIncome,
     weekly_recurring_revenue: totalWeeklyIncome,
   };
