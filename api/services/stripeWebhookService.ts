@@ -49,6 +49,7 @@ type ModernWebhookLedgerRow = {
   received_at?: string | null;
   retry_count?: number | null;
   retry_reason?: string | null;
+  stripe_subscription_id?: string | null;
   status?: WebhookLedgerStatus | null;
   updated_at?: string | null;
 };
@@ -227,6 +228,7 @@ const claimModernLedgerForProcessing = async (
         application_id: workItem.applicationId,
         checkout_kind: workItem.checkoutKind,
         checkout_session_id: workItem.checkoutSessionId,
+        stripe_subscription_id: workItem.stripeSubscriptionId,
         status: 'processing',
         error_message: null,
         processed_at: null,
@@ -260,6 +262,7 @@ const reclaimStaleModernInFlightLedger = async (
       application_id: workItem.applicationId,
       checkout_kind: workItem.checkoutKind,
       checkout_session_id: workItem.checkoutSessionId,
+      stripe_subscription_id: workItem.stripeSubscriptionId,
       error_message: null,
       status: 'processing',
       processing_source: workItem.processingSource,
@@ -454,6 +457,7 @@ const claimModernWebhookEvent = async (
       application_id: workItem.applicationId,
       checkout_kind: workItem.checkoutKind,
       checkout_session_id: workItem.checkoutSessionId,
+      stripe_subscription_id: workItem.stripeSubscriptionId,
       event_type: workItem.eventType,
       fulfillment_state: 'processing',
       payment_link_version: workItem.paymentLinkVersion,
@@ -750,17 +754,72 @@ export const processStripeWebhookWorkItem = async (
             subscription.metadata.checkout_kind === 'vehicle' &&
             Number(invoice.amount_paid || 0) > 0
           ) {
-            const sessions = await getStripe().checkout.sessions.list({
-              limit: 1,
-              subscription: subscriptionId,
-            });
-            const session = sessions.data.find(
-              (candidate) =>
-                candidate.metadata?.checkout_kind === 'vehicle' &&
-                candidate.metadata?.application_id === subscription.metadata.application_id &&
-                candidate.metadata?.payment_link_version ===
-                  subscription.metadata.payment_link_version
-            );
+            const { data: persistedCheckoutLedger, error: persistedCheckoutLedgerError } =
+              await db
+                .from('stripe_webhook_events')
+                .select('checkout_session_id')
+                .eq('stripe_subscription_id', subscriptionId)
+                .eq('checkout_kind', 'vehicle')
+                .not('checkout_session_id', 'is', null)
+                .order('received_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (persistedCheckoutLedgerError) {
+              throw new Error(
+                `Failed to resolve persisted Checkout Session for Stripe subscription ${subscriptionId}: ${persistedCheckoutLedgerError.message || 'Unknown error'}`
+              );
+            }
+
+            let session: Stripe.Checkout.Session | null = null;
+            const persistedSessionId = persistedCheckoutLedger?.checkout_session_id;
+            if (persistedSessionId) {
+              session = await getStripe().checkout.sessions.retrieve(persistedSessionId);
+            } else {
+              const applicationId = subscription.metadata.application_id || null;
+              const paymentLinkVersion = subscription.metadata.payment_link_version || null;
+              if (applicationId && paymentLinkVersion) {
+                const { data: application, error: applicationError } = await db
+                  .from('applications')
+                  .select('pending_checkout_session_id, payment_link_version')
+                  .eq('id', applicationId)
+                  .maybeSingle();
+
+                if (applicationError) {
+                  throw new Error(
+                    `Failed to resolve application ${applicationId} for Stripe subscription ${subscriptionId}: ${applicationError.message || 'Unknown error'}`
+                  );
+                }
+
+                const applicationRecord = application as
+                  | { pending_checkout_session_id?: string | null; payment_link_version?: number | null }
+                  | null;
+                if (
+                  applicationRecord?.pending_checkout_session_id &&
+                  Number(applicationRecord.payment_link_version || 0) ===
+                    Number(paymentLinkVersion)
+                ) {
+                  session = await getStripe().checkout.sessions.retrieve(
+                    applicationRecord.pending_checkout_session_id
+                  );
+                }
+              }
+            }
+            if (!session) {
+              // Compatibility for events received before the relationship column
+              // existed. New checkout events always persist the relation above.
+              const sessions = await getStripe().checkout.sessions.list({
+                limit: 1,
+                subscription: subscriptionId,
+              });
+              session = sessions.data.find(
+                (candidate) =>
+                  candidate.metadata?.checkout_kind === 'vehicle' &&
+                  candidate.metadata?.application_id === subscription.metadata.application_id &&
+                  candidate.metadata?.payment_link_version ===
+                    subscription.metadata.payment_link_version
+              ) || null;
+            }
 
             if (!session) {
               throw new Error(
