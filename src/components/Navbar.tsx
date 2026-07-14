@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowUpRight, Menu, Phone, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const navLinks = [
   { name: 'Home', path: '/' },
@@ -24,6 +24,9 @@ export const isNavigationPathActive = (path: string, pathname: string, hash: str
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const mobileNavigationRef = useRef<HTMLDivElement>(null);
+  const mobileToggleRef = useRef<HTMLButtonElement>(null);
+  const mobileMenuWasOpenRef = useRef(false);
 
   useEffect(() => {
     setIsOpen(false);
@@ -34,6 +37,58 @@ export default function Navbar() {
     return () => {
       document.body.style.overflow = '';
     };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      if (mobileMenuWasOpenRef.current) {
+        mobileToggleRef.current?.focus();
+      }
+      mobileMenuWasOpenRef.current = false;
+      return;
+    }
+
+    mobileMenuWasOpenRef.current = true;
+    const menu = mobileNavigationRef.current;
+    const getFocusableElements = () =>
+      Array.from(
+        menu?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        ) || []
+      );
+
+    getFocusableElements()[0]?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setIsOpen(false);
+        return;
+      }
+
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      const focusableElements = getFocusableElements();
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements.at(-1);
+      if (!firstElement || !lastElement) {
+        event.preventDefault();
+        return;
+      }
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
   const isActive = (path: string) =>
@@ -81,6 +136,7 @@ export default function Navbar() {
 
           <div className="flex items-center md:hidden">
             <button
+              ref={mobileToggleRef}
               type="button"
               onClick={() => setIsOpen((open) => !open)}
               aria-expanded={isOpen}
@@ -95,7 +151,14 @@ export default function Navbar() {
       </div>
 
       {isOpen && (
-        <div id="mobile-navigation" className="fixed inset-x-0 top-[76px] h-[calc(100dvh-76px)] overflow-y-auto border-t border-white/10 bg-brand-charcoal/98 md:hidden">
+        <div
+          ref={mobileNavigationRef}
+          id="mobile-navigation"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Mobile navigation"
+          className="fixed inset-x-0 top-[76px] h-[calc(100dvh-76px)] overflow-y-auto border-t border-white/10 bg-brand-charcoal/98 md:hidden"
+        >
           <div className="maple-container flex min-h-full flex-col py-8">
             <p className="maple-eyebrow mb-5">Navigation</p>
             <div className="grid gap-2">

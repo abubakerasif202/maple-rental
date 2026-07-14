@@ -44,6 +44,8 @@ export default function InquiryForm() {
   if (isSuccess) {
     return (
       <motion.div
+        role="status"
+        aria-live="polite"
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         className="bg-brand-navy-light p-8 md:p-12 border border-brand-gold/30 text-center shadow-2xl"
@@ -75,7 +77,7 @@ export default function InquiryForm() {
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {submitError && (
-          <div className="border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-100">
+          <div role="alert" aria-live="assertive" className="border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-100">
             {submitError}
           </div>
         )}
@@ -87,12 +89,14 @@ export default function InquiryForm() {
               <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
               <input
                 id="inquiry-name"
+                aria-describedby={errors.name ? 'inquiry-name-error' : undefined}
+                aria-invalid={Boolean(errors.name)}
                 {...register('name')}
                 placeholder="John Doe"
                 className={`w-full bg-brand-navy border ${errors.name ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
               />
             </div>
-            {errors.name && <p className="text-red-500 text-[10px] uppercase tracking-widest">{errors.name.message}</p>}
+            {errors.name && <p id="inquiry-name-error" role="alert" className="text-red-500 text-[10px] uppercase tracking-widest">{errors.name.message}</p>}
           </div>
           <div className="space-y-2">
             <label htmlFor="inquiry-email" className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Email Address</label>
@@ -100,12 +104,14 @@ export default function InquiryForm() {
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
               <input
                 id="inquiry-email"
+                aria-describedby={errors.email ? 'inquiry-email-error' : undefined}
+                aria-invalid={Boolean(errors.email)}
                 {...register('email')}
                 placeholder="john@example.com"
                 className={`w-full bg-brand-navy border ${errors.email ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
               />
             </div>
-            {errors.email && <p className="text-red-500 text-[10px] uppercase tracking-widest">{errors.email.message}</p>}
+            {errors.email && <p id="inquiry-email-error" role="alert" className="text-red-500 text-[10px] uppercase tracking-widest">{errors.email.message}</p>}
           </div>
         </div>
 
@@ -116,12 +122,14 @@ export default function InquiryForm() {
               <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
               <input
                 id="inquiry-phone"
+                aria-describedby={errors.phone ? 'inquiry-phone-error' : undefined}
+                aria-invalid={Boolean(errors.phone)}
                 {...register('phone')}
                 placeholder="0400 000 000"
                 className={`w-full bg-brand-navy border ${errors.phone ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
               />
             </div>
-            {errors.phone && <p className="text-red-500 text-[10px] uppercase tracking-widest">{errors.phone.message}</p>}
+            {errors.phone && <p id="inquiry-phone-error" role="alert" className="text-red-500 text-[10px] uppercase tracking-widest">{errors.phone.message}</p>}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -129,20 +137,24 @@ export default function InquiryForm() {
               <input
                 id="inquiry-start-date"
                 type="date"
+                aria-describedby={errors.startDate ? 'inquiry-start-date-error' : undefined}
+                aria-invalid={Boolean(errors.startDate)}
                 {...register('startDate')}
                 className={`w-full bg-brand-navy border ${errors.startDate ? 'border-red-500' : 'border-white/10'} p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors`}
               />
-              {errors.startDate && <p className="text-red-500 text-[10px] uppercase tracking-widest">{errors.startDate.message}</p>}
+              {errors.startDate && <p id="inquiry-start-date-error" role="alert" className="text-red-500 text-[10px] uppercase tracking-widest">{errors.startDate.message}</p>}
             </div>
             <div className="space-y-2">
               <label htmlFor="inquiry-end-date" className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">End Date</label>
               <input
                 id="inquiry-end-date"
                 type="date"
+                aria-describedby={errors.endDate ? 'inquiry-end-date-error' : undefined}
+                aria-invalid={Boolean(errors.endDate)}
                 {...register('endDate')}
                 className={`w-full bg-brand-navy border ${errors.endDate ? 'border-red-500' : 'border-white/10'} p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors`}
               />
-              {errors.endDate && <p className="text-red-500 text-[10px] uppercase tracking-widest">{errors.endDate.message}</p>}
+              {errors.endDate && <p id="inquiry-end-date-error" role="alert" className="text-red-500 text-[10px] uppercase tracking-widest">{errors.endDate.message}</p>}
             </div>
           </div>
         </div>

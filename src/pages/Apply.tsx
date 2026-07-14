@@ -172,10 +172,10 @@ const defaultValues: ApplyValues = {
   agreement_signature: "",
 };
 
-function FieldError({ message }: { message?: string }) {
+function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
   return (
-    <p className="text-red-300 text-[11px] font-semibold tracking-wide">
+    <p id={id} role="alert" className="text-red-300 text-[11px] font-semibold tracking-wide">
       {message}
     </p>
   );
@@ -400,11 +400,13 @@ export default function Apply() {
             "passport_or_uber_profile_screenshot",
           ];
 
-    const isValid = await trigger(fieldsToValidate);
+    const isValid = await trigger(fieldsToValidate, { shouldFocus: true });
 
     if (isValid) {
       setPageError(null);
       setStep(step === 1 ? 2 : 3);
+    } else {
+      setPageError("Please correct the highlighted fields before continuing.");
     }
   };
 
@@ -730,7 +732,7 @@ export default function Apply() {
 
               <div className="space-y-6 p-6 sm:p-8">
                 {pageError && (
-                  <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4">
+                  <div role="alert" aria-live="assertive" className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4">
                     <div className="flex items-start gap-3">
                       <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-300" />
                       <p className="text-sm leading-7 text-red-50">
@@ -753,33 +755,39 @@ export default function Apply() {
                           <FormLabel htmlFor="application-name">Full name</FormLabel>
                           <input
                             id="application-name"
+                            aria-describedby={errors.name ? "application-name-error" : undefined}
+                            aria-invalid={Boolean(errors.name)}
                             {...register("name")}
                             className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
                             placeholder="As shown on your licence"
                           />
-                          <FieldError message={errors.name?.message} />
+                          <FieldError id="application-name-error" message={errors.name?.message} />
                         </div>
 
                         <div className="space-y-2">
                           <FormLabel htmlFor="application-phone">Mobile number</FormLabel>
                           <input
                             id="application-phone"
+                            aria-describedby={errors.phone ? "application-phone-error" : undefined}
+                            aria-invalid={Boolean(errors.phone)}
                             {...register("phone")}
                             className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
                             placeholder="0412 345 678"
                           />
-                          <FieldError message={errors.phone?.message} />
+                          <FieldError id="application-phone-error" message={errors.phone?.message} />
                         </div>
 
                         <div className="space-y-2">
                           <FormLabel htmlFor="application-email">Email address</FormLabel>
                           <input
                             id="application-email"
+                            aria-describedby={errors.email ? "application-email-error" : undefined}
+                            aria-invalid={Boolean(errors.email)}
                             {...register("email")}
                             className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
                             placeholder="driver@example.com"
                           />
-                          <FieldError message={errors.email?.message} />
+                          <FieldError id="application-email-error" message={errors.email?.message} />
                         </div>
 
                         <div className="space-y-2">
@@ -787,10 +795,13 @@ export default function Apply() {
                           <input
                             id="application-start-date"
                             type="date"
+                            aria-describedby={errors.intended_start_date ? "application-start-date-error" : undefined}
+                            aria-invalid={Boolean(errors.intended_start_date)}
                             {...register("intended_start_date")}
                             className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
                           />
                           <FieldError
+                            id="application-start-date-error"
                             message={errors.intended_start_date?.message}
                           />
                         </div>
@@ -799,12 +810,14 @@ export default function Apply() {
                           <FormLabel htmlFor="application-address">Residential address</FormLabel>
                           <textarea
                             id="application-address"
+                            aria-describedby={errors.address ? "application-address-error" : undefined}
+                            aria-invalid={Boolean(errors.address)}
                             {...register("address")}
                             rows={3}
                             className="w-full resize-none rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
                             placeholder="Street, suburb, state, postcode"
                           />
-                          <FieldError message={errors.address?.message} />
+                          <FieldError id="application-address-error" message={errors.address?.message} />
                         </div>
                       </div>
                     </SectionShell>
@@ -822,11 +835,14 @@ export default function Apply() {
                           <FormLabel htmlFor="application-licence-number">Licence number</FormLabel>
                           <input
                             id="application-licence-number"
+                            aria-describedby={errors.license_number ? "application-licence-number-error" : undefined}
+                            aria-invalid={Boolean(errors.license_number)}
                             {...register("license_number")}
                             className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
                             placeholder="NSW licence number"
                           />
                           <FieldError
+                            id="application-licence-number-error"
                             message={errors.license_number?.message}
                           />
                         </div>
@@ -836,10 +852,13 @@ export default function Apply() {
                           <input
                             id="application-licence-expiry"
                             type="date"
+                            aria-describedby={errors.license_expiry ? "application-licence-expiry-error" : undefined}
+                            aria-invalid={Boolean(errors.license_expiry)}
                             {...register("license_expiry")}
                             className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
                           />
                           <FieldError
+                            id="application-licence-expiry-error"
                             message={errors.license_expiry?.message}
                           />
                         </div>
@@ -849,6 +868,8 @@ export default function Apply() {
                           <input
                             id="application-passport-document"
                             type="file"
+                            aria-describedby={errors.passport_or_uber_profile_screenshot ? "application-passport-document-error" : undefined}
+                            aria-invalid={Boolean(errors.passport_or_uber_profile_screenshot)}
                             accept={APPLICATION_DOCUMENT_CONTENT_TYPES.join(",")}
                             onChange={(event) =>
                               handleFileUpload(
@@ -863,6 +884,7 @@ export default function Apply() {
                             {MAX_UPLOAD_SIZE_MB} MB.
                           </p>
                           <FieldError
+                            id="application-passport-document-error"
                             message={
                               errors.passport_or_uber_profile_screenshot?.message
                             }
@@ -893,7 +915,10 @@ export default function Apply() {
                                 : "Choose an image file"}
                             </span>
                             <input
+                              id="application-licence-front"
                               type="file"
+                              aria-describedby={errors.license_photo ? "application-licence-front-error" : undefined}
+                              aria-invalid={Boolean(errors.license_photo)}
                               accept={APPLICATION_IMAGE_CONTENT_TYPES.join(",")}
                               className="hidden"
                               onChange={(event) =>
@@ -903,6 +928,7 @@ export default function Apply() {
                           </label>
                           <div className="mt-4">
                             <FieldError
+                              id="application-licence-front-error"
                               message={errors.license_photo?.message}
                             />
                           </div>
@@ -927,7 +953,10 @@ export default function Apply() {
                                 : "Choose an image file"}
                             </span>
                             <input
+                              id="application-licence-back"
                               type="file"
+                              aria-describedby={errors.license_back_photo ? "application-licence-back-error" : undefined}
+                              aria-invalid={Boolean(errors.license_back_photo)}
                               accept={APPLICATION_IMAGE_CONTENT_TYPES.join(",")}
                               className="hidden"
                               onChange={(event) =>
@@ -937,6 +966,7 @@ export default function Apply() {
                           </label>
                           <div className="mt-4">
                             <FieldError
+                              id="application-licence-back-error"
                               message={errors.license_back_photo?.message}
                             />
                           </div>
@@ -948,6 +978,8 @@ export default function Apply() {
                           <FormLabel htmlFor="application-uber-status">Uber status</FormLabel>
                           <select
                             id="application-uber-status"
+                            aria-describedby={errors.uber_status ? "application-uber-status-error" : undefined}
+                            aria-invalid={Boolean(errors.uber_status)}
                             {...register("uber_status")}
                             className="w-full appearance-none rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
                           >
@@ -957,13 +989,15 @@ export default function Apply() {
                               Not Yet Registered
                             </option>
                           </select>
-                          <FieldError message={errors.uber_status?.message} />
+                          <FieldError id="application-uber-status-error" message={errors.uber_status?.message} />
                         </div>
 
                         <div className="space-y-2">
                           <FormLabel htmlFor="application-experience">Rideshare experience</FormLabel>
                           <select
                             id="application-experience"
+                            aria-describedby={errors.experience ? "application-experience-error" : undefined}
+                            aria-invalid={Boolean(errors.experience)}
                             {...register("experience")}
                             className="w-full appearance-none rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
                           >
@@ -974,7 +1008,7 @@ export default function Apply() {
                             <option value="1-3 years">1-3 years</option>
                             <option value="3+ years">3+ years</option>
                           </select>
-                          <FieldError message={errors.experience?.message} />
+                          <FieldError id="application-experience-error" message={errors.experience?.message} />
                         </div>
                       </div>
 
@@ -1028,7 +1062,10 @@ export default function Apply() {
                         <div className="grid gap-5 md:grid-cols-2">
                           <label className="flex items-start gap-4 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
                             <input
+                              id="application-agreement-accepted"
                               type="checkbox"
+                              aria-describedby={errors.agreement_accepted ? "application-agreement-accepted-error" : undefined}
+                              aria-invalid={Boolean(errors.agreement_accepted)}
                               {...register("agreement_accepted")}
                               className="mt-1 h-5 w-5 rounded border-white/20 bg-brand-navy text-brand-gold focus:ring-brand-gold"
                             />
@@ -1041,16 +1078,20 @@ export default function Apply() {
                             <FormLabel htmlFor="application-signature">Typed signature</FormLabel>
                             <input
                               id="application-signature"
+                              aria-describedby={errors.agreement_signature ? "application-signature-error" : undefined}
+                              aria-invalid={Boolean(errors.agreement_signature)}
                               {...register("agreement_signature")}
                               className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
                               placeholder="Type your full legal name"
                             />
                             <FieldError
+                              id="application-signature-error"
                               message={errors.agreement_signature?.message}
                             />
                           </div>
                         </div>
                         <FieldError
+                          id="application-agreement-accepted-error"
                           message={errors.agreement_accepted?.message}
                         />
 
