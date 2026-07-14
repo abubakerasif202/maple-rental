@@ -46,7 +46,7 @@ import { completeAdminLogout } from '../lib/adminLogout';
 import {
   Application,
   Rental,
-  DashboardStats,
+  DashboardSummaryResponse,
   AdminDatasetResponse,
   OperationalCustomer,
   OperationalInvoice,
@@ -144,6 +144,7 @@ export default function AdminDashboard() {
   const notificationTimeoutRef = useRef<number | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [openingDocument, setOpeningDocument] = useState<'license_photo' | 'license_back_photo' | 'passport_or_uber_profile_screenshot' | null>(null);
@@ -280,9 +281,9 @@ export default function AdminDashboard() {
   const shouldLoadAgreements = activeTab === 'agreements';
 
   // Queries
-  const statsQuery = useQuery<DashboardStats>({
-    queryKey: ['stats'],
-    queryFn: () => api.fetchStats(),
+  const summaryQuery = useQuery<DashboardSummaryResponse>({
+    queryKey: ['dashboard-summary'],
+    queryFn: () => api.fetchDashboardSummary(),
     enabled: shouldLoadStats,
   });
 
@@ -735,7 +736,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const stats = statsQuery.data;
+  const summary = summaryQuery.data;
   const applicationsDataset = applicationsQuery.data;
   const approvedApplicationsDataset = approvedApplicationsQuery.data;
   const rentalsDataset = rentalsQuery.data;
@@ -797,7 +798,14 @@ export default function AdminDashboard() {
   const canCopyVehicleCheckoutLink =
     Boolean(selectedAgreementApplication) &&
     selectedAgreementApplication?.status === 'Approved';
-  const formatCurrency = (value?: number | string | null) => `$${Number(value ?? 0).toFixed(2)}`;
+  const formatCurrency = (value?: number | string | null) =>
+    new Intl.NumberFormat('en-AU', {
+      currency: 'AUD',
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 2,
+      style: 'currency',
+    }).format(Number(value ?? 0));
+  const lastUpdated = summary?.summary_generated_at || null;
   const formatDate = (value?: string | null) => {
     if (!value) {
       return 'N/A';
@@ -868,10 +876,12 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-brand-navy">
       <Sidebar
         activeTab={activeTab}
-        setActiveTab={handleAdminTabChange}
         handleLogout={handleLogout}
+        isCollapsed={isSidebarCollapsed}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        onToggleCollapse={() => setIsSidebarCollapsed((current) => !current)}
+        setActiveTab={handleAdminTabChange}
       />
 
       {/* Main Content */}
@@ -883,22 +893,38 @@ export default function AdminDashboard() {
               {adminTabLabels[activeTab] || 'Overview'}
             </h1>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsSidebarOpen(true)}
-            className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white transition-all hover:bg-white/10"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {activeTab === 'dashboard' && (
+              <button
+                type="button"
+                onClick={() => summaryQuery.refetch()}
+                className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white transition-all hover:bg-white/10"
+                aria-label="Refresh dashboard summary"
+              >
+                <RefreshCw className="h-5 w-5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(true)}
+              className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white transition-all hover:bg-white/10"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <Suspense fallback={renderLoadingPanel('Loading admin workspace...')}>
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && (
             <OverviewTab
-              stats={stats}
               applications={applications}
-              setActiveTab={setActiveTab}
+              isError={summaryQuery.isError && !summary}
+              isLoading={summaryQuery.isPending && !summary}
+              lastUpdated={lastUpdated}
+              onRefresh={() => summaryQuery.refetch()}
+              setActiveTab={handleAdminTabChange}
+              summary={summary}
             />
           )}
 

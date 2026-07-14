@@ -89,6 +89,55 @@ export interface DashboardStats {
   total_weekly_income: number;
 }
 
+export interface DashboardSummaryMetric {
+  count?: number | null;
+  currency?: string | null;
+  label: string;
+  value: number;
+}
+
+export interface DashboardSummaryTrendPoint {
+  label: string;
+  applications: number;
+  paidApplications: number;
+  rentals: number;
+  revenue: number;
+  audits: number;
+}
+
+export interface DashboardSummaryEvent {
+  actor?: string | null;
+  amount?: number | null;
+  created_at: string;
+  id: string;
+  status?: string | null;
+  subtitle?: string | null;
+  title: string;
+  type: string;
+}
+
+export interface DashboardSummaryResponse {
+  active_rentals: number;
+  agreements_generated: number;
+  agreements_awaiting_attention: number;
+  applications_by_status: Record<string, number>;
+  outstanding_invoices: number;
+  overdue_invoices: number;
+  pending_applications: number;
+  paid_applications: number;
+  recent_admin_actions: DashboardSummaryEvent[];
+  recent_applications: Application[];
+  recent_payments: DashboardSummaryEvent[];
+  recent_rental_activity: DashboardSummaryEvent[];
+  revenue_trend: DashboardSummaryTrendPoint[];
+  status_distribution: Array<{ label: string; value: number }>;
+  summary_generated_at: string;
+  total_applications: number;
+  total_customers: number;
+  total_weekly_income: number;
+  weekly_recurring_revenue: number;
+}
+
 export interface AdminDatasetResponse<T> {
   available: boolean;
   items: T[];

@@ -3,6 +3,7 @@ import {
   Application,
   Rental,
   DashboardStats,
+  DashboardSummaryResponse,
   AdminDatasetResponse,
   OperationalCustomer,
   OperationalInvoice,
@@ -75,6 +76,11 @@ export const updateApplicationStatus = async (id: string, status: string): Promi
 
 export const fetchStats = async (): Promise<DashboardStats> => {
   const { data } = await api.get('/financials/stats');
+  return data;
+};
+
+export const fetchDashboardSummary = async (): Promise<DashboardSummaryResponse> => {
+  const { data } = await api.get('/financials/dashboard-summary');
   return data;
 };
 

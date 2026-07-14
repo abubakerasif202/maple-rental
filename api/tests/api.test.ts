@@ -223,6 +223,7 @@ const {
     manual_invoice_items: [] as Array<Record<string, any>>,
     stripe_webhook_events: [] as Array<Record<string, any>>,
     stripe_balance_transactions: [] as Array<Record<string, any>>,
+    admin_audit_events: [] as Array<Record<string, any>>,
     queryLog: [] as Array<{
       columns?: string;
       filters: Array<Record<string, any>>;
@@ -487,6 +488,10 @@ vi.mock("../db/index.js", () => {
       return mockState.stripe_balance_transactions;
     }
 
+    if (table === "admin_audit_events") {
+      return mockState.admin_audit_events;
+    }
+
     return [];
   };
 
@@ -558,6 +563,11 @@ vi.mock("../db/index.js", () => {
 
     if (table === "stripe_balance_transactions") {
       mockState.stripe_balance_transactions = rows;
+      return;
+    }
+
+    if (table === "admin_audit_events") {
+      mockState.admin_audit_events = rows;
     }
   };
 
@@ -1437,6 +1447,13 @@ vi.mock("../db/index.js", () => {
       ];
     }
 
+    if (table === "admin_audit_events") {
+      mockState.admin_audit_events = [
+        ...mockState.admin_audit_events,
+        insertedRow,
+      ];
+    }
+
     return {
       error: insertError,
       select: vi.fn(() => ({
@@ -1874,6 +1891,7 @@ beforeEach(() => {
   ];
   mockState.stripe_webhook_events = [];
   mockState.stripe_balance_transactions = [];
+  mockState.admin_audit_events = [];
   mockState.toll_transfer_notices = [];
   mockState.toll_transfer_notice_audit_events = [];
   mockState.toll_notice_delivery_attempts = [];
@@ -4477,6 +4495,114 @@ describe("Operational history API", () => {
       total_applications: 1,
       active_rentals: 1,
       total_weekly_income: 260,
+    });
+  });
+
+  it("GET /api/financials/dashboard-summary returns authoritative admin metrics", async () => {
+    mockState.applications = [
+      {
+        ...mockState.applications[0],
+        id: PENDING_APPLICATION_ID,
+        legacy_id: null,
+        email: "pending.driver@example.com",
+        phone: "0400000200",
+        license_number: "NSW200001",
+        experience: "Recent applicant",
+        status: "Pending",
+        created_at: "2026-03-05T00:00:00.000Z",
+      },
+      {
+        ...mockState.applications[1],
+        id: BLOCKING_APPLICATION_ID,
+        legacy_id: null,
+        email: "paid.driver@example.com",
+        phone: "0400000201",
+        license_number: "NSW200002",
+        experience: "Experienced driver",
+        status: "Paid",
+        approved_weekly_price: 275,
+        paid_at: "2026-03-06T00:00:00.000Z",
+        created_at: "2026-03-04T00:00:00.000Z",
+      },
+    ];
+    mockState.rentals = [
+      {
+        id: 20,
+        application_id: BLOCKING_APPLICATION_ID,
+        status: "Active",
+        start_date: "2026-03-07",
+        weekly_price: 275,
+        created_at: "2026-03-07T00:00:00.000Z",
+      },
+    ];
+    mockState.invoices = [
+      {
+        ...mockState.invoices[0],
+        id: 1,
+        balance: 120,
+        amount: 220,
+        status: "Open",
+        invoice_date: "2026-03-06",
+      },
+      {
+        ...mockState.invoices[1],
+        id: 2,
+        balance: 0,
+        amount: 180,
+        status: "Paid",
+        invoice_date: "2026-03-05",
+      },
+    ];
+    mockState.lease_agreements = [
+      {
+        id: 1,
+        application_id: BLOCKING_APPLICATION_ID,
+        status: "saved",
+        created_at: "2026-03-06T00:00:00.000Z",
+      },
+    ];
+    mockState.admin_audit_events = [
+      {
+        id: 1,
+        action: "application_payment_approved",
+        actor: "admin@maplerentals.com.au",
+        created_at: "2026-03-06T02:00:00.000Z",
+        target_type: "application",
+        target_id: BLOCKING_APPLICATION_ID,
+      },
+    ];
+
+    const res = await request(app)
+      .get("/api/financials/dashboard-summary")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      total_applications: 2,
+      pending_applications: 1,
+      paid_applications: 1,
+      active_rentals: 1,
+      weekly_recurring_revenue: 275,
+      outstanding_invoices: 120,
+      overdue_invoices: 1,
+      agreements_generated: 1,
+      agreements_awaiting_attention: 0,
+      total_customers: expect.any(Number),
+    });
+    expect(res.body.status_distribution).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Pending", value: 1 }),
+        expect.objectContaining({ label: "Paid", value: 1 }),
+      ]),
+    );
+    expect(res.body.recent_payments[0]).toMatchObject({
+      id: BLOCKING_APPLICATION_ID,
+      type: "payment",
+      title: expect.stringContaining("marked paid"),
+    });
+    expect(res.body.recent_admin_actions[0]).toMatchObject({
+      actor: "admin@maplerentals.com.au",
+      type: "audit",
     });
   });
 
@@ -7574,9 +7700,28 @@ describe("Stripe API", () => {
     mockState.applications[1].pending_checkout_session_id = "cs_future_start";
     mockState.cars[0].status = "Available";
     mockState.rentals = [];
+    mockState.stripe_webhook_events.push({
+      checkout_kind: "vehicle",
+      checkout_session_id: "cs_future_start",
+      received_at: "2026-07-14T00:00:00.000Z",
+      stripe_subscription_id: "sub_future_start",
+      stripe_event_id: "evt_future_checkout_completed",
+    });
     mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
       id: "sub_future_start",
       status: "active",
+      metadata: {
+        application_id: APPROVED_APPLICATION_ID,
+        checkout_kind: "vehicle",
+        payment_link_version: "1",
+      },
+    });
+    mockStripe.checkoutSessionsRetrieve.mockResolvedValueOnce({
+      id: "cs_future_start",
+      status: "complete",
+      payment_status: "no_payment_required",
+      customer: "cus_future_start",
+      subscription: "sub_future_start",
       metadata: {
         application_id: APPROVED_APPLICATION_ID,
         checkout_kind: "vehicle",
@@ -7620,10 +7765,8 @@ describe("Stripe API", () => {
       .send("{}");
 
     expect(res.status).toBe(200);
-    expect(mockStripe.checkoutSessionsList).toHaveBeenCalledWith({
-      limit: 1,
-      subscription: "sub_future_start",
-    });
+    expect(mockStripe.checkoutSessionsRetrieve).toHaveBeenCalledWith("cs_future_start");
+    expect(mockStripe.checkoutSessionsList).not.toHaveBeenCalled();
     expect(mockState.applications[1].status).toBe("Paid");
     expect(mockState.applications[1].paid_at).toEqual(expect.any(String));
     expect(mockState.applications[1].pending_checkout_session_id).toBeNull();
