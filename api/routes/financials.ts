@@ -372,6 +372,9 @@ const loadDashboardSummary = async () => {
   const trendByDay = new Map<string, { applications: number; paidApplications: number; rentals: number; revenue: number; audits: number }>();
   for (let dayOffset = SUMMARY_TREND_DAYS - 1; dayOffset >= 0; dayOffset -= 1) {
     const key = formatSydneyDateKey(startOfSydneyDay(dayOffset));
+    if (key == null) {
+      continue;
+    }
     trendByDay.set(key, { applications: 0, paidApplications: 0, rentals: 0, revenue: 0, audits: 0 });
   }
   for (const row of realApplications) {
