@@ -335,8 +335,6 @@ const createHostedCheckoutSession = async ({
   const subscriptionData = buildSubscriptionData({ application, metadata });
 
   console.info('Creating Stripe vehicle checkout session', {
-    applicationId: application.id,
-    idempotencyKey,
     paymentLinkVersion: application.payment_link_version,
     rentalSubscriptionStartDate: metadata.rental_subscription_start_date || null,
   });
@@ -416,7 +414,6 @@ export const expirePendingCheckoutSession = async (sessionId: string | null | un
 
     if (session.status !== 'open') {
       console.info('Skipped expiring non-open Stripe checkout session', {
-        checkoutSessionId: sessionId,
         checkoutSessionStatus: session.status || null,
       });
       return;
@@ -424,7 +421,59 @@ export const expirePendingCheckoutSession = async (sessionId: string | null | un
 
     await getStripe().checkout.sessions.expire(sessionId);
   } catch (error) {
-    console.warn(`Unable to expire checkout session ${sessionId}:`, error);
+    console.warn('Unable to expire pending checkout session', {
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+    });
+  }
+};
+
+export const retirePendingCheckoutSessionForReplacement = async ({
+  applicationId,
+  paymentLinkVersion,
+  sessionId,
+}: {
+  applicationId: string;
+  paymentLinkVersion: number;
+  sessionId: string | null | undefined;
+}) => {
+  if (!sessionId) {
+    return;
+  }
+
+  let session: Stripe.Checkout.Session;
+  try {
+    session = await getStripe().checkout.sessions.retrieve(sessionId);
+  } catch (error) {
+    if (isStripeResourceMissingError(error)) {
+      return;
+    }
+    throw error;
+  }
+
+  if (
+    !isVehicleCheckoutMetadataMatch(
+      session.metadata as Record<string, string | undefined> | undefined,
+      applicationId,
+      paymentLinkVersion
+    )
+  ) {
+    throw Object.assign(
+      new Error('The existing payment link could not be safely reconciled.'),
+      { status: 409 }
+    );
+  }
+
+  if (session.status === 'complete') {
+    throw Object.assign(
+      new Error(
+        'The existing payment link has completed and must be reconciled before a replacement is issued.'
+      ),
+      { status: 409 }
+    );
+  }
+
+  if (session.status === 'open') {
+    await getStripe().checkout.sessions.expire(sessionId);
   }
 };
 
@@ -446,24 +495,40 @@ const cancelLinkedStripeSubscription = async ({
         paymentLinkVersion
       )
     ) {
-      console.warn('Skipped cancelling Stripe subscription that does not match the target application', {
-        applicationId,
-        paymentLinkVersion,
-        subscriptionId,
-      });
-      return false;
+      throw new Error(
+        'Refusing to cancel a Stripe subscription that does not match the application.'
+      );
     }
 
     if (subscription.status === 'canceled') {
-      return true;
+      return;
     }
 
     await getStripe().subscriptions.cancel(subscriptionId);
-    return true;
   } catch (error) {
-    console.warn(`Unable to cancel subscription ${subscriptionId}:`, error);
-    return false;
+    if (isStripeResourceMissingError(error)) {
+      return;
+    }
+    throw error;
   }
+};
+
+const fetchApplicationWebhookPaymentReferences = async (applicationId: string) => {
+  const { data, error } = await db
+    .from('stripe_webhook_events')
+    .select('checkout_session_id, stripe_subscription_id')
+    .eq('application_id', applicationId);
+
+  if (error) {
+    throw new Error(
+      `Failed to inspect persisted Stripe subscriptions for cancellation: ${error.message || 'Unknown error'}`
+    );
+  }
+
+  return (data || []) as Array<{
+    checkout_session_id?: string | null;
+    stripe_subscription_id?: string | null;
+  }>;
 };
 
 const fetchApplicationLinkedSubscriptionIds = async (applicationId: string) => {
@@ -502,34 +567,82 @@ export const cancelApplicationStripeResources = async ({
   paymentLinkVersion?: number | null;
   pendingCheckoutSessionId?: string | null;
 }) => {
+  const subscriptionIds = new Set<string>();
+  const inspectedCheckoutSessionIds = new Set<string>();
+
   if (pendingCheckoutSessionId) {
     try {
+      inspectedCheckoutSessionIds.add(pendingCheckoutSessionId);
       const session = await getStripe().checkout.sessions.retrieve(pendingCheckoutSessionId);
       if (
-        isVehicleCheckoutMetadataMatch(
+        !isVehicleCheckoutMetadataMatch(
           session.metadata as Record<string, string | undefined> | undefined,
           applicationId,
           paymentLinkVersion
         )
       ) {
-        await expirePendingCheckoutSession(pendingCheckoutSessionId);
-      } else {
-        console.warn('Skipped expiring Stripe checkout session that does not match the target application', {
-          applicationId,
-          paymentLinkVersion,
-          pendingCheckoutSessionId,
-        });
+        throw new Error(
+          'Refusing to cancel a Stripe checkout session that does not match the application.'
+        );
+      }
+
+      const sessionSubscriptionId = getSessionSubscriptionId(session);
+      if (sessionSubscriptionId) {
+        subscriptionIds.add(sessionSubscriptionId);
+      }
+
+      if (session.status === 'open') {
+        await getStripe().checkout.sessions.expire(pendingCheckoutSessionId);
       }
     } catch (error) {
-      console.warn(`Unable to inspect pending checkout session ${pendingCheckoutSessionId}:`, error);
+      if (!isStripeResourceMissingError(error)) {
+        throw error;
+      }
     }
   }
 
-  const subscriptionIds = await fetchApplicationLinkedSubscriptionIds(applicationId);
+  for (const reference of await fetchApplicationWebhookPaymentReferences(applicationId)) {
+    const subscriptionId = String(reference.stripe_subscription_id || '').trim();
+    if (subscriptionId) {
+      subscriptionIds.add(subscriptionId);
+      continue;
+    }
+
+    const checkoutSessionId = String(reference.checkout_session_id || '').trim();
+    if (!checkoutSessionId || inspectedCheckoutSessionIds.has(checkoutSessionId)) {
+      continue;
+    }
+
+    inspectedCheckoutSessionIds.add(checkoutSessionId);
+    const session = await getStripe().checkout.sessions.retrieve(checkoutSessionId);
+    if (
+      !isVehicleCheckoutMetadataMatch(
+        session.metadata as Record<string, string | undefined> | undefined,
+        applicationId
+      )
+    ) {
+      throw new Error(
+        'Refusing to cancel a persisted Stripe checkout session that does not match the application.'
+      );
+    }
+
+    const recoveredSubscriptionId = getSessionSubscriptionId(session);
+    if (recoveredSubscriptionId) {
+      subscriptionIds.add(recoveredSubscriptionId);
+    }
+
+    if (session.status === 'open') {
+      await getStripe().checkout.sessions.expire(checkoutSessionId);
+    }
+  }
+  for (const subscriptionId of await fetchApplicationLinkedSubscriptionIds(applicationId)) {
+    subscriptionIds.add(subscriptionId);
+  }
+
   for (const subscriptionId of subscriptionIds) {
     await cancelLinkedStripeSubscription({
       applicationId,
-      paymentLinkVersion,
+      paymentLinkVersion: undefined,
       subscriptionId,
     });
   }
@@ -757,7 +870,7 @@ export const resolvePendingCheckoutSession = async ({
     if (!isStripeResourceMissingError(error)) {
       throw error;
     }
-    console.warn(`Pending checkout session ${pendingSessionId} no longer exists in Stripe.`);
+    console.warn('Pending checkout session no longer exists in Stripe.');
   }
 
   return {
@@ -861,8 +974,6 @@ export const createVehicleCheckoutSession = async ({
 
     if (!didPersistSession) {
       console.error('Failed to persist pending Stripe checkout session', {
-        applicationId,
-        checkoutSessionId: session.id,
         paymentLinkVersion: application.payment_link_version,
       });
       await expirePendingCheckoutSession(session.id);
@@ -870,11 +981,7 @@ export const createVehicleCheckoutSession = async ({
     }
 
     console.info('Persisted pending Stripe checkout session', {
-      applicationId,
-      checkoutSessionId: session.id,
-      stripeCustomerId:
-        typeof session.customer === 'string' ? session.customer : session.customer?.id || null,
-      stripeSubscriptionId: getSessionSubscriptionId(session),
+      paymentLinkVersion: application.payment_link_version,
     });
 
     return {
@@ -889,60 +996,70 @@ export const createVehicleCheckoutLink = async ({
 }: {
   applicationId: string;
 }) => {
-  const application = await fetchApplication(applicationId);
+  return withOptionalCheckoutSessionLock(applicationId, async () => {
+    const application = await fetchApplication(applicationId);
 
-  if (!application) {
-    throw new Error('Application not found');
-  }
+    if (!application) {
+      throw new Error('Application not found');
+    }
 
-  if (application.status === 'Cancelled') {
-    throw new Error('This application has been cancelled.');
-  }
+    if (application.status === 'Cancelled') {
+      throw new Error('This application has been cancelled.');
+    }
 
-  if (application.status === 'Paid') {
-    throw new Error('This application has already been paid.');
-  }
+    if (application.status === 'Paid') {
+      throw new Error('This application has already been paid.');
+    }
 
-  if (application.status !== 'Approved') {
-    throw new Error('Approve the application and save pricing before sending a payment link.');
-  }
+    if (application.status !== 'Approved') {
+      throw new Error('Approve the application and save pricing before sending a payment link.');
+    }
 
-  requireApprovedPaymentContext({
-    application,
-  });
-
-  const nextVersion = Number(application.payment_link_version || 0) + 1;
-  await expirePendingCheckoutSession(application.pending_checkout_session_id);
-  const updatedApplication =
-    await updateApplicationPaymentStateIfCurrentVersion({
-      applicationId,
-      expectedPaymentLinkVersion: Number(application.payment_link_version || 0),
-      payload: {
-        payment_link_sent_at: new Date().toISOString(),
-        payment_link_version: nextVersion,
-        pending_checkout_session_id: null,
-      },
+    requireApprovedPaymentContext({
+      application,
     });
 
-  if (!updatedApplication) {
-    throw new Error('Payment link details changed while generating a new link. Refresh and try again.');
-  }
-
-  const checkoutToken = createCheckoutToken({
-    applicationId,
-    carId: null,
-    purpose: 'vehicle',
-    version: Number(updatedApplication.payment_link_version || nextVersion),
-  });
-
-  return {
-    checkout_token: checkoutToken.token,
-    checkout_token_expires_at: checkoutToken.expiresAt,
-    checkout_url: buildDriverPaymentLink({
+    const nextVersion = Number(application.payment_link_version || 0) + 1;
+    await retirePendingCheckoutSessionForReplacement({
       applicationId,
-      token: checkoutToken.token,
-    }),
-  };
+      paymentLinkVersion: Number(application.payment_link_version || 0),
+      sessionId: application.pending_checkout_session_id,
+    });
+    const updatedApplication =
+      await updateApplicationPaymentStateIfCurrentVersion({
+        applicationId,
+        expectedPaymentLinkVersion: Number(application.payment_link_version || 0),
+        expectedPendingCheckoutSessionId:
+          application.pending_checkout_session_id || null,
+        payload: {
+          payment_link_sent_at: new Date().toISOString(),
+          payment_link_version: nextVersion,
+          pending_checkout_session_id: null,
+        },
+      });
+
+    if (!updatedApplication) {
+      throw new Error(
+        'Payment link details changed while generating a new link. Refresh and try again.'
+      );
+    }
+
+    const checkoutToken = createCheckoutToken({
+      applicationId,
+      carId: null,
+      purpose: 'vehicle',
+      version: Number(updatedApplication.payment_link_version || nextVersion),
+    });
+
+    return {
+      checkout_token: checkoutToken.token,
+      checkout_token_expires_at: checkoutToken.expiresAt,
+      checkout_url: buildDriverPaymentLink({
+        applicationId,
+        token: checkoutToken.token,
+      }),
+    };
+  });
 };
 
 export const getVehicleCheckoutSessionStatus = async ({

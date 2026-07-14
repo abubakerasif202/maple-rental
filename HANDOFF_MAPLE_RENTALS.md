@@ -107,7 +107,7 @@ Optional or legacy-supported values to confirm intentionally:
 - Confirm Render uses `npm start` as the start command.
 - Confirm health path is `/api/health`.
 - Confirm `NODE_ENV=production`.
-- Confirm `DATABASE_URL` points to a session-capable Render Postgres connection for transactional payment activation.
+- Confirm `DATABASE_URL` points to a session-capable connection for the same Supabase project as `SUPABASE_URL`.
 - Do not point payment activation at a Supabase transaction pooler connection.
 - Confirm all required env vars in section 5 are set on the API/web service before deploy.
 - Deploy only after `npm run verify:schema-contract` passes against the target production schema.

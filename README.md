@@ -10,7 +10,7 @@ Stripe operational setup and reset steps are documented in [docs/STRIPE_SETUP.md
 - Public users can submit applications, upload driver documents, and receive a payment link after admin review.
 - Admin users can review applications, record a registration number, manage payment status, inspect customer and invoice history, and work with lease agreements.
 - Supabase provides auth and private document storage.
-- Transactional app data and Stripe/payment state use a direct PostgreSQL connection, with Render Postgres preferred through `DATABASE_URL`.
+- Transactional app data and Stripe/payment state use a session-capable direct connection to the same Supabase PostgreSQL database exposed through `SUPABASE_URL`.
 - Render deploys the app as one Node web service.
 
 ## Stack
@@ -246,7 +246,7 @@ What each command does:
 ### Required for direct transactional checkout activation
 
 - `DATABASE_URL`
-  - Preferred direct PostgreSQL connection string for Render Postgres and all new deployments
+  - Preferred session-capable PostgreSQL connection string for the same Supabase project used by the Data API
 - `SUPABASE_DB_URL`
   - Optional fallback only when `DATABASE_URL` is not set
   - Useful for legacy environments that still use a direct Supabase Postgres connection
@@ -334,8 +334,8 @@ Override them in Render only if those agreement details need to change.
 
 ### Render deployment steps
 
-1. Create a Render Postgres instance and copy its internal `DATABASE_URL`.
-2. Deploy the web service from `render.yaml`, then set `DATABASE_URL` on the service.
+1. Copy a session-capable direct or session-pooler PostgreSQL URL for the same Supabase project used by `SUPABASE_URL`.
+2. Deploy the web service from `render.yaml`, then set that URL as `DATABASE_URL` on the service. Do not use a separate Render Postgres database because application reads and writes are server-mediated through the Supabase Data API.
 3. Keep the Supabase variables in place for storage and auth: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
 4. Set the Stripe secrets: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `CHECKOUT_LINK_SECRET`.
 5. Set the app and security variables: `APP_URL`, `ADMIN_EMAIL`, and `JWT_SECRET`.
@@ -366,7 +366,7 @@ Do not paste the Postgres connection string into `SUPABASE_URL`.
 
 ### Health endpoint reports `restricted`
 
-Add `DATABASE_URL` with a session-capable direct Postgres connection to enable automatic Stripe activation. `SUPABASE_DB_URL` remains available as a fallback, but `DATABASE_URL` is the preferred Render configuration. The web app can still boot and create payment links without a session-capable direct database, but paid checkouts remain in manual review.
+Add `DATABASE_URL` with a session-capable direct or session-pooler connection to the same Supabase project as `SUPABASE_URL`. `SUPABASE_DB_URL` remains available as a fallback, but `DATABASE_URL` is the preferred Render variable name. Production startup fails closed when this same-project transactional connection is missing or incompatible.
 
 ### `npm run stripe:handoff` fails
 
@@ -376,7 +376,7 @@ Check:
 - `STRIPE_WEBHOOK_SECRET` is populated from the live webhook endpoint
 - `APP_URL` matches the final public domain
 - `/api/stripe/webhook` exists as a live Stripe webhook endpoint
-- `DATABASE_URL` points at the Render Postgres instance used for transactional payment state
+- `DATABASE_URL` points at the same Supabase project as `SUPABASE_URL`
 - the database schema includes the latest `stripe_webhook_events` columns
 
 ### Admin login loops back to `/admin/login`

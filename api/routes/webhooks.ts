@@ -44,9 +44,7 @@ const getSafeStripeEventLogContext = (event: Stripe.Event) => {
 
   return {
     metadataKeys: metadata ? Object.keys(metadata).sort() : [],
-    stripeEventId: event.id,
     stripeEventType: event.type,
-    stripeObjectId: typeof payload?.id === 'string' ? payload.id : null,
   };
 };
 
@@ -68,8 +66,7 @@ router.post('/', async (request, response) => {
   try {
     event = constructStripeEvent(request.body, sig);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error(`Stripe Webhook Error: ${message}`);
+    console.error('Stripe webhook signature verification failed.');
     response.status(400).send('400 Bad Request: Invalid Signature');
     return;
   }
@@ -79,10 +76,8 @@ router.post('/', async (request, response) => {
     response.status(result.status).send(result.body);
     return;
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('Stripe webhook processing failed', {
       ...getSafeStripeEventLogContext(event),
-      errorMessage: message,
       errorName: err instanceof Error ? err.name : 'UnknownError',
     });
     return response.status(500).send('Webhook processing failed');

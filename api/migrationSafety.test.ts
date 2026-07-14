@@ -119,4 +119,49 @@ describe('migration safety guards', () => {
       'FROM PUBLIC, anon, authenticated, service_role'
     );
   });
+
+  it('persists the Checkout Session to subscription relation for future invoices', () => {
+    const migration = fs.readFileSync(
+      path.resolve(
+        process.cwd(),
+        'supabase/migrations/20260715023000_persist_checkout_subscription_relation.sql'
+      ),
+      'utf8'
+    );
+
+    expect(migration).toContain('ALTER TABLE public.stripe_webhook_events');
+    expect(migration).toContain('ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT');
+    expect(migration).toContain('idx_stripe_webhook_events_subscription_checkout');
+    expect(migration).toContain("NOTIFY pgrst, 'reload schema'");
+    expect(migration).toContain('BEGIN;');
+    expect(migration).toContain('COMMIT;');
+  });
+
+  it('keeps application data server-mediated after legacy admin policies', () => {
+    const migration = fs.readFileSync(
+      path.resolve(
+        process.cwd(),
+        'supabase/migrations/20260715030000_enforce_server_mediated_data_access.sql'
+      ),
+      'utf8'
+    );
+
+    expect(migration).toContain(
+      'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM anon, authenticated'
+    );
+    expect(migration).toContain(
+      'REVOKE USAGE ON SCHEMA private FROM authenticated'
+    );
+    expect(migration).toContain(
+      'REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC, anon, authenticated'
+    );
+    expect(migration).toContain(
+      'REVOKE ALL ON FUNCTION private.is_admin() FROM authenticated'
+    );
+    expect(migration).toContain(
+      'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO service_role'
+    );
+    expect(migration).toContain('BEGIN;');
+    expect(migration).toContain('COMMIT;');
+  });
 });

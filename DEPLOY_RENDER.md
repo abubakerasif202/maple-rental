@@ -66,7 +66,7 @@ That server:
   - Frontend/browser public anon key used by the client app
 
 - `DATABASE_URL`
-  - Preferred direct PostgreSQL connection string for Render Postgres and transactional Stripe/payment state
+  - Preferred session-capable PostgreSQL connection string for the same Supabase project used by `SUPABASE_URL`
 
 - `STRIPE_SECRET_KEY`
   - Stripe server SDK key
@@ -115,7 +115,7 @@ That server:
 ## Important env rules
 
 - `SUPABASE_URL` must be the HTTPS project URL, not the Postgres connection string.
-- `DATABASE_URL` should point to Render Postgres in new deployments.
+- `DATABASE_URL` must point to the same Supabase project as `SUPABASE_URL`; a separate Render Postgres database is rejected to prevent split application/payment state.
 - `SUPABASE_DB_URL` must be the Postgres connection string, not the HTTPS project URL.
 - Do not expose `SUPABASE_SERVICE_ROLE_KEY` to the frontend.
 - Do not set `PORT` manually on Render.
@@ -125,7 +125,7 @@ That server:
 1. Connect the GitHub repo in Render.
 2. Use the Blueprint flow so `render.yaml` is applied.
 3. Fill every required environment variable.
-4. Create Render Postgres and set its connection string as `DATABASE_URL`.
+4. Set a session-capable direct or session-pooler URL for the same Supabase project as `DATABASE_URL`.
 5. Keep the Supabase storage/auth variables in place.
 6. Run the payment workflow migrations against `DATABASE_URL`.
 7. Configure Stripe to deliver webhooks to `https://<your-domain>/api/stripe/webhook`.

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import pg from 'pg';
 
 type PoolClient = import('pg').PoolClient;
@@ -35,12 +36,14 @@ const REQUIRED_PAYMENT_SCHEMA_COLUMNS: Record<string, string[]> = {
   ],
   stripe_webhook_events: [
     'id',
+    'application_id',
     'stripe_event_id',
     'event_type',
     'status',
     'received_at',
     'updated_at',
     'processed_at',
+    'stripe_subscription_id',
   ],
 };
 
@@ -48,6 +51,7 @@ const { Pool } = pg;
 
 let postgresPool: InstanceType<typeof Pool> | null = null;
 let postgresPoolConnectionString: string | null = null;
+const advisoryLockClientContext = new AsyncLocalStorage<PoolClient>();
 
 const readConfiguredConnectionString = (key: 'DATABASE_URL' | 'SUPABASE_DB_URL') =>
   (process.env[key] || '').trim();
@@ -102,7 +106,7 @@ const isPrivatePostgresHostname = (hostname: string) => {
     normalized.startsWith('10.') ||
     normalized.startsWith('192.168.') ||
     normalized.endsWith('.internal') ||
-    !normalized.includes('.')
+    /^dpg-[a-z0-9-]+$/.test(normalized)
   ) {
     return true;
   }
@@ -178,13 +182,78 @@ const inferPostgresConnectionMode = (
   }
 };
 
+const getSupabaseProjectRefFromApiUrl = (supabaseUrl: string) => {
+  try {
+    const hostname = new URL(supabaseUrl).hostname.toLowerCase();
+    const match = hostname.match(/^([a-z0-9-]+)\.supabase\.co$/);
+    return match?.[1] || null;
+  } catch {
+    return null;
+  }
+};
+
+const getSupabaseProjectRefFromPostgresUrl = (connectionString: string) => {
+  try {
+    const url = new URL(connectionString);
+    const hostname = url.hostname.toLowerCase();
+    const directMatch = hostname.match(/^db\.([a-z0-9-]+)\.supabase\.co$/);
+    if (directMatch?.[1]) {
+      return directMatch[1];
+    }
+
+    if (hostname.endsWith('.pooler.supabase.com')) {
+      const username = decodeURIComponent(url.username);
+      const poolerMatch = username.match(/^postgres\.([a-z0-9-]+)$/i);
+      return poolerMatch?.[1]?.toLowerCase() || null;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+export const getDirectDatabaseAlignmentIssue = () => {
+  if (process.env.NODE_ENV !== 'production') {
+    return null;
+  }
+
+  const { connectionString } = getDirectDatabaseConfig();
+  if (!connectionString) {
+    return null;
+  }
+
+  const apiProjectRef = getSupabaseProjectRefFromApiUrl(
+    (process.env.SUPABASE_URL || '').trim()
+  );
+  const postgresProjectRef = getSupabaseProjectRefFromPostgresUrl(connectionString);
+
+  if (!apiProjectRef) {
+    return 'SUPABASE_URL must identify the authoritative Supabase project.';
+  }
+
+  if (!postgresProjectRef || postgresProjectRef !== apiProjectRef) {
+    return (
+      'The direct PostgreSQL connection must target the same Supabase project as SUPABASE_URL. ' +
+      'A separate Render Postgres database would split application and payment state.'
+    );
+  }
+
+  return null;
+};
+
 export const getPostgresConnectionMode = () => getDirectDatabaseConfig().mode;
 
 export const hasDirectDatabaseConnection = () =>
-  getPostgresConnectionMode() === 'session';
+  getPostgresConnectionMode() === 'session' && !getDirectDatabaseAlignmentIssue();
 
 export const getSessionModePostgresRequirementIssue = () => {
   const { mode, source } = getDirectDatabaseConfig();
+
+  const alignmentIssue = getDirectDatabaseAlignmentIssue();
+  if (alignmentIssue) {
+    return alignmentIssue;
+  }
 
   if (mode === 'session') {
     return null;
@@ -275,11 +344,21 @@ const getPostgresPool = () => {
 
 export const checkDirectDatabaseHealth = async () => {
   const config = getDirectDatabaseConfig();
+  const alignmentIssue = getDirectDatabaseAlignmentIssue();
   if (!config.source) {
     return {
       configured: false,
       mode: config.mode,
       schemaIssues: [] as string[],
+      source: config.source,
+    };
+  }
+
+  if (alignmentIssue) {
+    return {
+      configured: true,
+      mode: config.mode,
+      schemaIssues: [alignmentIssue],
       source: config.source,
     };
   }
@@ -313,7 +392,8 @@ export const checkDirectDatabaseHealth = async () => {
 export const withPostgresTransaction = async <T>(
   callback: (client: PoolClient) => Promise<T>
 ) => {
-  const client = await getPostgresPool().connect();
+  const contextualClient = advisoryLockClientContext.getStore();
+  const client = contextualClient || (await getPostgresPool().connect());
 
   try {
     await client.query('BEGIN');
@@ -345,7 +425,9 @@ export const withPostgresTransaction = async <T>(
 
     throw error;
   } finally {
-    client.release();
+    if (!contextualClient) {
+      client.release();
+    }
   }
 };
 
@@ -386,7 +468,7 @@ export const withPostgresAdvisoryLock = async <T>(
       );
     }
 
-    return await callback();
+    return await advisoryLockClientContext.run(client, callback);
   } finally {
     try {
       if (lockAcquired) {

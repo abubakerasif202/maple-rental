@@ -326,9 +326,7 @@ export const handleVehicleCheckoutCompletion = async (
 
   return withVehicleCheckoutProcessingLock(applicationId, async () => {
     if (await hasVehicleCheckoutFulfillmentMarker(session.id)) {
-      console.info(
-        `Ignoring replayed checkout completion ${session.id} because fulfillment is already recorded.`
-      );
+      console.info('Ignoring replayed checkout completion because fulfillment is already recorded.');
       return 'already_fulfilled' as const;
     }
 
@@ -363,12 +361,7 @@ export const handleVehicleCheckoutCompletion = async (
     }
 
     const moveApplicationToPaymentReview = async (reason: string) => {
-      console.warn('Vehicle checkout activation requires review', {
-        applicationId,
-        checkoutSessionId: session.id,
-        reason,
-        stripeSubscriptionId: subscriptionId,
-      });
+      console.warn('Vehicle checkout activation requires review.');
 
       const transitionedApplication = await updateApplicationPaymentState({
         applicationId,
@@ -383,7 +376,7 @@ export const handleVehicleCheckoutCompletion = async (
         applicationStatus !== 'Payment Review'
       ) {
         console.warn(
-          `Skipped Payment Review transition for application ${applicationId} because its payment state advanced before ${session.id} finished processing.`
+          'Skipped Payment Review transition because the payment state advanced during processing.'
         );
         return 'manual_review' as const;
       }
@@ -413,7 +406,9 @@ export const handleVehicleCheckoutCompletion = async (
           `,
         });
       } catch (emailError) {
-        console.error('Failed to send activation review alert email:', emailError);
+        console.error('Failed to send activation review alert email', {
+          errorName: emailError instanceof Error ? emailError.name : 'UnknownError',
+        });
       }
 
       return 'manual_review' as const;

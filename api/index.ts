@@ -175,7 +175,7 @@ const logRuntimeConfigurationSummary = () => {
   if (source === 'SUPABASE_DB_URL') {
     if (mode === 'session') {
       console.warn(
-        'SUPABASE_DB_URL is providing the current direct PostgreSQL session connection. Prefer DATABASE_URL for Render Postgres deployments.'
+        'SUPABASE_DB_URL is providing the current direct PostgreSQL session connection. Prefer DATABASE_URL as the Render service variable name.'
       );
       return;
     }

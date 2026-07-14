@@ -116,4 +116,78 @@ describe('postgres pool configuration', () => {
     await expect(withPostgresTransaction(async () => 'ok')).resolves.toBe('ok');
     expect(poolCtor.getLastPoolOptions()).not.toHaveProperty('ssl');
   });
+
+  it('supports explicitly named Render internal database hosts without plaintext fallback for arbitrary hosts', async () => {
+    process.env.DATABASE_URL = 'postgresql://postgres:secret@dpg-maple-db-a:5432/app';
+    const { withPostgresTransaction } = await import('./postgres.js');
+
+    await expect(withPostgresTransaction(async () => 'ok')).resolves.toBe('ok');
+    expect(poolCtor.getLastPoolOptions()).not.toHaveProperty('ssl');
+  });
+
+  it('does not classify arbitrary bare hostnames as approved private hosts', async () => {
+    process.env.DATABASE_URL = 'postgresql://postgres:secret@database:5432/app';
+    const { withPostgresTransaction } = await import('./postgres.js');
+
+    await expect(withPostgresTransaction(async () => 'ok')).resolves.toBe('ok');
+    expect(poolCtor.getLastPoolOptions()).toMatchObject({
+      ssl: { rejectUnauthorized: true },
+    });
+  });
+
+  it('rejects a separate production database that does not match the Supabase data plane', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.SUPABASE_URL = 'https://maple-project.supabase.co';
+    process.env.DATABASE_URL =
+      'postgresql://postgres:secret@dpg-maple-db-a:5432/app';
+    const {
+      getDirectDatabaseAlignmentIssue,
+      getSessionModePostgresRequirementIssue,
+      hasDirectDatabaseConnection,
+    } = await import('./postgres.js');
+
+    expect(hasDirectDatabaseConnection()).toBe(false);
+    expect(getDirectDatabaseAlignmentIssue()).toContain(
+      'same Supabase project'
+    );
+    expect(getSessionModePostgresRequirementIssue()).toContain(
+      'split application and payment state'
+    );
+  });
+
+  it('accepts a production session pooler for the same Supabase project', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.SUPABASE_URL = 'https://maple-project.supabase.co';
+    process.env.DATABASE_URL =
+      'postgresql://postgres.maple-project:secret@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres';
+    const {
+      getDirectDatabaseAlignmentIssue,
+      hasDirectDatabaseConnection,
+    } = await import('./postgres.js');
+
+    expect(getDirectDatabaseAlignmentIssue()).toBeNull();
+    expect(hasDirectDatabaseConnection()).toBe(true);
+  });
+
+  it('reuses the advisory-lock client for a nested transaction', async () => {
+    poolCtor.mockClient.query.mockImplementation(async (sql: string) => {
+      if (sql.startsWith('SELECT pg_try_advisory_lock')) {
+        return { rows: [{ acquired: true }] };
+      }
+      return { rows: [] };
+    });
+    const { withPostgresAdvisoryLock, withPostgresTransaction } = await import(
+      './postgres.js'
+    );
+
+    await expect(
+      withPostgresAdvisoryLock('payment:one', () =>
+        withPostgresTransaction(async () => 'ok')
+      )
+    ).resolves.toBe('ok');
+
+    expect(poolCtor.mockPool.connect).toHaveBeenCalledTimes(1);
+    expect(poolCtor.mockClient.query).toHaveBeenCalledWith('BEGIN');
+    expect(poolCtor.mockClient.query).toHaveBeenCalledWith('COMMIT');
+  });
 });

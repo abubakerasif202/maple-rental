@@ -138,9 +138,22 @@ const logStripeWebhookEvent = (
   workItem: StripeWebhookWorkItem,
   extra?: Record<string, unknown>
 ) => {
+  const {
+    applicationId: _applicationId,
+    checkoutSessionId: _checkoutSessionId,
+    eventId: _eventId,
+    stripeCustomerId: _stripeCustomerId,
+    stripeSubscriptionId: _stripeSubscriptionId,
+    ...safeWorkItem
+  } = workItem;
+  const safeExtra = extra
+    ? Object.fromEntries(
+        Object.entries(extra).filter(([key]) => key !== 'errorMessage')
+      )
+    : undefined;
   const payload = {
-    ...workItem,
-    ...extra,
+    ...safeWorkItem,
+    ...safeExtra,
     level,
     message,
   };
@@ -610,10 +623,10 @@ const clearPendingCheckoutSessionForTerminatedSession = async (
     expectedSessionId: sessionId,
   });
   if (!cleared) {
-    console.log(`Stripe Webhook: ignored ${reason} for session ${sessionId}; payment link version has advanced for application ${applicationId}.`);
+    console.log(`Stripe webhook ignored ${reason} because the payment link advanced.`);
     return;
   }
-  console.log(`Stripe Webhook: cleared pending checkout session ${sessionId} for application ${applicationId} after ${reason}.`);
+  console.log(`Stripe webhook cleared the pending checkout session after ${reason}.`);
 };
 
 const shouldCompleteRentalAfterRequestedCancellation = (
@@ -651,15 +664,13 @@ const updateRentalBySubscriptionIdentityOrSkip = async (
   const result = Array.isArray(data) ? data[0] : data;
   if (!result?.matched) {
     console.warn(
-      `Ignoring subscription lifecycle webhook for ${subscriptionId} because no strict Stripe rental identity could be resolved.`
+      'Ignoring subscription lifecycle webhook because no strict Stripe rental identity could be resolved.'
     );
     return;
   }
 
   if (!result.applied) {
-    console.info(
-      `Ignored stale Stripe rental status event ${event.id} for subscription ${subscriptionId}.`
-    );
+    console.info('Ignored stale Stripe rental status event.');
   }
 };
 

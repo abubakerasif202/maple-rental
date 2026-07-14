@@ -78,7 +78,9 @@ describe('schemaContract', () => {
             },
             stripe_webhook_events: {
               properties: {
+                application_id: { type: 'string' },
                 stripe_event_id: { type: 'string' },
+                stripe_subscription_id: { type: 'string' },
                 status: { type: 'string' },
                 received_at: { type: 'string' },
                 updated_at: { type: 'string' },
@@ -141,7 +143,9 @@ describe('schemaContract', () => {
             },
             stripe_webhook_events: {
               properties: {
+                application_id: { type: 'string' },
                 stripe_event_id: { type: 'string' },
+                stripe_subscription_id: { type: 'string' },
                 status: { type: 'string' },
                 received_at: { type: 'string' },
                 updated_at: { type: 'string' },

@@ -59,26 +59,37 @@ export const updateApplicationPaymentStateIfCurrentVersionAndStatus = async ({
 export const updateApplicationPaymentStateIfCurrentVersion = async ({
   applicationId,
   expectedPaymentLinkVersion,
+  expectedPendingCheckoutSessionId,
   payload,
 }: {
   applicationId: string;
   expectedPaymentLinkVersion: number;
+  expectedPendingCheckoutSessionId?: string | null;
   payload: ApplicationPaymentWritePayload;
 }) => {
   const compat = await getSchemaCompat();
   const selectColumns = await getApplicationSelectColumns();
   const mappedPayload = await toApplicationPaymentWritePayload(payload);
 
-  const { data, error } = await db
+  let query = db
     .from('applications')
     .update(mappedPayload)
     .eq('id', applicationId)
     .eq(
       compat.applicationPaymentLinkVersionColumn,
       expectedPaymentLinkVersion
-    )
-    .select(selectColumns)
-    .maybeSingle();
+    );
+
+  if (expectedPendingCheckoutSessionId === null) {
+    query = query.is(compat.applicationPendingCheckoutSessionColumn, null);
+  } else if (typeof expectedPendingCheckoutSessionId === 'string') {
+    query = query.eq(
+      compat.applicationPendingCheckoutSessionColumn,
+      expectedPendingCheckoutSessionId
+    );
+  }
+
+  const { data, error } = await query.select(selectColumns).maybeSingle();
 
   if (error) {
     throw error;

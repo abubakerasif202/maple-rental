@@ -21,6 +21,22 @@ import { LEASE_SETTINGS } from '../constants.js';
 
 const router = express.Router();
 
+const getSafeErrorLogContext = (error: unknown) => ({
+  errorCode:
+    error && typeof error === 'object' && 'code' in error
+      ? String(error.code || '').slice(0, 64) || null
+      : null,
+  errorName: error instanceof Error ? error.name : 'UnknownError',
+  errorType:
+    error && typeof error === 'object' && 'type' in error
+      ? String(error.type || '').slice(0, 64) || null
+      : null,
+  statusCode:
+    error && typeof error === 'object' && 'statusCode' in error
+      ? Number(error.statusCode) || null
+      : null,
+});
+
 const isStripeConfigurationError = (
   error: unknown
 ): error is { code?: string; message?: string; type?: string } =>
@@ -228,7 +244,7 @@ router.get('/payment-context', async (req, res) => {
       return res.status(401).json({ error: error.message });
     }
 
-    console.error('Payment context error:', error);
+    console.error('Payment context error', getSafeErrorLogContext(error));
     res.status(500).json({ error: 'Failed to load the payment link details' });
   }
 });
@@ -248,7 +264,10 @@ router.post('/vehicle-checkout-session', async (req, res) => {
     }
 
     if (isStripeConfigurationError(error)) {
-      console.error('Stripe configuration error during vehicle checkout session:', error);
+      console.error(
+        'Stripe configuration error during vehicle checkout session',
+        getSafeErrorLogContext(error)
+      );
       return res.status(503).json({
         error: 'Payments are temporarily unavailable. Please contact support.',
       });
@@ -256,7 +275,10 @@ router.post('/vehicle-checkout-session', async (req, res) => {
 
     if (isStripeSdkError(error)) {
       const stripeFailure = getCheckoutSessionStripeErrorResponse(error);
-      console.error('Stripe checkout session creation failed:', error);
+      console.error(
+        'Stripe checkout session creation failed',
+        getSafeErrorLogContext(error)
+      );
       return res.status(stripeFailure.status).json({
         error: stripeFailure.error,
       });
@@ -283,7 +305,10 @@ router.post('/vehicle-checkout-session', async (req, res) => {
       return res.status(401).json({ error: error.message });
     }
 
-    console.error('Vehicle checkout session error:', error);
+    console.error(
+      'Vehicle checkout session error',
+      getSafeErrorLogContext(error)
+    );
     res.status(500).json({ error: 'Failed to create the vehicle checkout session' });
   }
 });
@@ -312,7 +337,10 @@ router.post('/vehicle-checkout-link', authenticateAdmin, async (req, res) => {
       return res.status(409).json({ error: error.message });
     }
 
-    console.error('Vehicle checkout link error:', error);
+    console.error(
+      'Vehicle checkout link error',
+      getSafeErrorLogContext(error)
+    );
     res.status(500).json({ error: 'Failed to generate the vehicle checkout link' });
   }
 });
@@ -371,7 +399,10 @@ router.get('/checkout-sessions/:sessionId', async (req, res) => {
         .json({ error: error.message });
     }
 
-    console.error('Checkout session fetch error:', error);
+    console.error(
+      'Checkout session fetch error',
+      getSafeErrorLogContext(error)
+    );
     res.status(500).json({ error: 'Failed to fetch checkout session status' });
   }
 });

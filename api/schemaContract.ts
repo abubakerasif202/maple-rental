@@ -90,6 +90,10 @@ export const PRODUCTION_SCHEMA_CONTRACT_REQUIRED_COLUMNS = {
   invoices: [
     { label: 'is_imported', acceptable: ['is_imported'] },
   ],
+  stripe_webhook_events: [
+    { label: 'application_id', acceptable: ['application_id'] },
+    { label: 'stripe_subscription_id', acceptable: ['stripe_subscription_id'] },
+  ],
 } as const;
 
 export const STRIPE_WEBHOOK_LEDGER_CONTRACTS = [

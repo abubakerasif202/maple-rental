@@ -1242,6 +1242,12 @@ vi.mock("../db/index.js", () => {
           { type: "eq", column, value },
         ]),
       ),
+      is: vi.fn((column: string, value: unknown) =>
+        createMutationQuery(table, action, payload, [
+          ...filters,
+          { type: "is", column, value },
+        ]),
+      ),
       in: vi.fn((column: string, values: unknown[]) =>
         createMutationQuery(table, action, payload, [
           ...filters,
@@ -3977,6 +3983,19 @@ describe("Applications API", () => {
     );
   });
 
+  it("POST /api/applications rejects multipart envelopes with too many text fields", async () => {
+    let submission = request(app).post("/api/applications");
+    for (let index = 0; index < 21; index += 1) {
+      submission = submission.field(`unexpected_${index}`, "value");
+    }
+
+    const res = await submission;
+
+    expect(res.status).toBe(413);
+    expect(res.body.error).toContain("multipart limits");
+    expect(mockState.applications).toHaveLength(2);
+  });
+
   it("POST /api/applications creates a pending application without generating an agreement or checkout link", async () => {
     process.env.LEASE_OWNER_NAME = "Maple Rentals";
     process.env.LEASE_OWNER_ADDRESS =
@@ -5747,6 +5766,11 @@ describe("Stripe API", () => {
     mockStripe.checkoutSessionsRetrieve.mockResolvedValueOnce({
       id: "cs_old_pending",
       status: "open",
+      metadata: {
+        application_id: PENDING_APPLICATION_ID,
+        checkout_kind: "vehicle",
+        payment_link_version: "3",
+      },
     });
 
     const res = await request(app)
@@ -5798,13 +5822,19 @@ describe("Stripe API", () => {
     expect(mockState.applications[0].assigned_car_id).toBeNull();
   });
 
-  it("POST /api/applications/:id/approve-payment does not expire a completed pending checkout session", async () => {
+  it("POST /api/applications/:id/approve-payment refuses to replace a completed pending checkout session", async () => {
     mockState.applications[0].pending_checkout_session_id =
       "cs_completed_pending";
     mockState.applications[0].payment_link_version = 3;
     mockStripe.checkoutSessionsRetrieve.mockResolvedValueOnce({
       id: "cs_completed_pending",
       status: "complete",
+      subscription: "sub_scheduled",
+      metadata: {
+        application_id: PENDING_APPLICATION_ID,
+        checkout_kind: "vehicle",
+        payment_link_version: "3",
+      },
     });
 
     const res = await request(app)
@@ -5816,15 +5846,49 @@ describe("Stripe API", () => {
         approved_weekly_price: 285,
       });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain("must be reconciled");
     expect(mockStripe.checkoutSessionsRetrieve).toHaveBeenCalledWith(
       "cs_completed_pending",
     );
     expect(mockStripe.checkoutSessionsExpire).not.toHaveBeenCalled();
     expect(mockState.applications[0]).toMatchObject({
-      payment_link_version: 4,
-      pending_checkout_session_id: null,
-      status: "Approved",
+      payment_link_version: 3,
+      pending_checkout_session_id: "cs_completed_pending",
+      status: "Pending",
+    });
+  });
+
+  it("POST /api/applications/:id/approve-payment fails closed when the old session cannot be expired", async () => {
+    mockState.applications[0].pending_checkout_session_id = "cs_open_pending";
+    mockState.applications[0].payment_link_version = 3;
+    mockStripe.checkoutSessionsRetrieve.mockResolvedValueOnce({
+      id: "cs_open_pending",
+      status: "open",
+      metadata: {
+        application_id: PENDING_APPLICATION_ID,
+        checkout_kind: "vehicle",
+        payment_link_version: "3",
+      },
+    });
+    mockStripe.checkoutSessionsExpire.mockRejectedValueOnce(
+      new Error("Stripe unavailable"),
+    );
+
+    const res = await request(app)
+      .post(`/api/applications/${PENDING_APPLICATION_ID}/approve-payment`)
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        approved_vehicle: "Toyota Camry Hybrid",
+        approved_bond: 650,
+        approved_weekly_price: 285,
+      });
+
+    expect(res.status).toBe(500);
+    expect(mockState.applications[0]).toMatchObject({
+      payment_link_version: 3,
+      pending_checkout_session_id: "cs_open_pending",
+      status: "Pending",
     });
   });
 
@@ -5950,6 +6014,11 @@ describe("Stripe API", () => {
     mockStripe.checkoutSessionsRetrieve.mockResolvedValueOnce({
       id: "cs_old_pending",
       status: "open",
+      metadata: {
+        application_id: PENDING_APPLICATION_ID,
+        checkout_kind: "vehicle",
+        payment_link_version: "3",
+      },
     });
     mockStripe.checkoutSessionsExpire.mockImplementationOnce(async () => {
       mockState.applications[0].payment_link_version = 4;
@@ -6125,7 +6194,7 @@ describe("Stripe API", () => {
     it("POST /api/applications/:id/cancel returns conflict when payment details change mid-cancel", async () => {
       mockState.applications[0].status = "Approved";
       mockState.applications[0].payment_link_version = 3;
-      mockState.applications[0].pending_checkout_session_id = "cs_pending_cancel";
+      mockState.applications[0].pending_checkout_session_id = null;
       mockBeforeApplicationsUpdate.mockImplementationOnce(() => {
         mockState.applications[0].payment_link_version = 4;
       });
@@ -6144,8 +6213,134 @@ describe("Stripe API", () => {
         cancelled_at: null,
         cancel_reason: null,
         payment_link_version: 4,
-        pending_checkout_session_id: "cs_pending_cancel",
+        pending_checkout_session_id: null,
         status: "Approved",
+      });
+    });
+
+    it("POST /api/applications/:id/cancel cancels a payment-only subscription from the webhook ledger", async () => {
+      mockState.applications[0].status = "Paid";
+      mockState.applications[0].payment_link_version = 3;
+      mockState.applications[0].pending_checkout_session_id = null;
+      mockState.rentals = [];
+      mockState.stripe_webhook_events = [
+        {
+          application_id: PENDING_APPLICATION_ID,
+          stripe_subscription_id: "sub_payment_only",
+        },
+      ];
+      mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
+        id: "sub_payment_only",
+        status: "active",
+        metadata: {
+          application_id: PENDING_APPLICATION_ID,
+          checkout_kind: "vehicle",
+          payment_link_version: "2",
+        },
+      });
+      mockStripe.subscriptionsCancel.mockResolvedValueOnce({
+        id: "sub_payment_only",
+        status: "canceled",
+      });
+
+      const res = await request(app)
+        .post(`/api/applications/${PENDING_APPLICATION_ID}/cancel`)
+        .set("Authorization", "Bearer fake-token")
+        .send({ cancel_reason: "Driver withdrew" });
+
+      expect(res.status).toBe(200);
+      expect(mockStripe.subscriptionsCancel).toHaveBeenCalledWith(
+        "sub_payment_only",
+      );
+      expect(mockState.applications[0].status).toBe("Cancelled");
+      expect(mockState.rentals).toHaveLength(0);
+    });
+
+    it("POST /api/applications/:id/cancel recovers a pre-migration payment-only subscription from its checkout session", async () => {
+      mockState.applications[0].status = "Paid";
+      mockState.applications[0].payment_link_version = 3;
+      mockState.applications[0].pending_checkout_session_id = null;
+      mockState.rentals = [];
+      mockState.stripe_webhook_events = [
+        {
+          application_id: PENDING_APPLICATION_ID,
+          checkout_session_id: "cs_legacy_payment_only",
+          stripe_subscription_id: null,
+        },
+      ];
+      mockStripe.checkoutSessionsRetrieve.mockResolvedValueOnce({
+        id: "cs_legacy_payment_only",
+        status: "complete",
+        metadata: {
+          application_id: PENDING_APPLICATION_ID,
+          checkout_kind: "vehicle",
+          payment_link_version: "2",
+        },
+        subscription: "sub_legacy_payment_only",
+      });
+      mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
+        id: "sub_legacy_payment_only",
+        status: "active",
+        metadata: {
+          application_id: PENDING_APPLICATION_ID,
+          checkout_kind: "vehicle",
+          payment_link_version: "2",
+        },
+      });
+      mockStripe.subscriptionsCancel.mockResolvedValueOnce({
+        id: "sub_legacy_payment_only",
+        status: "canceled",
+      });
+
+      const res = await request(app)
+        .post(`/api/applications/${PENDING_APPLICATION_ID}/cancel`)
+        .set("Authorization", "Bearer fake-token")
+        .send({ cancel_reason: "Driver withdrew" });
+
+      expect(res.status).toBe(200);
+      expect(mockStripe.checkoutSessionsRetrieve).toHaveBeenCalledWith(
+        "cs_legacy_payment_only",
+      );
+      expect(mockStripe.subscriptionsCancel).toHaveBeenCalledWith(
+        "sub_legacy_payment_only",
+      );
+      expect(mockState.applications[0].status).toBe("Cancelled");
+      expect(mockState.rentals).toHaveLength(0);
+    });
+
+    it("POST /api/applications/:id/cancel does not commit cancellation when Stripe cleanup fails", async () => {
+      mockState.applications[0].status = "Paid";
+      mockState.applications[0].payment_link_version = 3;
+      mockState.applications[0].pending_checkout_session_id = null;
+      mockState.stripe_webhook_events = [
+        {
+          application_id: PENDING_APPLICATION_ID,
+          stripe_subscription_id: "sub_payment_only",
+        },
+      ];
+      mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
+        id: "sub_payment_only",
+        status: "active",
+        metadata: {
+          application_id: PENDING_APPLICATION_ID,
+          checkout_kind: "vehicle",
+          payment_link_version: "3",
+        },
+      });
+      mockStripe.subscriptionsCancel.mockRejectedValueOnce(
+        new Error("Stripe unavailable"),
+      );
+
+      const res = await request(app)
+        .post(`/api/applications/${PENDING_APPLICATION_ID}/cancel`)
+        .set("Authorization", "Bearer fake-token")
+        .send({ cancel_reason: "Driver withdrew" });
+
+      expect(res.status).toBe(500);
+      expect(mockState.applications[0]).toMatchObject({
+        cancel_reason: null,
+        payment_link_version: 3,
+        status: "Paid",
       });
     });
 
@@ -6748,6 +6943,32 @@ describe("Stripe API", () => {
       version: 2,
     });
     expect(verified.carId).toBeNull();
+  });
+
+  it("POST /api/stripe/vehicle-checkout-link refuses to replace a completed subscription checkout", async () => {
+    mockState.applications[1].pending_checkout_session_id = "cs_completed";
+    mockStripe.checkoutSessionsRetrieve.mockResolvedValueOnce({
+      id: "cs_completed",
+      status: "complete",
+      subscription: "sub_scheduled",
+      metadata: {
+        application_id: APPROVED_APPLICATION_ID,
+        checkout_kind: "vehicle",
+        payment_link_version: "1",
+      },
+    });
+
+    const res = await request(app)
+      .post("/api/stripe/vehicle-checkout-link")
+      .set("Authorization", "Bearer fake-token")
+      .send({ application_id: APPROVED_APPLICATION_ID });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain("must be reconciled");
+    expect(mockState.applications[1]).toMatchObject({
+      payment_link_version: 1,
+      pending_checkout_session_id: "cs_completed",
+    });
   });
 
   it("POST /api/stripe/vehicle-checkout-link rejects approved applications that are missing pricing", async () => {

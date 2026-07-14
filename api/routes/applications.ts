@@ -35,7 +35,7 @@ import {
 import { handleVehicleCheckoutCompletion } from "../paymentActivation.js";
 import {
   cancelApplicationStripeResources,
-  expirePendingCheckoutSession,
+  retirePendingCheckoutSessionForReplacement,
 } from "../services/stripeCheckoutService.js";
 import { withVehicleCheckoutProcessingLock } from "../paymentActivation.js";
 import {
@@ -61,6 +61,8 @@ const APPLICATIONS_BUCKET = "applications";
 const DOCUMENT_URL_TTL_SECONDS = 60 * 15;
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
+const MAX_APPLICATION_MULTIPART_FIELDS = 20;
+const MAX_APPLICATION_MULTIPART_FIELD_BYTES = 16 * 1024;
 const ALLOWED_APPLICATION_IMAGE_TYPES = new Set<string>(
   APPLICATION_IMAGE_CONTENT_TYPES,
 );
@@ -140,8 +142,11 @@ type UploadedApplicationFiles = Partial<
 
 const applicationUpload = multer({
   limits: {
+    fields: MAX_APPLICATION_MULTIPART_FIELDS,
+    fieldSize: MAX_APPLICATION_MULTIPART_FIELD_BYTES,
     fileSize: MAX_APPLICATION_UPLOAD_BYTES,
     files: 3,
+    parts: MAX_APPLICATION_MULTIPART_FIELDS + 3,
   },
   storage: multer.memoryStorage(),
 });
@@ -173,13 +178,21 @@ const applicationUploadMiddleware: express.RequestHandler = (
     }
 
     if (error instanceof MulterError) {
-      const message =
-        error.code === "LIMIT_FILE_SIZE"
-          ? `Application documents must be smaller than ${Math.floor(
-              MAX_APPLICATION_UPLOAD_BYTES / (1024 * 1024),
-            )} MB.`
+      const isPayloadLimit = new Set([
+        "LIMIT_FIELD_COUNT",
+        "LIMIT_FIELD_VALUE",
+        "LIMIT_FILE_COUNT",
+        "LIMIT_FILE_SIZE",
+        "LIMIT_PART_COUNT",
+      ]).has(error.code);
+      const message = error.code === "LIMIT_FILE_SIZE"
+        ? `Application documents must be smaller than ${Math.floor(
+            MAX_APPLICATION_UPLOAD_BYTES / (1024 * 1024),
+          )} MB.`
+        : isPayloadLimit
+          ? "Application upload exceeds the allowed multipart limits."
           : "Invalid multipart upload.";
-      res.status(400).json({ error: message });
+      res.status(isPayloadLimit ? 413 : 400).json({ error: message });
       return;
     }
 
@@ -921,14 +934,18 @@ router.post("/:id/approve-payment", authenticateAdmin, async (req, res) => {
     const nextVersion = currentVersion + 1;
     const nowIso = new Date().toISOString();
 
-    await expirePendingCheckoutSession(
-      applicationRecord.pending_checkout_session_id,
-    );
+    await retirePendingCheckoutSessionForReplacement({
+      applicationId: payload.application_id,
+      paymentLinkVersion: currentVersion,
+      sessionId: applicationRecord.pending_checkout_session_id,
+    });
 
     const updatedApplication =
       await updateApplicationPaymentStateIfCurrentVersion({
         applicationId: payload.application_id,
         expectedPaymentLinkVersion: currentVersion,
+        expectedPendingCheckoutSessionId:
+          applicationRecord.pending_checkout_session_id || null,
         payload: {
           approved_at: nowIso,
           approved_bond: payload.approved_bond,
@@ -1024,11 +1041,17 @@ router.post("/:id/approve-payment", authenticateAdmin, async (req, res) => {
       return res.status(409).json({ error: error.message });
     }
 
-    if (error instanceof Error && "status" in error && error.status === 503) {
-      return res.status(503).json({ error: error.message });
+    if (
+      error instanceof Error &&
+      "status" in error &&
+      typeof error.status === "number"
+    ) {
+      return res.status(error.status).json({ error: error.message });
     }
 
-    console.error("Application approve-payment error:", error);
+    console.error("Application approve-payment error", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
     res
       .status(500)
       .json({ error: "Failed to approve application for payment" });
@@ -1148,6 +1171,18 @@ router.post("/:id/cancel", authenticateAdmin, async (req, res) => {
           cancel_reason?: string | null;
         };
 
+      const currentVersion = Number(applicationRecord.payment_link_version || 0);
+      const nextVersion = currentVersion + 1;
+      const nowIso = new Date().toISOString();
+
+      await cancelApplicationStripeResources({
+        applicationId: id,
+        paymentLinkVersion:
+          applicationRecord.status === "Cancelled" ? undefined : currentVersion,
+        pendingCheckoutSessionId:
+          applicationRecord.pending_checkout_session_id || null,
+      });
+
       if (applicationRecord.status === "Cancelled") {
         return {
           success: true,
@@ -1155,14 +1190,12 @@ router.post("/:id/cancel", authenticateAdmin, async (req, res) => {
         } as const;
       }
 
-      const currentVersion = Number(applicationRecord.payment_link_version || 0);
-      const nextVersion = currentVersion + 1;
-      const nowIso = new Date().toISOString();
-
       const updatedApplication =
         await updateApplicationPaymentStateIfCurrentVersion({
           applicationId: id,
           expectedPaymentLinkVersion: currentVersion,
+          expectedPendingCheckoutSessionId:
+            applicationRecord.pending_checkout_session_id || null,
           payload: {
             payment_link_version: nextVersion,
             pending_checkout_session_id: null,
@@ -1180,13 +1213,6 @@ router.post("/:id/cancel", authenticateAdmin, async (req, res) => {
           ),
         } as const;
       }
-
-      await cancelApplicationStripeResources({
-        applicationId: id,
-        paymentLinkVersion: currentVersion,
-        pendingCheckoutSessionId:
-          applicationRecord.pending_checkout_session_id || null,
-      });
 
       return {
         success: true,
@@ -1222,7 +1248,9 @@ router.post("/:id/cancel", authenticateAdmin, async (req, res) => {
       return res.status(error.status).json({ error: error.message });
     }
 
-    console.error("Application cancel error:", error);
+    console.error("Application cancel error", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
     res.status(500).json({ error: "Failed to cancel application" });
   }
 });

@@ -9,6 +9,23 @@ permissions:
   contents: read
 
 jobs:
+  migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.20.2
+          cache: npm
+      - name: Start isolated Supabase stack and apply migrations
+        run: npx --yes supabase@2.109.1 start
+      - name: Rebuild the database from the ordered migration chain
+        run: npx --yes supabase@2.109.1 db reset --local
+      - name: Stop isolated Supabase stack
+        if: always()
+        run: npx --yes supabase@2.109.1 stop --no-backup
+
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20

@@ -9,10 +9,25 @@ const REDACTED_QUERY_VALUE = '[REDACTED]';
 const REDACTED_QUERY_KEYS = new Set([
   'access_token',
   'admin_token',
+  'application_id',
   'checkout_token',
+  'email',
+  'license_number',
+  'phone',
   'refresh_token',
+  'search',
+  'session_id',
   'token',
 ]);
+const SENSITIVE_PATH_SEGMENT = /^(?:[0-9a-f]{8}-[0-9a-f-]{27,}|(?:cs|cus|evt|in|pi|sub)_[A-Za-z0-9_]+)$/i;
+
+const isSensitivePathSegment = (segment: string) => {
+  try {
+    return SENSITIVE_PATH_SEGMENT.test(decodeURIComponent(segment));
+  } catch {
+    return SENSITIVE_PATH_SEGMENT.test(segment);
+  }
+};
 
 const shouldSkipLogging = (req: Request) =>
   TEST_MODE ||
@@ -31,11 +46,18 @@ const getRequestId = (req: Request) => {
   return crypto.randomUUID();
 };
 
-const sanitizeOriginalUrl = (originalUrl: string) => {
+const sanitizePath = (path: string) =>
+  path
+    .split('/')
+    .map((segment) => (isSensitivePathSegment(segment) ? REDACTED_QUERY_VALUE : segment))
+    .join('/');
+
+export const sanitizeOriginalUrl = (originalUrl: string) => {
   const [path, queryString] = originalUrl.split('?', 2);
+  const sanitizedPath = sanitizePath(path);
 
   if (!queryString) {
-    return originalUrl;
+    return sanitizedPath;
   }
 
   const query = new URLSearchParams(queryString);
@@ -46,7 +68,7 @@ const sanitizeOriginalUrl = (originalUrl: string) => {
   }
 
   const sanitizedQuery = query.toString();
-  return sanitizedQuery ? `${path}?${sanitizedQuery}` : path;
+  return sanitizedQuery ? `${sanitizedPath}?${sanitizedQuery}` : sanitizedPath;
 };
 
 export const requestContext = (
@@ -75,14 +97,10 @@ export const requestLogger = (
   res.on('finish', () => {
     const durationMs = Number(process.hrtime.bigint() - startTime) / 1_000_000;
     const requestId = String(res.locals.requestId || '-');
-    const forwardedFor = req.header('x-forwarded-for');
-    const clientIp = forwardedFor
-      ? forwardedFor.split(',')[0]?.trim()
-      : req.ip;
     const safeOriginalUrl = sanitizeOriginalUrl(req.originalUrl);
 
     console.info(
-      `[${requestId}] ${req.method} ${safeOriginalUrl} ${res.statusCode} ${durationMs.toFixed(1)}ms ip=${clientIp || '-'}`
+      `[${requestId}] ${req.method} ${safeOriginalUrl} ${res.statusCode} ${durationMs.toFixed(1)}ms`
     );
   });
 
