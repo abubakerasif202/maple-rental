@@ -55,18 +55,27 @@ const homeJsonLd = {
 
 const showcaseVehicles = [
   {
-    image: '/camry-deep-blue.webp',
+    height: 600,
+    image: '/camry-deep-blue-800.webp',
+    imageSmall: '/camry-deep-blue-480.webp',
     title: 'Deep blue 2026 Toyota Camry',
+    width: 800,
     body: 'A generic Camry colour visual for presentation only. Vehicle / Number Plate is confirmed manually after review.',
   },
   {
-    image: '/camry-pearl-white.webp',
+    height: 600,
+    image: '/camry-pearl-white-800.webp',
+    imageSmall: '/camry-pearl-white-480.webp',
     title: 'Pearl white 2026 Toyota Camry',
+    width: 800,
     body: 'Maple Rentals records the approved vehicle and number plate as text instead of public fleet selection.',
   },
   {
-    image: '/camry-red.webp',
+    height: 600,
+    image: '/camry-red-800.webp',
+    imageSmall: '/camry-red-480.webp',
     title: 'Red 2026 Toyota Camry',
+    width: 800,
     body: 'Stripe checkout stays tied to the approved application and weekly payment, not a catalogue image.',
   },
 ];
@@ -191,8 +200,14 @@ export default function Home() {
             <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#1b1713] shadow-[0_40px_120px_rgba(0,0,0,0.45)]">
               <div className="aspect-[4/3] overflow-hidden">
                   <img
-                    src="/camry-deep-blue.webp"
+                    src="/camry-deep-blue-960.webp"
+                    srcSet="/camry-deep-blue-640.webp 640w, /camry-deep-blue-960.webp 960w, /camry-deep-blue-1200.webp 1200w, /camry-deep-blue.webp 1920w"
+                    sizes="(min-width: 1280px) 519px, (min-width: 1024px) calc(45vw - 58px), calc(100vw - 48px)"
                     alt="Deep blue generic 2026 Toyota Camry"
+                    decoding="async"
+                    fetchPriority="high"
+                    height={718}
+                    width={960}
                     className="h-full w-full object-cover"
                   />
               </div>
@@ -385,9 +400,14 @@ export default function Home() {
                 <div className="aspect-[4/3] overflow-hidden">
                   <img
                     src={vehicle.image}
+                    srcSet={`${vehicle.imageSmall} 480w, ${vehicle.image} 800w`}
+                    sizes="(min-width: 1280px) 384px, (min-width: 1024px) calc((100vw - 128px) / 3), (min-width: 768px) calc((100vw - 112px) / 3), calc(100vw - 48px)"
                     alt={vehicle.title}
                     className="h-full w-full object-cover transition-transform duration-700 hover:scale-105"
+                    decoding="async"
+                    height={vehicle.height}
                     loading="lazy"
+                    width={vehicle.width}
                   />
                 </div>
                 <div className="p-6">

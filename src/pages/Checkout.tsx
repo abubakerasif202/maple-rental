@@ -180,6 +180,7 @@ export default function Checkout() {
   }
 
   const { approved_vehicle, billing, vehicle_image } = paymentContext;
+  const isDefaultVehicleImage = vehicle_image === '/camry-deep-blue.webp';
 
   return (
     <>
@@ -278,8 +279,17 @@ export default function Checkout() {
                 <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
                   <div className="aspect-video relative">
                     <img
-                      src={vehicle_image}
+                      src={isDefaultVehicleImage ? '/camry-deep-blue-960.webp' : vehicle_image}
+                      srcSet={
+                        isDefaultVehicleImage
+                          ? '/camry-deep-blue-640.webp 640w, /camry-deep-blue-960.webp 960w, /camry-deep-blue-1200.webp 1200w'
+                          : undefined
+                      }
+                      sizes="(min-width: 1200px) 453px, (min-width: 1024px) calc(41.67vw - 47px), calc(100vw - 48px)"
                       alt="Deep blue generic 2026 Toyota Camry preview"
+                      decoding="async"
+                      height={718}
+                      width={960}
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-brand-navy to-transparent opacity-60" />

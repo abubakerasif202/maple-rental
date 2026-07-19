@@ -28,8 +28,12 @@ export default function Footer() {
           <div>
             <Link to="/" aria-label="Maple Rentals home" className="flex items-center mb-8 group">
               <img
-                src="/maple-logo.webp"
+                src="/maple-logo-256.webp"
                 alt="Maple Rentals Sydney car rentals logo"
+                decoding="async"
+                height={256}
+                loading="lazy"
+                width={256}
                 className="h-20 md:h-24 object-contain rounded-lg"
               />
             </Link>

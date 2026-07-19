@@ -509,40 +509,43 @@ router.get("/", authenticateAdmin, async (req, res) => {
     const listSelectColumns = await getApplicationListSelectColumns();
     const orderColumn = await getApplicationCreatedAtColumn();
 
-    const countQuery = applyApplicationStatusFilters(
-      applyApplicationSearch(
-        applyImportedApplicationFilters(
-          db.from("applications").select("id", { count: "exact", head: true }),
+    const buildDataQuery = (includeCount: boolean) =>
+      applyApplicationStatusFilters(
+        applyApplicationSearch(
+          applyImportedApplicationFilters(
+            includeCount
+              ? db.from("applications").select(listSelectColumns, { count: "exact" })
+              : db.from("applications").select(listSelectColumns),
+          ),
+          searchTerm,
         ),
-        searchTerm,
-      ),
-      statusFilters,
-    );
-    const { count, error: countError } = await countQuery;
+        statusFilters,
+      );
+    const requestedRangeStart = (requestedPage - 1) * pageSize;
+    const requestedRangeEnd = requestedRangeStart + pageSize - 1;
+    const firstResult = await buildDataQuery(true)
+      .order(orderColumn, { ascending: false })
+      .range(requestedRangeStart, requestedRangeEnd);
 
-    if (countError) {
+    if (firstResult.error) {
       return res.status(500).json({ error: "Failed to fetch applications" });
     }
 
-    const totalItems = count || 0;
+    const totalItems = firstResult.count || 0;
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const page = Math.min(requestedPage, totalPages);
     const rangeStart = (page - 1) * pageSize;
     const rangeEnd = rangeStart + pageSize - 1;
+    let data = firstResult.data;
 
-    const dataQuery = applyApplicationStatusFilters(
-      applyApplicationSearch(
-        applyImportedApplicationFilters(db.from("applications").select(listSelectColumns)),
-        searchTerm,
-      ),
-      statusFilters,
-    );
-    const { data, error } = await dataQuery
-      .order(orderColumn, { ascending: false })
-      .range(rangeStart, rangeEnd);
-
-    if (error) {
-      return res.status(500).json({ error: "Failed to fetch applications" });
+    if (page !== requestedPage && totalItems > 0) {
+      const fallbackResult = await buildDataQuery(false)
+        .order(orderColumn, { ascending: false })
+        .range(rangeStart, rangeEnd);
+      if (fallbackResult.error) {
+        return res.status(500).json({ error: "Failed to fetch applications" });
+      }
+      data = fallbackResult.data;
     }
 
     const applications = ((data || []) as Array<Record<string, any>>).map((application) => {

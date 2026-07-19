@@ -9,6 +9,7 @@
     "build": "npm run build:client && npm run build:server",
     "build:client": "node scripts/run-vite.js build",
     "build:server": "tsc -p tsconfig.server.json",
+    "check:bundle-budget": "node scripts/check-client-bundle-budget.mjs",
     "preview": "node scripts/run-vite.js preview",
     "clean": "node scripts/clean.js",
     "clean:documents": "tsx scripts/cleanup-orphaned-documents.ts",

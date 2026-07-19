@@ -344,7 +344,6 @@ const loadAdminRentalDatasetWithApplications = async ({
   pageSize: number;
   search: string;
 }) => {
-  const orderColumn = await getRentalCreatedAtColumn();
   const searchTerm = normalizeSearchTerm(search);
 
   if (searchTerm) {
@@ -405,32 +404,42 @@ const loadAdminRentalDatasetWithApplications = async ({
     };
   }
 
-  const countQuery = applyRentalImportFilters(
-    db
-      .from("rentals")
-      .select(`id, ${RENTAL_APPLICATION_RELATION_SELECT}`, { count: "exact", head: true }),
-  );
-  const { count, error: countError } = await countQuery;
-  if (countError) {
-    throw countError;
+  const [orderColumn, selectColumns] = await Promise.all([
+    getRentalCreatedAtColumn(),
+    getRentalSelectColumns({ includeStripeFields: true }),
+  ]);
+  const buildRentalQuery = (includeCount: boolean) =>
+    applyRentalImportFilters(
+      includeCount
+        ? db
+            .from("rentals")
+            .select(withRentalApplicationRelation(selectColumns), { count: "exact" })
+        : db.from("rentals").select(withRentalApplicationRelation(selectColumns)),
+    );
+  const requestedRangeStart = (page - 1) * pageSize;
+  const requestedRangeEnd = requestedRangeStart + pageSize - 1;
+  const firstResult = await buildRentalQuery(true)
+    .order(orderColumn, { ascending: false })
+    .range(requestedRangeStart, requestedRangeEnd);
+  if (firstResult.error) {
+    throw firstResult.error;
   }
 
-  const totalItems = count || 0;
+  const totalItems = firstResult.count || 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const currentPage = Math.min(page, totalPages);
   const rangeStart = (currentPage - 1) * pageSize;
   const rangeEnd = rangeStart + pageSize - 1;
-  const selectColumns = await getRentalSelectColumns({
-    includeStripeFields: true,
-  });
-  const { data, error } = await applyRentalImportFilters(
-    db.from("rentals").select(withRentalApplicationRelation(selectColumns)),
-  )
-    .order(orderColumn, { ascending: false })
-    .range(rangeStart, rangeEnd);
+  let data = firstResult.data;
 
-  if (error) {
-    throw error;
+  if (currentPage !== page && totalItems > 0) {
+    const fallbackResult = await buildRentalQuery(false)
+      .order(orderColumn, { ascending: false })
+      .range(rangeStart, rangeEnd);
+    if (fallbackResult.error) {
+      throw fallbackResult.error;
+    }
+    data = fallbackResult.data;
   }
 
   const { applicationsById, items: formattedRentals } =

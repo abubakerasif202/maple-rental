@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useDeferredValue, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import {
   Badge,
   Button,
@@ -55,6 +55,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Sidebar from '../components/admin/Sidebar';
 import AccessibleDialog from '../components/admin/AccessibleDialog';
 import { getTodayInAustralia } from '../../shared/applicationSubmission';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 const OverviewTab = lazy(() => import('../components/admin/tabs/OverviewTab'));
 const ApplicationsTab = lazy(() => import('../components/admin/tabs/ApplicationsTab'));
@@ -140,6 +141,8 @@ export default function AdminDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const invalidateDashboardSummary = () =>
+    queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
   const { dispatchToast } = useToastController('maple-admin-toaster');
   const notificationTimeoutRef = useRef<number | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -188,8 +191,8 @@ export default function AdminDashboard() {
     getDateRangeForPreset('last7')
   );
   const [agreementModalMode, setAgreementModalMode] = useState<'draft' | 'saved'>('draft');
-  const deferredCustomerSearch = useDeferredValue(customerSearch.trim());
-  const deferredInvoiceSearch = useDeferredValue(invoiceSearch.trim());
+  const debouncedCustomerSearch = useDebouncedValue(customerSearch.trim());
+  const debouncedInvoiceSearch = useDebouncedValue(invoiceSearch.trim());
 
   useEffect(() => {
     if (location.pathname === '/admin/agreements') {
@@ -218,26 +221,26 @@ export default function AdminDashboard() {
           : '/admin/dashboard'
     );
   };
-  const deferredApplicationSearch = useDeferredValue(applicationSearch.trim());
-  const deferredRentalSearch = useDeferredValue(rentalSearch.trim());
+  const debouncedApplicationSearch = useDebouncedValue(applicationSearch.trim());
+  const debouncedRentalSearch = useDebouncedValue(rentalSearch.trim());
 
   const approvedApplicationStatusFilters = ['Approved', 'Paid'];
 
   useEffect(() => {
     setCustomerPage(1);
-  }, [deferredCustomerSearch]);
+  }, [debouncedCustomerSearch]);
 
   useEffect(() => {
     setInvoicePage(1);
-  }, [deferredInvoiceSearch, invoicePageSize]);
+  }, [debouncedInvoiceSearch, invoicePageSize]);
 
   useEffect(() => {
     setApplicationPage(1);
-  }, [deferredApplicationSearch, applicationPageSize, applicationStatusFilters]);
+  }, [debouncedApplicationSearch, applicationPageSize, applicationStatusFilters]);
 
   useEffect(() => {
     setRentalPage(1);
-  }, [deferredRentalSearch, rentalPageSize]);
+  }, [debouncedRentalSearch, rentalPageSize]);
 
   useEffect(() => {
     return () => {
@@ -271,7 +274,6 @@ export default function AdminDashboard() {
 
   const shouldLoadStats = activeTab === 'dashboard' || activeTab === 'financials';
   const shouldLoadApplications =
-    activeTab === 'dashboard' ||
     activeTab === 'applications' ||
     activeTab === 'agreements';
   const shouldLoadRentals = activeTab === 'rentals' || activeTab === 'toll-notices';
@@ -283,73 +285,73 @@ export default function AdminDashboard() {
   // Queries
   const summaryQuery = useQuery<DashboardSummaryResponse>({
     queryKey: ['dashboard-summary'],
-    queryFn: () => api.fetchDashboardSummary(),
+    queryFn: ({ signal }) => api.fetchDashboardSummary(signal),
     enabled: shouldLoadStats,
   });
 
   const applicationsQuery = useQuery<AdminDatasetResponse<Application>>({
     queryKey: [
       'applications',
-      deferredApplicationSearch,
+      debouncedApplicationSearch,
       applicationPage,
       applicationPageSize,
       applicationStatusFilters.join('|'),
     ],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       api.fetchApplications({
         page: applicationPage,
         pageSize: applicationPageSize,
-        search: deferredApplicationSearch,
+        search: debouncedApplicationSearch,
         statuses: applicationStatusFilters,
-      }),
+      }, signal),
     enabled: shouldLoadApplications,
     placeholderData: (previousData) => previousData,
   });
 
   const approvedApplicationsQuery = useQuery<AdminDatasetResponse<Application>>({
     queryKey: ['approved-applications'],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       api.fetchApplications({
         page: 1,
         pageSize: 100,
         statuses: approvedApplicationStatusFilters,
-      }),
+      }, signal),
     enabled: shouldLoadAgreements,
     placeholderData: (previousData) => previousData,
   });
 
   const rentalsQuery = useQuery<AdminDatasetResponse<Rental>>({
-    queryKey: ['rentals', deferredRentalSearch, rentalPage, rentalPageSize],
-    queryFn: () =>
+    queryKey: ['rentals', debouncedRentalSearch, rentalPage, rentalPageSize],
+    queryFn: ({ signal }) =>
       api.fetchRentals({
         page: rentalPage,
         pageSize: rentalPageSize,
-        search: deferredRentalSearch,
-      }),
+        search: debouncedRentalSearch,
+      }, signal),
     enabled: shouldLoadRentals,
     placeholderData: (previousData) => previousData,
   });
 
   const customerDatasetQuery = useQuery<AdminDatasetResponse<OperationalCustomer>>({
-    queryKey: ['operational-customers', deferredCustomerSearch, customerPage, OPERATIONAL_PAGE_SIZE],
-    queryFn: () =>
+    queryKey: ['operational-customers', debouncedCustomerSearch, customerPage, OPERATIONAL_PAGE_SIZE],
+    queryFn: ({ signal }) =>
       api.fetchOperationalCustomers({
         page: customerPage,
         pageSize: OPERATIONAL_PAGE_SIZE,
-        search: deferredCustomerSearch,
-      }),
+        search: debouncedCustomerSearch,
+      }, signal),
     enabled: shouldLoadCustomers,
     placeholderData: (previousData) => previousData,
   });
 
   const invoiceDatasetQuery = useQuery<AdminDatasetResponse<OperationalInvoice>>({
-    queryKey: ['operational-invoices', deferredInvoiceSearch, invoicePage, invoicePageSize],
-    queryFn: () =>
+    queryKey: ['operational-invoices', debouncedInvoiceSearch, invoicePage, invoicePageSize],
+    queryFn: ({ signal }) =>
       api.fetchOperationalInvoices({
         page: invoicePage,
         pageSize: invoicePageSize,
-        search: deferredInvoiceSearch,
-      }),
+        search: debouncedInvoiceSearch,
+      }, signal),
     enabled: shouldLoadInvoices,
     placeholderData: (previousData) => previousData,
   });
@@ -376,6 +378,7 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['applications'] });
       queryClient.invalidateQueries({ queryKey: ['approved-applications'] });
+      invalidateDashboardSummary();
       showNotification('Application status updated', 'success');
     },
     onError: (error) =>
@@ -389,6 +392,7 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['applications'] });
       queryClient.invalidateQueries({ queryKey: ['approved-applications'] });
       queryClient.invalidateQueries({ queryKey: ['rentals'] });
+      invalidateDashboardSummary();
       setSelectedApplication(null);
       setIsCancelApplicationModalOpen(false);
       setCancelApplicationReason('');
@@ -405,6 +409,7 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['agreements'] });
       queryClient.invalidateQueries({ queryKey: ['applications'] });
       queryClient.invalidateQueries({ queryKey: ['approved-applications'] });
+      invalidateDashboardSummary();
       setIsAgreementModalOpen(false);
       setAgreementModalMode('draft');
       showNotification('Agreement saved successfully', 'success');
@@ -435,6 +440,7 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['approved-applications'] });
       queryClient.invalidateQueries({ queryKey: ['agreements'] });
       queryClient.invalidateQueries({ queryKey: ['rentals'] });
+      invalidateDashboardSummary();
     },
   });
 
@@ -444,6 +450,7 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['applications'] });
       queryClient.invalidateQueries({ queryKey: ['approved-applications'] });
+      invalidateDashboardSummary();
     },
   });
 
@@ -453,6 +460,7 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['applications'] });
       queryClient.invalidateQueries({ queryKey: ['approved-applications'] });
       queryClient.invalidateQueries({ queryKey: ['rentals'] });
+      invalidateDashboardSummary();
     },
   });
 
@@ -475,6 +483,7 @@ export default function AdminDashboard() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rentals'] });
+      invalidateDashboardSummary();
       showNotification('Stripe subscription cancellation updated.', 'success');
     },
     onError: (error) =>
@@ -1004,7 +1013,7 @@ export default function AdminDashboard() {
               setCustomerSearch={setCustomerSearch}
               isLoadingCustomerDataset={isLoadingCustomerDataset}
               customerHistoryAvailable={customerHistoryAvailable}
-              deferredCustomerSearch={deferredCustomerSearch}
+              deferredCustomerSearch={debouncedCustomerSearch}
               customerTotalItems={customerTotalItems}
               customerTotals={customerTotals}
               customerRecords={customerRecords}
@@ -1024,7 +1033,7 @@ export default function AdminDashboard() {
               setInvoiceSearch={setInvoiceSearch}
               isLoadingInvoiceDataset={isLoadingInvoiceDataset}
               invoiceHistoryAvailable={invoiceHistoryAvailable}
-              deferredInvoiceSearch={deferredInvoiceSearch}
+              deferredInvoiceSearch={debouncedInvoiceSearch}
               invoiceTotalItems={invoiceTotalItems}
               invoiceTotals={invoiceTotals}
               invoiceRecords={invoiceRecords}

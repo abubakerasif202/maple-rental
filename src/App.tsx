@@ -1,11 +1,9 @@
 import { Suspense, lazy } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { FluentProvider, Toaster } from '@fluentui/react-components';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { mapleFluentTheme } from './theme/mapleFluentTheme';
 
 const Home = lazy(() => import('./pages/Home'));
 const Pricing = lazy(() => import('./pages/Pricing'));
@@ -78,12 +76,9 @@ function AppShell() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <FluentProvider theme={mapleFluentTheme} className="min-h-screen bg-brand-navy">
-        <Toaster toasterId="maple-admin-toaster" position="bottom" />
-        <Router>
-          <AppShell />
-        </Router>
-      </FluentProvider>
+      <Router>
+        <AppShell />
+      </Router>
     </QueryClientProvider>
   );
 }

@@ -164,4 +164,26 @@ describe('migration safety guards', () => {
     expect(migration).toContain('BEGIN;');
     expect(migration).toContain('COMMIT;');
   });
+
+  it('aggregates the admin dashboard inside Postgres with service-role-only access', () => {
+    const migration = fs.readFileSync(
+      path.resolve(
+        process.cwd(),
+        'supabase/migrations/20260719090000_add_admin_dashboard_summary_rpc.sql'
+      ),
+      'utf8'
+    );
+
+    expect(migration).toContain('FUNCTION public.get_admin_dashboard_summary()');
+    expect(migration).toContain('SECURITY DEFINER');
+    expect(migration).toContain("SET search_path = ''");
+    expect(migration).toContain('AS MATERIALIZED');
+    expect(migration).toContain('LIMIT 8');
+    expect(migration).toContain("AT TIME ZONE 'Australia/Sydney'");
+    expect(migration).toContain('application.legacy_id IS NULL');
+    expect(migration).toContain('rental.legacy_application_id IS NULL');
+    expect(migration).toContain('FROM PUBLIC');
+    expect(migration).toContain('TO service_role');
+    expect(migration).toContain("NOTIFY pgrst, 'reload schema'");
+  });
 });

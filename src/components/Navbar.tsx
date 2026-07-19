@@ -101,8 +101,11 @@ export default function Navbar() {
           <div className="flex flex-1 justify-start">
             <Link to="/" aria-label="Maple Rentals home" className="flex items-center rounded-lg">
               <img
-                src="/maple-logo.webp"
+                src="/maple-logo-256.webp"
                 alt="Maple Rentals Sydney car rentals logo"
+                decoding="async"
+                height={256}
+                width={256}
                 className="h-14 w-auto object-contain drop-shadow-2xl md:h-[68px]"
               />
             </Link>

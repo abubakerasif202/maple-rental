@@ -40,6 +40,7 @@ import indexNowAdminRoutes from './routes/indexNowAdmin.js';
 import inquiryRoutes from './routes/inquiries.js';
 import invoiceRoutes from './routes/invoices.js';
 import manualInvoiceRoutes from './routes/manualInvoices.js';
+import performanceRoutes from './routes/performance.js';
 import rentalRoutes from './routes/rentals.js';
 import stripeRoutes from './routes/stripe.js';
 import tollNoticeRoutes from './routes/tollNotices.js';
@@ -536,6 +537,7 @@ const registerCoreRoutes = (app: express.Express) => {
     });
   });
 
+  app.use('/api/performance', performanceRoutes);
   app.use('/api', rateLimiter);
   app.use('/api', async (_req, _res, next) => {
     try {

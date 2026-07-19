@@ -1,12 +1,14 @@
+import { FluentProvider, Toaster } from '@fluentui/react-components';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { Suspense, useEffect, useState, lazy } from 'react';
 import { Navigate } from 'react-router-dom';
 import { verifyAdminSession } from '../lib/api';
 import { classifyAdminSessionFailure } from '../lib/adminSession';
+import { mapleFluentTheme } from '../theme/mapleFluentTheme';
 
 const AdminDashboard = lazy(() => import('./AdminDashboard'));
 
-export default function AdminDashboardRoute() {
+function AdminDashboardRouteContent() {
   const [sessionState, setSessionState] = useState<
     'checking' | 'ready' | 'unauthorized' | 'forbidden' | 'error'
   >('checking');
@@ -98,5 +100,14 @@ export default function AdminDashboardRoute() {
     >
       <AdminDashboard />
     </Suspense>
+  );
+}
+
+export default function AdminDashboardRoute() {
+  return (
+    <FluentProvider theme={mapleFluentTheme} className="min-h-screen bg-brand-navy">
+      <Toaster toasterId="maple-admin-toaster" position="bottom" />
+      <AdminDashboardRouteContent />
+    </FluentProvider>
   );
 }

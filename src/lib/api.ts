@@ -53,14 +53,15 @@ export const verifyAdminSession = async (): Promise<AdminSessionResponse> => {
 };
 
 export const fetchApplications = async (
-  params: AdminDatasetRequest & { statuses?: string[] } = {}
+  params: AdminDatasetRequest & { statuses?: string[] } = {},
+  signal?: AbortSignal
 ): Promise<AdminDatasetResponse<Application>> => {
   const queryParams: Record<string, string | number> = {};
   if (params.page != null) queryParams.page = params.page;
   if (params.pageSize != null) queryParams.pageSize = params.pageSize;
   if (params.search != null) queryParams.search = params.search;
   if (params.statuses && params.statuses.length > 0) queryParams.statuses = params.statuses.join(',');
-  const { data } = await api.get('/applications', { params: queryParams });
+  const { data } = await api.get('/applications', { params: queryParams, signal });
   return data;
 };
 
@@ -79,15 +80,18 @@ export const fetchStats = async (): Promise<DashboardStats> => {
   return data;
 };
 
-export const fetchDashboardSummary = async (): Promise<DashboardSummaryResponse> => {
-  const { data } = await api.get('/financials/dashboard-summary');
+export const fetchDashboardSummary = async (
+  signal?: AbortSignal
+): Promise<DashboardSummaryResponse> => {
+  const { data } = await api.get('/financials/dashboard-summary', { signal });
   return data;
 };
 
 export const fetchRentals = async (
-  params: AdminDatasetRequest = {}
+  params: AdminDatasetRequest = {},
+  signal?: AbortSignal
 ): Promise<AdminDatasetResponse<Rental>> => {
-  const { data } = await api.get('/rentals', { params });
+  const { data } = await api.get('/rentals', { params, signal });
   return data;
 };
 
@@ -122,20 +126,22 @@ export interface AdminDatasetRequest {
 }
 
 export const fetchOperationalCustomers = async (
-  params: AdminDatasetRequest = {}
+  params: AdminDatasetRequest = {},
+  signal?: AbortSignal
 ): Promise<
   AdminDatasetResponse<OperationalCustomer>
 > => {
-  const { data } = await api.get('/customers', { params });
+  const { data } = await api.get('/customers', { params, signal });
   return data;
 };
 
 export const fetchOperationalInvoices = async (
-  params: AdminDatasetRequest = {}
+  params: AdminDatasetRequest = {},
+  signal?: AbortSignal
 ): Promise<
   AdminDatasetResponse<OperationalInvoice>
 > => {
-  const { data } = await api.get('/invoices', { params });
+  const { data } = await api.get('/invoices', { params, signal });
   return data;
 };
 

@@ -16,6 +16,7 @@ export default defineConfig(() => {
       },
     },
     build: {
+      manifest: true,
       rollupOptions: {
         output: {
           manualChunks(id) {
@@ -47,7 +48,7 @@ export default defineConfig(() => {
               return 'forms';
             }
 
-            if (id.includes('motion')) {
+            if (isNodeModule(id, 'motion')) {
               return 'motion';
             }
 

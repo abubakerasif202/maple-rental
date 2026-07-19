@@ -39,6 +39,7 @@ jobs:
       - run: npm run lint
       - run: npm run test
       - run: npm run build
+      - run: npm run check:bundle-budget
       - name: Verify ordered migration contracts
         run: >-
           npx vitest run

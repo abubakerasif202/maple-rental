@@ -2037,6 +2037,16 @@ beforeEach(() => {
     async (functionName: string, args: Record<string, unknown>) => {
       const now = new Date().toISOString();
 
+      if (functionName === "get_admin_dashboard_summary") {
+        return {
+          data: null,
+          error: {
+            code: "PGRST202",
+            message: "Function public.get_admin_dashboard_summary was not found in the schema cache",
+          },
+        };
+      }
+
       if (functionName === "create_manual_invoice_transaction") {
         const invoiceInput = args.p_invoice as Record<string, unknown>;
         const itemInputs = args.p_items as Array<Record<string, unknown>>;
@@ -3537,7 +3547,7 @@ describe("Applications API", () => {
       id: 402,
       vehicle_registration: "CZ55XY-3",
     });
-    expect(getQueryTables().filter((table) => table === "rentals")).toHaveLength(2);
+    expect(getQueryTables().filter((table) => table === "rentals")).toHaveLength(1);
     expect(mockState.queryLog.length).toBeLessThanOrEqual(2);
     expectNoImportedApplicationPreload();
     expectNoDuplicateRentalRehydration();
@@ -3613,7 +3623,7 @@ describe("Applications API", () => {
       application_id: APPROVED_APPLICATION_ID,
       vehicle_registration: "LIVE-1",
     });
-    expect(getQueryTables().filter((table) => table === "rentals")).toHaveLength(2);
+    expect(getQueryTables().filter((table) => table === "rentals")).toHaveLength(1);
     expect(mockState.queryLog.length).toBeLessThanOrEqual(2);
     expectNoImportedApplicationPreload();
     expectNoDuplicateRentalRehydration();
@@ -4623,6 +4633,39 @@ describe("Operational history API", () => {
       actor: "admin@maplerentals.com.au",
       type: "audit",
     });
+  });
+
+  it("GET /api/financials/dashboard-summary uses the bounded database aggregate", async () => {
+    const databaseSummary = {
+      active_rentals: 3,
+      agreements_awaiting_attention: 1,
+      agreements_generated: 4,
+      applications_by_status: { Paid: 3 },
+      outstanding_invoices: 90,
+      overdue_invoices: 1,
+      pending_applications: 0,
+      paid_applications: 3,
+      recent_admin_actions: [],
+      recent_applications: [],
+      recent_payments: [],
+      recent_rental_activity: [],
+      revenue_trend: [],
+      status_distribution: [{ label: "Paid", value: 3 }],
+      summary_generated_at: "2026-07-20T00:00:00.000Z",
+      total_applications: 3,
+      total_customers: 3,
+      total_weekly_income: 900,
+      weekly_recurring_revenue: 900,
+    };
+    mockDbRpc.mockResolvedValueOnce({ data: databaseSummary, error: null });
+
+    const res = await request(app)
+      .get("/api/financials/dashboard-summary")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(databaseSummary);
+    expect(mockDbRpc).toHaveBeenCalledWith("get_admin_dashboard_summary");
   });
 
   it("GET /api/financials/weekly returns zero projections when only imported active rentals exist", async () => {

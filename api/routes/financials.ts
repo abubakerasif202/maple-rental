@@ -296,7 +296,7 @@ router.get('/stats', authenticateAdmin, async (_req, res) => {
   }
 });
 
-const loadDashboardSummary = async () => {
+const loadDashboardSummaryLegacy = async () => {
   const rentalSelectColumns = await getRentalSelectColumns({ includeStripeFields: true });
   const applicationSelectColumns = await getApplicationSelectColumns();
   const importedApplicationSelectColumns = await getApplicationImportedDataSelectColumns();
@@ -304,7 +304,7 @@ const loadDashboardSummary = async () => {
     await Promise.all([
       readOptionalRows<Record<string, any>>(() => db.from('applications').select(applicationSelectColumns)),
       readOptionalRows<Record<string, any>>(() => db.from('rentals').select(rentalSelectColumns)),
-      readOptionalRows<Record<string, any>>(() => db.from('invoices').select('id, balance, amount, status, invoice_date, due_label, customer_name, car_registration')),
+      readOptionalRows<Record<string, any>>(() => db.from('invoices').select('id, balance, amount, invoice_date, due_label, customer_name, car_registration')),
       readOptionalRows<Record<string, any>>(() => db.from('lease_agreements').select('id, application_id, status, created_at')),
       readOptionalRows<Record<string, any>>(() => db.from('admin_audit_events').select('id, action, actor, created_at, target_type, target_id, metadata').order('created_at', { ascending: false }).limit(RECENT_ACTIVITY_LIMIT)),
       readOptionalRows<Record<string, any>>(() => db.from('applications').select(importedApplicationSelectColumns)),
@@ -324,21 +324,29 @@ const loadDashboardSummary = async () => {
     return acc;
   }, {});
   const totalWeeklyIncome = realRentals.reduce(
-    (sum, row) => sum + getNumeric(row.weekly_price),
+    (sum, row) =>
+      sum + (toText(row.status) === 'Active' ? getNumeric(row.weekly_price) : 0),
     0
   );
   const outstandingInvoices = invoiceRows.reduce(
     (sum, row) => sum + Math.max(0, getNumeric(row.balance)),
     0
   );
-  const overdueInvoices = invoiceRows.filter((row) => getNumeric(row.balance) > 0 && toText(row.status).toLowerCase() !== 'paid').length;
+  const overdueInvoices = invoiceRows.filter((row) => getNumeric(row.balance) > 0).length;
   const paidApplications = realApplications.filter((row) => toText(row.status) === 'Paid');
   const agreementsByApplication = new Set(
     agreementRows.map((agreement) => toText(agreement.application_id)).filter(Boolean)
   );
   const recentApplications = [...realApplications]
     .sort((left, right) => Date.parse(toText(right.created_at)) - Date.parse(toText(left.created_at)))
-    .slice(0, RECENT_ACTIVITY_LIMIT);
+    .slice(0, RECENT_ACTIVITY_LIMIT)
+    .map((application) => ({
+      id: application.id,
+      name: application.name,
+      status: application.status,
+      created_at: application.created_at,
+      approved_vehicle: application.approved_vehicle,
+    }));
   const recentPayments = [...paidApplications]
     .sort((left, right) => Date.parse(toText(right.paid_at)) - Date.parse(toText(left.paid_at)))
     .slice(0, RECENT_ACTIVITY_LIMIT)
@@ -352,7 +360,8 @@ const loadDashboardSummary = async () => {
       created_at: toText(application.paid_at),
       status: toText(application.status),
     }));
-  const recentRentalActivity = [...realRentals]
+  const recentRentalActivity = realRentals
+    .filter((rental) => toText(rental.status) === 'Active')
     .sort((left, right) => Date.parse(toText(right.created_at)) - Date.parse(toText(left.created_at)))
     .slice(0, RECENT_ACTIVITY_LIMIT)
     .map((rental) => ({
@@ -390,10 +399,6 @@ const loadDashboardSummary = async () => {
     const bucket = trendByDay.get(key);
     if (bucket) {
       bucket.applications += 1;
-      if (toText(row.status) === 'Paid') {
-        bucket.paidApplications += 1;
-        bucket.revenue += getNumeric(row.approved_weekly_price);
-      }
     }
     if (row.paid_at) {
       const paidKey = formatSydneyDateKey(toText(row.paid_at));
@@ -412,7 +417,7 @@ const loadDashboardSummary = async () => {
       continue;
     }
     const bucket = trendByDay.get(key);
-    if (bucket) {
+    if (bucket && toText(row.status) === 'Active') {
       bucket.rentals += 1;
       bucket.revenue += getNumeric(row.weekly_price);
     }
@@ -430,7 +435,9 @@ const loadDashboardSummary = async () => {
 
   return {
     active_rentals: realRentals.filter((row) => toText(row.status) === 'Active').length,
-    agreements_awaiting_attention: Math.max(0, paidApplications.length - agreementsByApplication.size),
+    agreements_awaiting_attention: paidApplications.filter(
+      (application) => !agreementsByApplication.has(toText(application.id))
+    ).length,
     agreements_generated: agreementRows.length,
     applications_by_status: statusCounts,
     outstanding_invoices: outstandingInvoices,
@@ -449,6 +456,45 @@ const loadDashboardSummary = async () => {
     total_weekly_income: totalWeeklyIncome,
     weekly_recurring_revenue: totalWeeklyIncome,
   };
+};
+
+const isMissingDashboardSummaryRpcError = (error: unknown) => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const rpcError = error as { code?: string; message?: string };
+  return (
+    rpcError.code === 'PGRST202' ||
+    rpcError.code === '42883' ||
+    /get_admin_dashboard_summary/i.test(rpcError.message || '') &&
+      /(?:not found|does not exist|schema cache)/i.test(rpcError.message || '')
+  );
+};
+
+const isDashboardSummary = (value: unknown): value is Record<string, unknown> =>
+  value != null &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  typeof (value as Record<string, unknown>).total_applications === 'number' &&
+  typeof (value as Record<string, unknown>).active_rentals === 'number' &&
+  Array.isArray((value as Record<string, unknown>).revenue_trend);
+
+const loadDashboardSummary = async () => {
+  const result = await db.rpc('get_admin_dashboard_summary');
+
+  if (result.error) {
+    if (isMissingDashboardSummaryRpcError(result.error)) {
+      return loadDashboardSummaryLegacy();
+    }
+    throw result.error;
+  }
+
+  if (!isDashboardSummary(result.data)) {
+    throw new Error('Dashboard summary RPC returned an invalid payload');
+  }
+
+  return result.data;
 };
 
 router.get('/dashboard-summary', authenticateAdmin, async (_req, res) => {

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { OutgoingHttpHeader, OutgoingHttpHeaders } from 'node:http';
 import type { NextFunction, Request, Response } from 'express';
 
 const TEST_MODE = process.env.VITEST === 'true';
@@ -20,6 +21,7 @@ const REDACTED_QUERY_KEYS = new Set([
   'token',
 ]);
 const SENSITIVE_PATH_SEGMENT = /^(?:[0-9a-f]{8}-[0-9a-f-]{27,}|(?:cs|cus|evt|in|pi|sub)_[A-Za-z0-9_]+)$/i;
+const VALID_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 
 const isSensitivePathSegment = (segment: string) => {
   try {
@@ -37,10 +39,15 @@ const shouldSkipLogging = (req: Request) =>
   req.path === '/favicon.ico' ||
   ASSET_PATH_REGEX.test(req.path);
 
+const shouldSkipServerTiming = (req: Request) =>
+  req.path.startsWith('/assets/') ||
+  req.path === '/favicon.ico' ||
+  ASSET_PATH_REGEX.test(req.path);
+
 const getRequestId = (req: Request) => {
   const headerValue = req.header('x-request-id');
-  if (typeof headerValue === 'string' && headerValue.trim()) {
-    return headerValue.trim().slice(0, 128);
+  if (typeof headerValue === 'string' && VALID_REQUEST_ID.test(headerValue.trim())) {
+    return headerValue.trim();
   }
 
   return crypto.randomUUID();
@@ -87,21 +94,64 @@ export const requestLogger = (
   res: Response,
   next: NextFunction
 ) => {
-  if (shouldSkipLogging(req)) {
-    next();
-    return;
+  const startTime = process.hrtime.bigint();
+  const skipLogging = shouldSkipLogging(req);
+  let completed = false;
+  let logged = false;
+
+  if (!shouldSkipServerTiming(req)) {
+    const originalWriteHead = res.writeHead;
+    res.writeHead = (function (
+      this: Response,
+      statusCode: number,
+      statusMessageOrHeaders?: string | OutgoingHttpHeaders | OutgoingHttpHeader[],
+      headers?: OutgoingHttpHeaders | OutgoingHttpHeader[]
+    ) {
+      if (!res.hasHeader('Server-Timing')) {
+        const durationMs =
+          Number(process.hrtime.bigint() - startTime) / 1_000_000;
+        res.setHeader('Server-Timing', `app;dur=${durationMs.toFixed(1)}`);
+      }
+      return Reflect.apply(originalWriteHead, this, [
+        statusCode,
+        statusMessageOrHeaders,
+        headers,
+      ]);
+    }) as Response['writeHead'];
   }
 
-  const startTime = process.hrtime.bigint();
+  const logRequest = (aborted: boolean) => {
+    if (skipLogging || logged) {
+      return;
+    }
+
+    logged = true;
+    const durationMs = Number(process.hrtime.bigint() - startTime) / 1_000_000;
+    const contentLength = res.getHeader('content-length');
+
+    console.info(JSON.stringify({
+      event: 'http_request',
+      requestId: String(res.locals.requestId || '-'),
+      method: req.method,
+      path: sanitizePath(req.path),
+      statusCode: res.statusCode,
+      durationMs: Number(durationMs.toFixed(1)),
+      contentLength:
+        typeof contentLength === 'string' || typeof contentLength === 'number'
+          ? Number(contentLength)
+          : null,
+      aborted,
+    }));
+  };
 
   res.on('finish', () => {
-    const durationMs = Number(process.hrtime.bigint() - startTime) / 1_000_000;
-    const requestId = String(res.locals.requestId || '-');
-    const safeOriginalUrl = sanitizeOriginalUrl(req.originalUrl);
-
-    console.info(
-      `[${requestId}] ${req.method} ${safeOriginalUrl} ${res.statusCode} ${durationMs.toFixed(1)}ms`
-    );
+    completed = true;
+    logRequest(false);
+  });
+  res.on('close', () => {
+    if (!completed) {
+      logRequest(true);
+    }
   });
 
   next();

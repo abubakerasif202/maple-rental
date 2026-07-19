@@ -126,7 +126,9 @@ export interface DashboardSummaryResponse {
   pending_applications: number;
   paid_applications: number;
   recent_admin_actions: DashboardSummaryEvent[];
-  recent_applications: Application[];
+  recent_applications: Array<
+    Pick<Application, 'id' | 'name' | 'status' | 'created_at' | 'approved_vehicle'>
+  >;
   recent_payments: DashboardSummaryEvent[];
   recent_rental_activity: DashboardSummaryEvent[];
   revenue_trend: DashboardSummaryTrendPoint[];

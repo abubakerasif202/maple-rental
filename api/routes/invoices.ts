@@ -55,40 +55,56 @@ router.get('/', authenticateAdmin, async (req, res) => {
   const searchTerm = normalizeSearchTerm(req.query.search);
 
   try {
-    const countQuery = applyInvoiceSearch(
-      db.from('invoices').select('id', { count: 'exact', head: true }).eq('is_imported', false),
-      searchTerm,
-    );
-    const { count, error: countError } = await countQuery;
-    if (countError) {
-      if (isMissingOperationalHistoryTableError(countError)) {
+    const buildInvoiceQuery = (includeCount: boolean) =>
+      applyInvoiceSearch(
+        includeCount
+          ? db.from('invoices').select('*', { count: 'exact' }).eq('is_imported', false)
+          : db.from('invoices').select('*').eq('is_imported', false),
+        searchTerm,
+      );
+    const unavailableResponse = {
+      available: false,
+      items: [],
+      message: OPERATIONAL_HISTORY_UNAVAILABLE_MESSAGE,
+      page: 1,
+      pageSize,
+      totalItems: 0,
+      totalPages: 1,
+    };
+    const requestedRangeStart = (requestedPage - 1) * pageSize;
+    const requestedRangeEnd = requestedRangeStart + pageSize - 1;
+    const firstResult = await buildInvoiceQuery(true)
+      .order('invoice_date', { ascending: false })
+      .range(requestedRangeStart, requestedRangeEnd);
+    if (firstResult.error) {
+      if (isMissingOperationalHistoryTableError(firstResult.error)) {
         return res.json({
-          available: false,
-          items: [],
-          message: OPERATIONAL_HISTORY_UNAVAILABLE_MESSAGE,
-          page: 1,
-          pageSize,
-          totalItems: 0,
-          totalPages: 1,
+          ...unavailableResponse,
         });
       }
 
-      throw countError;
+      throw firstResult.error;
     }
 
-    const totalItems = count || 0;
+    const totalItems = firstResult.count || 0;
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const page = Math.min(requestedPage, totalPages);
     const rangeStart = (page - 1) * pageSize;
     const rangeEnd = rangeStart + pageSize - 1;
-    const invoiceQuery = applyInvoiceSearch(
-      db.from('invoices').select('*').eq('is_imported', false),
-      searchTerm,
-    );
-    const { data: invoices, error: invoicesError } = await invoiceQuery
-      .order('invoice_date', { ascending: false })
-      .range(rangeStart, rangeEnd);
-    if (invoicesError) throw invoicesError;
+    let invoices = firstResult.data;
+
+    if (page !== requestedPage && totalItems > 0) {
+      const fallbackResult = await buildInvoiceQuery(false)
+        .order('invoice_date', { ascending: false })
+        .range(rangeStart, rangeEnd);
+      if (fallbackResult.error) {
+        if (isMissingOperationalHistoryTableError(fallbackResult.error)) {
+          return res.json({ ...unavailableResponse });
+        }
+        throw fallbackResult.error;
+      }
+      invoices = fallbackResult.data;
+    }
 
     const customerIds = (invoices || [])
       .map((invoice: any) => Number(invoice.customer_id))

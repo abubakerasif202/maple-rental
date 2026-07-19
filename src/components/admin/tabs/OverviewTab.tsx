@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   AlertCircle,
@@ -14,21 +14,16 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react';
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 
 import { Application, DashboardSummaryResponse } from '../../../types';
 import EmptyState from '../EmptyState';
+
+const RevenueTrendChart = lazy(() =>
+  import('../OverviewCharts').then((module) => ({ default: module.RevenueTrendChart }))
+);
+const StatusDistributionChart = lazy(() =>
+  import('../OverviewCharts').then((module) => ({ default: module.StatusDistributionChart }))
+);
 
 interface OverviewTabProps {
   applications: Application[];
@@ -124,7 +119,7 @@ export default function OverviewTab({
       : null,
     summary && summary.overdue_invoices > 0
       ? {
-          label: 'Overdue invoices',
+          label: 'Open invoices',
           value: summary.overdue_invoices,
           tab: 'invoices',
         }
@@ -236,7 +231,7 @@ export default function OverviewTab({
           icon={CreditCard}
           label="Outstanding Invoices"
           onClick={() => setActiveTab('invoices')}
-          subtitle={`${summary?.overdue_invoices || 0} overdue invoices need attention`}
+          subtitle={`${summary?.overdue_invoices || 0} open invoices need attention`}
           value={formatCurrency(summary?.outstanding_invoices)}
         />
       </div>
@@ -265,49 +260,30 @@ export default function OverviewTab({
         />
         <MetricTile
           icon={CalendarClock}
-          label="Overdue Invoices"
+          label="Open Invoices"
           onClick={() => setActiveTab('invoices')}
-          subtitle="Invoices past due with a positive balance"
+          subtitle="Unpaid invoices with a positive balance"
           value={summary?.overdue_invoices ?? 0}
         />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
         <SectionCard
-          title="Revenue trend"
+          title="New active weekly value"
           action={<span className="text-[10px] uppercase tracking-[0.24em] text-brand-grey">Australia/Sydney</span>}
         >
           {trend.length === 0 ? (
             <EmptyState
-              description="A seven-day revenue trend will appear once the backend returns real application, rental, or audit activity."
+              description="A seven-day trend will appear once active rentals are added."
               icon={TrendingUp}
               title="No trend data"
             />
           ) : (
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trend}>
-                  <defs>
-                    <linearGradient id="dashboardRevenueFill" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="5%" stopColor="#dfb125" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="#dfb125" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                  <XAxis dataKey="label" stroke="#94a3b8" tickLine={false} axisLine={false} />
-                  <YAxis stroke="#94a3b8" tickFormatter={(value) => `$${value}`} tickLine={false} axisLine={false} />
-                  <Tooltip
-                    contentStyle={{
-                      background: '#061425',
-                      border: '1px solid rgba(223,177,37,0.25)',
-                      borderRadius: '16px',
-                      color: '#fff',
-                    }}
-                  />
-                  <Area dataKey="revenue" fill="url(#dashboardRevenueFill)" stroke="#dfb125" strokeWidth={2} type="monotone" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            <DeferredChart className="h-80">
+              <Suspense fallback={<ChartPlaceholder />}>
+                <RevenueTrendChart data={trend} />
+              </Suspense>
+            </DeferredChart>
           )}
         </SectionCard>
 
@@ -353,28 +329,11 @@ export default function OverviewTab({
               title="No application data"
             />
           ) : (
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={statusDistribution}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                  <XAxis dataKey="label" stroke="#94a3b8" tickLine={false} axisLine={false} />
-                  <YAxis stroke="#94a3b8" tickLine={false} axisLine={false} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{
-                      background: '#061425',
-                      border: '1px solid rgba(223,177,37,0.25)',
-                      borderRadius: '16px',
-                      color: '#fff',
-                    }}
-                  />
-                  <Bar dataKey="value" radius={[12, 12, 0, 0]}>
-                    {statusDistribution.map((entry, index) => (
-                      <Cell key={`${entry.label}-${index}`} fill={index === 0 ? '#dfb125' : '#7b8ca3'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <DeferredChart className="h-72">
+              <Suspense fallback={<ChartPlaceholder />}>
+                <StatusDistributionChart data={statusDistribution} />
+              </Suspense>
+            </DeferredChart>
           )}
         </SectionCard>
 
@@ -430,7 +389,7 @@ export default function OverviewTab({
                     </p>
                   </div>
                   <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-brand-grey">
-                    {application.approved_vehicle?.trim() || application.license_number || 'Pending review'}
+                    {application.approved_vehicle?.trim() || 'Pending review'}
                   </span>
                 </button>
               ))}
@@ -477,3 +436,50 @@ export default function OverviewTab({
     </motion.div>
   );
 }
+
+const DeferredChart = ({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className: string;
+}) => {
+  const [shouldLoad, setShouldLoad] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof IntersectionObserver === 'undefined') {
+      setShouldLoad(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoad(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '240px 0px' }
+    );
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={containerRef} className={className}>
+      {shouldLoad ? children : <ChartPlaceholder />}
+    </div>
+  );
+};
+
+const ChartPlaceholder = () => (
+  <div
+    aria-label="Preparing dashboard chart"
+    className="flex h-full items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] text-xs uppercase tracking-[0.2em] text-brand-grey"
+    role="status"
+  >
+    Preparing chart
+  </div>
+);
