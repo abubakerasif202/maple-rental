@@ -744,3 +744,47 @@ Remove-Item Env:SUPABASE_URL, Env:SUPABASE_SERVICE_ROLE_KEY
 - [x] **CR-QA-1.8 [Positive Controls]**: Existing secure and well-structured behavior is acknowledged separately.
 - [x] **CR-QA-1.9 [False-Positive Control]**: The historic `applications_status_check` cancellation concern was excluded after a later schema-recreation migration proved that constraint is not present in the migration end state.
 - [x] **CR-QA-1.10 [Release Controls]**: Production operations began only after the explicit `do all` instruction. Target identity was verified before mutation, migrations were applied sequentially and checked directly, Stripe endpoint rotation uses overlapping secrets for deployment safety, and no customer/payment/rental business records were changed.
+
+## Final Independent Fix Verification
+
+Verified against the current checkout at `b81da3b18516a72476d088d55881248655a5f8c5`, not from the historical checkbox state. The focused remediation in this pass added a persisted Stripe subscription-to-Checkout Session relation so future invoice fulfillment resolves the exact session before using the pre-migration compatibility fallback.
+
+| Finding | Verification status | Evidence | Regression test | Files changed in final pass | Remaining limitation |
+| --- | --- | --- | --- | --- | --- |
+| CR-ITEM-1.1 | Verified fixed | Anonymous application INSERT is retired; document endpoints reject external URLs; server mediation remains the public path. | `api/tests/securityPolicy.test.ts`, application/document API tests, migration checks | None in final pass | Live RLS assertion requires isolated Supabase. |
+| CR-ITEM-1.2 | Verified fixed | Future `no_payment_required` checkout remains scheduled; first paid invoice resolves the persisted Checkout Session and records `Paid` only. | Future-start invoice test in `api/tests/api.test.ts` | `api/services/stripeWebhookService.ts`, `api/tests/api.test.ts`, schema/migration files | Legacy rows use a narrow Stripe-list fallback. |
+| CR-ITEM-1.3 | Verified fixed | Transient Stripe reads rethrow; replacement requires `resource_missing` or terminal state; idempotency seed is stable. | `api/services/stripeCheckoutService.test.ts`, checkout API tests | None in final pass | None identified in source/tests. |
+| CR-ITEM-1.4 | Verified fixed | Later migrations qualify `private.is_admin()` and final policies include `WITH CHECK`; migration safety covers the repaired chain. | `api/dataWorkflowMigrations.test.ts`, `api/migrationSafety.test.ts` | `api/migrationSafety.test.ts` | Clean DB execution was blocked by Docker permission. |
+| CR-ITEM-1.5 | Verified fixed | External DSNs enforce verified TLS; insecure `sslmode` is rejected; localhost/private/Render internal hosts are explicit. | `api/db/postgres.test.ts` | `api/db/postgres.ts`, `api/db/postgres.test.ts` | Certificate-chain acceptance needs a live DB connection. |
+| CR-ITEM-1.6 | Verified fixed | Rental status writes use atomic event-created watermarks and deterministic terminal tie handling. | Reversed-order webhook tests and migration checks | None in final pass | None identified in source/tests. |
+| CR-ITEM-1.7 | Verified fixed | Advisory locks use non-blocking `pg_try_advisory_lock` and release clients on contention/failure. | `api/db/postgres-advisory-lock.test.ts`, checkout lock tests | None in final pass | Live pool-starvation load test not run. |
+| CR-ITEM-1.8 | Verified fixed | All admin CSV exporters use the centralized formula-safe encoder. | `src/lib/csv.test.ts` | None in final pass | None identified in source/tests. |
+| CR-ITEM-1.9 | Verified fixed | Invoice totals are server-derived and header/items/audit are written by one transaction RPC. | `api/manualInvoices.transaction.test.ts`, API invoice rollback tests | None in final pass | Database rollback execution needs local Supabase. |
+| CR-ITEM-1.10 | Verified fixed | Logout clears state only after server success and preserves authenticated UI on failure. | `src/lib/adminLogout.test.ts`, auth API tests | None in final pass | Browser-level cookie invalidation not run. |
+| CR-ITEM-2.1 | Verified fixed | Pending session clearing compares application, version, and expected session ID. | Delayed-expiration webhook test | None in final pass | None identified in source/tests. |
+| CR-ITEM-2.2 | Verified fixed | Financial aggregates are full-range and recent rows are separately limited with inclusive end date. | Financial API range/pagination tests | None in final pass | None identified in source/tests. |
+| CR-ITEM-2.3 | Verified fixed | Customer search, count, invoice totals, and page slicing are in the SQL RPC. | Customer pagination tests | None in final pass | SQL execution needs local Supabase for query-plan proof. |
+| CR-ITEM-2.4 | Verified fixed | Stripe payout pagination is incremental, bounded by date range, and retains only recent display rows. | Financial payout pagination tests | None in final pass | None identified in source/tests. |
+| CR-ITEM-2.5 | Verified fixed | Stripe `Address State` maps to customer state. | `scripts/import-stripe-admin-csv.test.ts` | None in final pass | None identified in source/tests. |
+| CR-ITEM-2.6 | Verified fixed | Toll delivery claims, stable provider idempotency, and finalization use server-only outbox RPCs. | `api/routes/tollNotices.delivery.test.ts` | None in final pass | Provider/database reconciliation still needs operational monitoring. |
+| CR-ITEM-2.7 | Verified fixed | Agreement version allocation/activation uses transactional RPCs and advisory transaction locks. | `api/routes/adminAgreements.atomic.test.ts` | None in final pass | Concurrent execution needs local PostgreSQL. |
+| CR-ITEM-2.8 | Verified fixed | Maintenance reset success is separated from refresh failure and caches are invalidated. | `api/tests/adminMaintenanceReset.test.ts`, admin API tests | None in final pass | None identified in source/tests. |
+| CR-ITEM-2.9 | Verified fixed | Server-paginated tables carry query state in keys and avoid local whole-dataset filtering. | Data table/admin pagination tests | None in final pass | None identified in source/tests. |
+| CR-ITEM-2.10 | Verified fixed | Manual invoice dates use date-only values and Sydney-aware generation paths. | Manual invoice and Australia-date tests | None in final pass | None identified in source/tests. |
+| CR-ITEM-2.11 | Verified fixed | Strict TypeScript, React Hooks, JSX accessibility lint, migration safety, and full validation are enforced locally. | `npm run validate`; 55 files/477 tests | `api/schemaContract.ts`, `api/schemaContract.test.ts`, migration test files | No CI workflow was added in this pass. |
+| CR-ITEM-2.12 | Verified fixed | Admin dialogs use dialog semantics, accessible names, focus trapping/restoration, Escape, and labeled controls. | `src/components/admin/AccessibleDialog.test.tsx` | None in final pass | Full browser assistive-tech audit not run. |
+| CR-ITEM-3.1 | Verified fixed | Production error boundaries return generic safe messaging. | `src/components/ErrorBoundary.test.tsx` | None in final pass | None identified in source/tests. |
+| CR-ITEM-3.2 | Verified fixed | Toll generation async failures are handled by mutation callbacks. | Toll generation/API tests | None in final pass | None identified in source/tests. |
+| CR-ITEM-3.3 | Verified fixed | Navbar `aria-current` is route-specific, including contact fragment behavior. | `src/components/Navbar.test.ts` | None in final pass | None identified in source/tests. |
+
+### Final validation evidence
+
+- Node `v20.20.2`; npm `11.17.0`; Supabase CLI `2.109.1`.
+- `npm ci`: passed after removing the incomplete ignored `node_modules` tree and rerunning with dev/optional dependencies.
+- `npm run lint`: passed; `npm run validate`: passed.
+- Tests: 55 files, 477 tests passed.
+- Client build: passed; server build: passed.
+- `npm audit --omit=dev --audit-level=moderate`: passed, 0 vulnerabilities.
+- `git diff --check`: passed.
+- `npx supabase start` and `npx supabase db reset`: not runnable because Docker access was denied by the current environment.
+- `npm run verify:schema-contract`: not runnable because the isolated Supabase service-role environment was not present; it failed closed with the required-variable message.
