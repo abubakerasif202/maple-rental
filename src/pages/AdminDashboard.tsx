@@ -758,6 +758,69 @@ export default function AdminDashboard() {
   const savedAgreements = savedAgreementsQuery.data || [];
 
   useEffect(() => {
+    const serverPage = applicationsDataset?.page;
+    if (
+      !applicationsQuery.isSuccess ||
+      applicationsQuery.isPlaceholderData ||
+      typeof serverPage !== 'number' ||
+      !Number.isInteger(serverPage) ||
+      serverPage < 1 ||
+      serverPage === applicationPage
+    ) {
+      return;
+    }
+
+    queryClient.setQueryData(
+      [
+        'applications',
+        debouncedApplicationSearch,
+        serverPage,
+        applicationPageSize,
+        applicationStatusFilters.join('|'),
+      ],
+      applicationsDataset,
+    );
+    setApplicationPage(serverPage);
+  }, [
+    applicationPage,
+    applicationPageSize,
+    applicationStatusFilters,
+    applicationsDataset,
+    applicationsQuery.isPlaceholderData,
+    applicationsQuery.isSuccess,
+    debouncedApplicationSearch,
+    queryClient,
+  ]);
+
+  useEffect(() => {
+    const serverPage = rentalsDataset?.page;
+    if (
+      !rentalsQuery.isSuccess ||
+      rentalsQuery.isPlaceholderData ||
+      typeof serverPage !== 'number' ||
+      !Number.isInteger(serverPage) ||
+      serverPage < 1 ||
+      serverPage === rentalPage
+    ) {
+      return;
+    }
+
+    queryClient.setQueryData(
+      ['rentals', debouncedRentalSearch, serverPage, rentalPageSize],
+      rentalsDataset,
+    );
+    setRentalPage(serverPage);
+  }, [
+    debouncedRentalSearch,
+    queryClient,
+    rentalPage,
+    rentalPageSize,
+    rentalsDataset,
+    rentalsQuery.isPlaceholderData,
+    rentalsQuery.isSuccess,
+  ]);
+
+  useEffect(() => {
     if (!selectedApplication) {
       return;
     }
@@ -797,8 +860,14 @@ export default function AdminDashboard() {
   const isFetchingApplications = shouldLoadApplications && applicationsQuery.isFetching;
   const isLoadingRentals = shouldLoadRentals && rentalsQuery.isPending && !rentalsDataset;
   const isFetchingRentals = shouldLoadRentals && rentalsQuery.isFetching;
+  const applicationsCurrentPage = applicationsQuery.isPlaceholderData
+    ? applicationPage
+    : applicationsDataset?.page || applicationPage;
   const applicationsTotalItems = applicationsDataset?.totalItems || 0;
   const applicationsTotalPages = applicationsDataset?.totalPages || 1;
+  const rentalsCurrentPage = rentalsQuery.isPlaceholderData
+    ? rentalPage
+    : rentalsDataset?.page || rentalPage;
   const rentalsTotalItems = rentalsDataset?.totalItems || 0;
   const rentalsTotalPages = rentalsDataset?.totalPages || 1;
   const selectedAgreementApplication =
@@ -942,7 +1011,7 @@ export default function AdminDashboard() {
               applicationSearch={applicationSearch}
               applications={applications}
               applicationsError={applicationsError}
-              applicationsPage={applicationPage}
+              applicationsPage={applicationsCurrentPage}
               applicationsPageSize={applicationPageSize}
               applicationsTotalItems={applicationsTotalItems}
               applicationsTotalPages={applicationsTotalPages}
@@ -988,7 +1057,7 @@ export default function AdminDashboard() {
               setRentalSearch={setRentalSearch}
               rentals={rentals}
               rentalsError={rentalsError}
-              rentalsPage={rentalPage}
+              rentalsPage={rentalsCurrentPage}
               rentalsPageSize={rentalPageSize}
               rentalsTotalItems={rentalsTotalItems}
               rentalsTotalPages={rentalsTotalPages}

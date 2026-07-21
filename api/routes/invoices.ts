@@ -5,6 +5,7 @@ import {
   isMissingOperationalHistoryTableError,
   OPERATIONAL_HISTORY_UNAVAILABLE_MESSAGE,
 } from '../operationalHistory.js';
+import { isPostgrestInvalidRangeError } from '../pagination.js';
 
 const router = express.Router();
 const DEFAULT_PAGE_SIZE = 25;
@@ -62,6 +63,14 @@ router.get('/', authenticateAdmin, async (req, res) => {
           : db.from('invoices').select('*').eq('is_imported', false),
         searchTerm,
       );
+    const buildInvoiceCountQuery = () =>
+      applyInvoiceSearch(
+        db
+          .from('invoices')
+          .select('id', { count: 'exact', head: true })
+          .eq('is_imported', false),
+        searchTerm,
+      );
     const unavailableResponse = {
       available: false,
       items: [],
@@ -76,7 +85,7 @@ router.get('/', authenticateAdmin, async (req, res) => {
     const firstResult = await buildInvoiceQuery(true)
       .order('invoice_date', { ascending: false })
       .range(requestedRangeStart, requestedRangeEnd);
-    if (firstResult.error) {
+    if (firstResult.error && !isPostgrestInvalidRangeError(firstResult.error)) {
       if (isMissingOperationalHistoryTableError(firstResult.error)) {
         return res.json({
           ...unavailableResponse,
@@ -86,14 +95,24 @@ router.get('/', authenticateAdmin, async (req, res) => {
       throw firstResult.error;
     }
 
-    const totalItems = firstResult.count || 0;
+    let totalItems = firstResult.count || 0;
+    if (firstResult.error) {
+      const countResult = await buildInvoiceCountQuery();
+      if (countResult.error) {
+        if (isMissingOperationalHistoryTableError(countResult.error)) {
+          return res.json({ ...unavailableResponse });
+        }
+        throw countResult.error;
+      }
+      totalItems = countResult.count || 0;
+    }
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const page = Math.min(requestedPage, totalPages);
     const rangeStart = (page - 1) * pageSize;
     const rangeEnd = rangeStart + pageSize - 1;
-    let invoices = firstResult.data;
+    let invoices = firstResult.error ? [] : firstResult.data;
 
-    if (page !== requestedPage && totalItems > 0) {
+    if ((firstResult.error || page !== requestedPage) && totalItems > 0) {
       const fallbackResult = await buildInvoiceQuery(false)
         .order('invoice_date', { ascending: false })
         .range(rangeStart, rangeEnd);

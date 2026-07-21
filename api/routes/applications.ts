@@ -55,6 +55,7 @@ import {
 } from "../email.js";
 import { normalizeUuid } from "../../shared/uuid.js";
 import { recordAdminAuditEvent } from "../adminAudit.js";
+import { isPostgrestInvalidRangeError } from "../pagination.js";
 import { claimCancellationOperation, requestCancellationOperation, safeCancellationFailureCode, tryUpdateCancellationOperation, updateCancellationOperation } from "../cancellationOperations.js";
 
 const router = express.Router();
@@ -522,24 +523,41 @@ router.get("/", authenticateAdmin, async (req, res) => {
         ),
         statusFilters,
       );
+    const buildCountQuery = () =>
+      applyApplicationStatusFilters(
+        applyApplicationSearch(
+          applyImportedApplicationFilters(
+            db.from("applications").select("id", { count: "exact", head: true }),
+          ),
+          searchTerm,
+        ),
+        statusFilters,
+      );
     const requestedRangeStart = (requestedPage - 1) * pageSize;
     const requestedRangeEnd = requestedRangeStart + pageSize - 1;
     const firstResult = await buildDataQuery(true)
       .order(orderColumn, { ascending: false })
       .range(requestedRangeStart, requestedRangeEnd);
 
-    if (firstResult.error) {
+    if (firstResult.error && !isPostgrestInvalidRangeError(firstResult.error)) {
       return res.status(500).json({ error: "Failed to fetch applications" });
     }
 
-    const totalItems = firstResult.count || 0;
+    let totalItems = firstResult.count || 0;
+    if (firstResult.error) {
+      const countResult = await buildCountQuery();
+      if (countResult.error) {
+        return res.status(500).json({ error: "Failed to fetch applications" });
+      }
+      totalItems = countResult.count || 0;
+    }
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const page = Math.min(requestedPage, totalPages);
     const rangeStart = (page - 1) * pageSize;
     const rangeEnd = rangeStart + pageSize - 1;
-    let data = firstResult.data;
+    let data = firstResult.error ? [] : firstResult.data;
 
-    if (page !== requestedPage && totalItems > 0) {
+    if ((firstResult.error || page !== requestedPage) && totalItems > 0) {
       const fallbackResult = await buildDataQuery(false)
         .order(orderColumn, { ascending: false })
         .range(rangeStart, rangeEnd);

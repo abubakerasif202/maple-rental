@@ -201,7 +201,7 @@ export default function Home() {
               <div className="aspect-[4/3] overflow-hidden">
                   <img
                     src="/camry-deep-blue-960.webp"
-                    srcSet="/camry-deep-blue-640.webp 640w, /camry-deep-blue-960.webp 960w, /camry-deep-blue-1200.webp 1200w, /camry-deep-blue.webp 1920w"
+                    srcSet="/camry-deep-blue-640.webp 640w, /camry-deep-blue-960.webp 960w, /camry-deep-blue-1200.webp 1200w"
                     sizes="(min-width: 1280px) 519px, (min-width: 1024px) calc(45vw - 58px), calc(100vw - 48px)"
                     alt="Deep blue generic 2026 Toyota Camry"
                     decoding="async"

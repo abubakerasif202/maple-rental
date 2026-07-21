@@ -989,6 +989,18 @@ vi.mock("../db/index.js", () => {
 
       const filteredRows = applyFilters(attachRentalApplications(getTableRows(table)), filters);
       const orderedRows = applyOrder(filteredRows, order);
+      if (range && range.from > 0 && range.from >= filteredRows.length) {
+        return {
+          data: null,
+          error: {
+            code: "PGRST103",
+            details: `An offset of ${range.from} was requested, but there are only ${filteredRows.length} rows.`,
+            hint: null,
+            message: "Requested range not satisfiable",
+          },
+          count: null,
+        };
+      }
       const selectedRows = applyRange(orderedRows, range);
 
       return {
@@ -3508,6 +3520,34 @@ describe("Applications API", () => {
     });
   });
 
+  it("GET /api/applications recovers from an unsatisfiable PostgREST range", async () => {
+    mockState.applications = [
+      {
+        ...mockState.applications[1],
+        created_at: "2026-03-06T00:00:00.000Z",
+        id: "33333333-3333-4333-8333-333333333334",
+      },
+      {
+        ...mockState.applications[0],
+        created_at: "2026-03-05T00:00:00.000Z",
+      },
+    ];
+
+    const res = await request(app)
+      .get("/api/applications?page=2&pageSize=100")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      page: 1,
+      pageSize: 100,
+      total: 2,
+      totalItems: 2,
+      totalPages: 1,
+    });
+    expect(res.body.items).toHaveLength(2);
+  });
+
   it("GET /api/applications/:id/documents/:document rejects non-UUID ids", async () => {
     const res = await request(app)
       .get("/api/applications/not-a-uuid/documents/license_photo")
@@ -3567,8 +3607,8 @@ describe("Applications API", () => {
     expect(res.body.totalPages).toBe(1);
     expect(res.body.page).toBe(1);
     expect(res.body.items).toHaveLength(3);
-    expect(getQueryTables().filter((table) => table === "rentals")).toHaveLength(2);
-    expect(mockState.queryLog).toHaveLength(2);
+    expect(getQueryTables().filter((table) => table === "rentals")).toHaveLength(3);
+    expect(mockState.queryLog).toHaveLength(3);
     expectNoImportedApplicationPreload();
     expectNoDuplicateRentalRehydration();
   });
@@ -4537,6 +4577,24 @@ describe("Operational history API", () => {
     expect(res.body.totalPages).toBe(1);
     expect(res.body.items).toHaveLength(1);
     expect(res.body.items[0].external_invoice_number).toBe("1881");
+  });
+
+  it("GET /api/invoices recovers from an unsatisfiable PostgREST range", async () => {
+    makeOperationalRowsCurrent();
+
+    const res = await request(app)
+      .get("/api/invoices?page=2&pageSize=100")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      available: true,
+      page: 1,
+      pageSize: 100,
+      totalItems: 2,
+      totalPages: 1,
+    });
+    expect(res.body.items).toHaveLength(2);
   });
 
   it("GET /api/financials/stats excludes imported applications and rentals", async () => {

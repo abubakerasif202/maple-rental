@@ -13,6 +13,7 @@ import {
   getSchemaCompat,
 } from "../schemaCompat.js";
 import { isImportedApplicationRecord } from "../importedDataFilters.js";
+import { isPostgrestInvalidRangeError } from "../pagination.js";
 import { recordAdminAuditEvent } from "../adminAudit.js";
 
 const router = express.Router();
@@ -540,23 +541,39 @@ const loadAdminRentalDatasetWithApplications = async ({
             .select(withRentalApplicationRelation(selectColumns), { count: "exact" })
         : db.from("rentals").select(withRentalApplicationRelation(selectColumns)),
     );
+  const buildRentalCountQuery = () =>
+    applyRentalImportFilters(
+      db
+        .from("rentals")
+        .select(`id, ${RENTAL_APPLICATION_RELATION_SELECT}`, {
+          count: "exact",
+          head: true,
+        }),
+    );
   const requestedRangeStart = (page - 1) * pageSize;
   const requestedRangeEnd = requestedRangeStart + pageSize - 1;
   const firstResult = await buildRentalQuery(true)
     .order(orderColumn, { ascending: false })
     .range(requestedRangeStart, requestedRangeEnd);
-  if (firstResult.error) {
+  if (firstResult.error && !isPostgrestInvalidRangeError(firstResult.error)) {
     throw firstResult.error;
   }
 
-  const totalItems = firstResult.count || 0;
+  let totalItems = firstResult.count || 0;
+  if (firstResult.error) {
+    const countResult = await buildRentalCountQuery();
+    if (countResult.error) {
+      throw countResult.error;
+    }
+    totalItems = countResult.count || 0;
+  }
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const currentPage = Math.min(page, totalPages);
   const rangeStart = (currentPage - 1) * pageSize;
   const rangeEnd = rangeStart + pageSize - 1;
-  let data = firstResult.data;
+  let data = firstResult.error ? [] : firstResult.data;
 
-  if (currentPage !== page && totalItems > 0) {
+  if ((firstResult.error || currentPage !== page) && totalItems > 0) {
     const fallbackResult = await buildRentalQuery(false)
       .order(orderColumn, { ascending: false })
       .range(rangeStart, rangeEnd);

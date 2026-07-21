@@ -6,6 +6,11 @@ type PerformanceMetric = {
   value: number;
 };
 
+type LayoutShiftMetricEntry = {
+  startTime: number;
+  value: number;
+};
+
 const metricLimits: Record<MetricName, number> = {
   cls: 10,
   lcp: 120_000,
@@ -46,6 +51,33 @@ export const buildPerformanceReport = (
   };
 };
 
+export const createClsSessionWindowTracker = () => {
+  let hasSession = false;
+  let maximumSessionValue = 0;
+  let sessionStartTime = 0;
+  let sessionValue = 0;
+  let previousEntryTime = 0;
+
+  return (entry: LayoutShiftMetricEntry) => {
+    const continuesSession =
+      hasSession &&
+      entry.startTime - previousEntryTime < 1_000 &&
+      entry.startTime - sessionStartTime < 5_000;
+
+    if (continuesSession) {
+      sessionValue += entry.value;
+    } else {
+      sessionStartTime = entry.startTime;
+      sessionValue = entry.value;
+      hasSession = true;
+    }
+
+    previousEntryTime = entry.startTime;
+    maximumSessionValue = Math.max(maximumSessionValue, sessionValue);
+    return maximumSessionValue;
+  };
+};
+
 export const initializePerformanceMetrics = () => {
   if (!import.meta.env.PROD || typeof PerformanceObserver === 'undefined') {
     return;
@@ -53,7 +85,7 @@ export const initializePerformanceMetrics = () => {
 
   const metrics = new Map<MetricName, PerformanceMetric>();
   const initialPathname = location.pathname;
-  let cumulativeLayoutShift = 0;
+  const trackClsSessionWindow = createClsSessionWindowTracker();
   let sent = false;
 
   const record = (name: MetricName, value: number) => {
@@ -93,10 +125,15 @@ export const initializePerformanceMetrics = () => {
         value?: number;
       };
       if (!layoutShift.hadRecentInput) {
-        cumulativeLayoutShift += layoutShift.value || 0;
+        record(
+          'cls',
+          trackClsSessionWindow({
+            startTime: layoutShift.startTime,
+            value: layoutShift.value || 0,
+          })
+        );
       }
     }
-    record('cls', cumulativeLayoutShift);
   });
 
   const flush = () => {
