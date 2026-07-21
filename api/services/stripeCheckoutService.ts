@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import Stripe from 'stripe';
 
 import { db } from '../db/index.js';
@@ -479,10 +480,12 @@ export const retirePendingCheckoutSessionForReplacement = async ({
 
 const cancelLinkedStripeSubscription = async ({
   applicationId,
+  idempotencyKey,
   paymentLinkVersion,
   subscriptionId,
 }: {
   applicationId: string;
+  idempotencyKey?: string;
   paymentLinkVersion?: number | null;
   subscriptionId: string;
 }) => {
@@ -504,7 +507,11 @@ const cancelLinkedStripeSubscription = async ({
       return;
     }
 
-    await getStripe().subscriptions.cancel(subscriptionId);
+    await getStripe().subscriptions.cancel(
+      subscriptionId,
+      {},
+      idempotencyKey ? { idempotencyKey: `${idempotencyKey}:${crypto.createHash('sha256').update(subscriptionId).digest('hex').slice(0, 16)}` } : undefined,
+    );
   } catch (error) {
     if (isStripeResourceMissingError(error)) {
       return;
@@ -560,10 +567,12 @@ const fetchApplicationLinkedSubscriptionIds = async (applicationId: string) => {
 
 export const cancelApplicationStripeResources = async ({
   applicationId,
+  idempotencyKey,
   paymentLinkVersion,
   pendingCheckoutSessionId,
 }: {
   applicationId: string;
+  idempotencyKey?: string;
   paymentLinkVersion?: number | null;
   pendingCheckoutSessionId?: string | null;
 }) => {
@@ -642,6 +651,7 @@ export const cancelApplicationStripeResources = async ({
   for (const subscriptionId of subscriptionIds) {
     await cancelLinkedStripeSubscription({
       applicationId,
+      idempotencyKey,
       paymentLinkVersion: undefined,
       subscriptionId,
     });

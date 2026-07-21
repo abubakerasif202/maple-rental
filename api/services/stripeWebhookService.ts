@@ -49,6 +49,7 @@ type ModernWebhookLedgerRow = {
   received_at?: string | null;
   retry_count?: number | null;
   retry_reason?: string | null;
+  stripe_customer_id?: string | null;
   stripe_subscription_id?: string | null;
   status?: WebhookLedgerStatus | null;
   updated_at?: string | null;
@@ -207,7 +208,7 @@ const readModernLedgerRow = async (eventId: string) => {
   const { data, error } = await db
     .from('stripe_webhook_events')
     .select(
-      'id, application_id, checkout_kind, checkout_session_id, error_message, fulfillment_state, received_at, retry_count, retry_reason, status, updated_at'
+      'id, application_id, checkout_kind, checkout_session_id, error_message, fulfillment_state, received_at, retry_count, retry_reason, stripe_customer_id, stripe_subscription_id, status, updated_at'
     )
     .eq('stripe_event_id', eventId)
     .maybeSingle();
@@ -241,6 +242,7 @@ const claimModernLedgerForProcessing = async (
         application_id: workItem.applicationId,
         checkout_kind: workItem.checkoutKind,
         checkout_session_id: workItem.checkoutSessionId,
+        ...(workItem.stripeCustomerId ? { stripe_customer_id: workItem.stripeCustomerId } : {}),
         stripe_subscription_id: workItem.stripeSubscriptionId,
         status: 'processing',
         error_message: null,
@@ -275,6 +277,7 @@ const reclaimStaleModernInFlightLedger = async (
       application_id: workItem.applicationId,
       checkout_kind: workItem.checkoutKind,
       checkout_session_id: workItem.checkoutSessionId,
+      ...(workItem.stripeCustomerId ? { stripe_customer_id: workItem.stripeCustomerId } : {}),
       stripe_subscription_id: workItem.stripeSubscriptionId,
       error_message: null,
       status: 'processing',
@@ -319,7 +322,7 @@ const markModernLedgerProcessed = async (
 };
 
 const markModernLedgerFailed = async (eventId: string, errorMessage: string) => {
-  await db
+  const { data, error } = await db
     .from('stripe_webhook_events')
     .update({
       error_message: errorMessage,
@@ -329,7 +332,18 @@ const markModernLedgerFailed = async (eventId: string, errorMessage: string) => 
       updated_at: new Date().toISOString(),
     })
     .eq('stripe_event_id', eventId)
-    .eq('status', 'processing');
+    .eq('status', 'processing')
+    .select('id')
+    .maybeSingle();
+  if (error || !data?.id) {
+    console.error(JSON.stringify({
+      category: error ? 'database_error' : 'row_not_updated',
+      message: 'stripe_webhook_ledger_finalization_failed',
+    }));
+    throw new Error('Stripe webhook processing failed and its ledger failure state could not be persisted.', {
+      cause: error || new Error('No processing ledger row was updated'),
+    });
+  }
 };
 
 const markModernLedgerProcessedWithClassification = async (
@@ -470,6 +484,7 @@ const claimModernWebhookEvent = async (
       application_id: workItem.applicationId,
       checkout_kind: workItem.checkoutKind,
       checkout_session_id: workItem.checkoutSessionId,
+      stripe_customer_id: workItem.stripeCustomerId,
       stripe_subscription_id: workItem.stripeSubscriptionId,
       event_type: workItem.eventType,
       fulfillment_state: 'processing',
@@ -919,11 +934,17 @@ export const processStripeWebhookWorkItem = async (
           classification,
           errorMessage: message,
         });
-        await markLedgerFailed(
-          webhookClaim,
-          event.type,
-          `${classification}:${message}`
-        );
+        try {
+          await markLedgerFailed(
+            webhookClaim,
+            event.type,
+            `${classification}:${message}`
+          );
+        } catch {
+          logStripeWebhookEvent('error', 'webhook.ledger_finalization_failed', workItem, {
+            classification: 'secondary_persistence_failure',
+          });
+        }
         throw err;
       }
 

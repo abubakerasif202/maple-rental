@@ -55,6 +55,7 @@ import {
 } from "../email.js";
 import { normalizeUuid } from "../../shared/uuid.js";
 import { recordAdminAuditEvent } from "../adminAudit.js";
+import { claimCancellationOperation, requestCancellationOperation, safeCancellationFailureCode, tryUpdateCancellationOperation, updateCancellationOperation } from "../cancellationOperations.js";
 
 const router = express.Router();
 const APPLICATIONS_BUCKET = "applications";
@@ -1178,15 +1179,52 @@ router.post("/:id/cancel", authenticateAdmin, async (req, res) => {
       const nextVersion = currentVersion + 1;
       const nowIso = new Date().toISOString();
 
-      await cancelApplicationStripeResources({
+      const operation = await requestCancellationOperation({
         applicationId: id,
-        paymentLinkVersion:
-          applicationRecord.status === "Cancelled" ? undefined : currentVersion,
-        pendingCheckoutSessionId:
-          applicationRecord.pending_checkout_session_id || null,
+        checkoutSessionId: applicationRecord.pending_checkout_session_id || null,
+        mode: "immediate",
+        operationType: "application",
+        paymentVersion: currentVersion,
+        requestedBy: req.admin?.email || null,
       });
+      if (operation.status === "completed") {
+        return { success: true, application_status: "Cancelled" as const } as const;
+      }
+      const claimedOperation = await claimCancellationOperation(operation.id);
+      if (!claimedOperation) {
+        return { pending: true, operation_id: operation.id } as const;
+      }
+      try {
+        await recordAdminAuditEvent({
+          action: "stripe_cancellation_requested", actor: req.admin?.email || null,
+          metadata: { operationId: operation.id }, targetId: id, targetType: "application",
+        });
+      } catch {
+        await tryUpdateCancellationOperation(operation.id, "reconciliation_pending", { last_error_code: "AUDIT_REQUEST_FAILED" });
+        return { pending: true, operation_id: operation.id } as const;
+      }
+
+      try {
+        await cancelApplicationStripeResources({
+          applicationId: id,
+          idempotencyKey: operation.idempotency_key,
+          paymentLinkVersion: applicationRecord.status === "Cancelled" ? undefined : currentVersion,
+          pendingCheckoutSessionId: applicationRecord.pending_checkout_session_id || null,
+        });
+        const stripePersisted = await tryUpdateCancellationOperation(operation.id, "stripe_completed", { stripe_completed_at: nowIso });
+        if (!stripePersisted) return { pending: true, operation_id: operation.id } as const;
+        await recordAdminAuditEvent({
+          action: "stripe_cancellation_completed", actor: req.admin?.email || null,
+          metadata: { operationId: operation.id }, targetId: id, targetType: "application",
+        });
+      } catch (error) {
+        await tryUpdateCancellationOperation(operation.id, "reconciliation_pending", { last_error_code: safeCancellationFailureCode(error) });
+        return { pending: true, operation_id: operation.id } as const;
+      }
 
       if (applicationRecord.status === "Cancelled") {
+        const finalized = await tryUpdateCancellationOperation(operation.id, "completed", { database_completed_at: nowIso, reconciled_at: nowIso });
+        if (!finalized) return { pending: true, operation_id: operation.id } as const;
         return {
           success: true,
           application_status: "Cancelled" as const,
@@ -1209,12 +1247,20 @@ router.post("/:id/cancel", authenticateAdmin, async (req, res) => {
         });
 
       if (!updatedApplication) {
-        return {
-          error: createRequestError(
-            409,
-            "Application payment details changed while cancelling. Refresh and try again.",
-          ),
-        } as const;
+        await updateCancellationOperation(operation.id, "reconciliation_pending", { last_error_code: "APPLICATION_COMPARE_AND_SET_CONFLICT" });
+        return { pending: true, operation_id: operation.id } as const;
+      }
+
+      const finalized = await tryUpdateCancellationOperation(operation.id, "completed", { database_completed_at: nowIso, reconciled_at: nowIso });
+      if (!finalized) return { pending: true, operation_id: operation.id } as const;
+      try {
+        await recordAdminAuditEvent({
+          action: "cancellation_database_completed", actor: req.admin?.email || null,
+          metadata: { operationId: operation.id }, targetId: id, targetType: "application",
+        });
+      } catch {
+        await tryUpdateCancellationOperation(operation.id, "reconciliation_pending", { last_error_code: "AUDIT_LOCAL_COMPLETION_FAILED" });
+        return { pending: true, operation_id: operation.id } as const;
       }
 
       return {
@@ -1225,6 +1271,15 @@ router.post("/:id/cancel", authenticateAdmin, async (req, res) => {
 
     if ("error" in result) {
       throw result.error;
+    }
+
+    if ("pending" in result) {
+      return res.status(202).json({
+        success: false,
+        reconciliationPending: true,
+        operationId: result.operation_id,
+        message: "Cancellation reconciliation is pending.",
+      });
     }
 
     await recordAdminAuditEvent({

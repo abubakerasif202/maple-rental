@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Loader2, RefreshCw, ExternalLink, FileText, Save, Eye, CheckCircle2, AlertCircle, Power } from 'lucide-react';
-import { UseMutationResult, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { UseMutationResult, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Application } from '../../../types';
 import * as api from '../../../lib/api';
 import EmptyState from '../EmptyState';
@@ -52,6 +52,30 @@ export default function AgreementsTab({
     type: 'success' | 'error';
   } | null>(null);
   const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [pdfAgreementId, setPdfAgreementId] = useState<number | null>(null);
+  const pdfStatusQueries = useQueries({
+    queries: savedAgreements.map((agreement) => ({
+      queryKey: ['agreement-pdf', agreement.id],
+      queryFn: () => api.fetchSavedAgreementPdfStatus(agreement.id),
+      refetchInterval: (query: { state: { data?: api.AgreementPdfStatus } }) =>
+        query.state.data?.artifact_status === 'generating' ? 2_000 : false,
+    })),
+  });
+  const pdfStatusById = new Map(savedAgreements.map((agreement, index) => [agreement.id, pdfStatusQueries[index]?.data]));
+
+  const downloadPdf = async (agreement: api.SavedLeaseAgreement) => {
+    setPdfAgreementId(agreement.id);
+    try {
+      const current = await api.fetchSavedAgreementPdfStatus(agreement.id);
+      const artifact = current.artifact_status === 'ready'
+        ? current
+        : await api.generateSavedAgreementPdf(agreement.id);
+      await queryClient.invalidateQueries({ queryKey: ['agreement-pdf', agreement.id] });
+      if (artifact.signed_url) window.open(artifact.signed_url, '_blank', 'noopener,noreferrer');
+    } finally {
+      setPdfAgreementId(null);
+    }
+  };
 
   const approvedVehicleLabel =
     selectedAgreementApplication?.approved_vehicle?.trim() || '';
@@ -468,14 +492,19 @@ export default function AgreementsTab({
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
-                  className="flex min-h-11 items-center justify-center rounded-lg bg-white/5 px-4 text-brand-grey transition-all hover:bg-brand-gold hover:text-brand-navy"
+                  aria-label={`View saved agreement for ${agreement.applicant_name || 'applicant'} (mobile)`}
+                  className="flex min-h-11 items-center justify-center rounded-lg bg-white/5 px-4 text-brand-grey transition-all hover:bg-brand-gold hover:text-brand-navy focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  type="button"
                   onClick={() => {
                     setAgreementModalMode('saved');
                     setAgreementContent(agreement.content);
                     setIsAgreementModalOpen(true);
                   }}
                 >
-                  <FileText className="h-4 w-4" />
+                  <FileText aria-hidden="true" className="h-4 w-4" />
+                </button>
+                <button aria-label={`${pdfStatusById.get(agreement.id)?.artifact_status === 'failed' ? 'Retry' : pdfStatusById.get(agreement.id)?.artifact_status === 'ready' ? 'Download' : 'Generate'} saved agreement PDF for ${agreement.applicant_name || 'applicant'} (mobile)`} className="min-h-11 rounded-lg bg-brand-gold px-4 text-xs font-bold text-brand-navy focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60" type="button" onClick={() => downloadPdf(agreement)} disabled={pdfAgreementId === agreement.id || pdfStatusById.get(agreement.id)?.artifact_status === 'generating'}>
+                  {pdfAgreementId === agreement.id || pdfStatusById.get(agreement.id)?.artifact_status === 'generating' ? 'Generating PDF…' : pdfStatusById.get(agreement.id)?.artifact_status === 'failed' ? 'Retry PDF' : pdfStatusById.get(agreement.id)?.artifact_status === 'ready' ? 'Download saved PDF' : 'Generate saved PDF'}
                 </button>
               </div>
             </article>
@@ -532,14 +561,19 @@ export default function AgreementsTab({
                 <td className="px-8 py-6 text-right">
                   <div className="flex justify-end gap-2 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
                     <button
-                      className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/5 text-brand-grey transition-all hover:bg-brand-gold hover:text-brand-navy"
+                      aria-label={`View saved agreement for ${agreement.applicant_name || 'applicant'} (desktop)`}
+                      className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/5 text-brand-grey transition-all hover:bg-brand-gold hover:text-brand-navy focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                      type="button"
                       onClick={() => {
                         setAgreementModalMode('saved');
                         setAgreementContent(agreement.content);
                         setIsAgreementModalOpen(true);
                       }}
                     >
-                      <FileText className="w-4 h-4" />
+                      <FileText aria-hidden="true" className="w-4 h-4" />
+                    </button>
+                    <button aria-label={`${pdfStatusById.get(agreement.id)?.artifact_status === 'failed' ? 'Retry' : pdfStatusById.get(agreement.id)?.artifact_status === 'ready' ? 'Download' : 'Generate'} saved agreement PDF for ${agreement.applicant_name || 'applicant'} (desktop)`} className="min-h-11 rounded-lg bg-brand-gold px-3 text-xs font-bold text-brand-navy focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60" type="button" onClick={() => downloadPdf(agreement)} disabled={pdfAgreementId === agreement.id || pdfStatusById.get(agreement.id)?.artifact_status === 'generating'}>
+                      {pdfAgreementId === agreement.id || pdfStatusById.get(agreement.id)?.artifact_status === 'generating' ? 'Generating…' : pdfStatusById.get(agreement.id)?.artifact_status === 'failed' ? 'Retry PDF' : pdfStatusById.get(agreement.id)?.artifact_status === 'ready' ? 'PDF' : 'Generate PDF'}
                     </button>
                   </div>
                 </td>

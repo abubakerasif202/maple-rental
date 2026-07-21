@@ -1,4 +1,6 @@
 import express from "express";
+import type Stripe from "stripe";
+import { claimCancellationOperation, requestCancellationOperation, safeCancellationFailureCode, tryUpdateCancellationOperation, updateCancellationOperation } from "../cancellationOperations.js";
 import { z } from "zod";
 
 import { db } from "../db/index.js";
@@ -11,6 +13,7 @@ import {
   getSchemaCompat,
 } from "../schemaCompat.js";
 import { isImportedApplicationRecord } from "../importedDataFilters.js";
+import { recordAdminAuditEvent } from "../adminAudit.js";
 
 const router = express.Router();
 const DEFAULT_PAGE_SIZE = 25;
@@ -40,19 +43,6 @@ const cancelSubscriptionSchema = z.object({
 const getRentalStripeSubscriptionId = (rental: Record<string, unknown>) =>
   String(rental.stripe_subscription_id || rental.stripeSubscriptionId || "").trim();
 
-const buildCancellationIdempotencyKey = ({
-  cancelAtPeriodEnd,
-  rentalId,
-  subscriptionId,
-}: {
-  cancelAtPeriodEnd: boolean;
-  rentalId: string;
-  subscriptionId: string;
-}) =>
-  `admin-rental-subscription-cancel:${rentalId}:${subscriptionId}:${
-    cancelAtPeriodEnd ? "period-end" : "immediate"
-  }`;
-
 const parsePositiveInt = (value: unknown, fallback: number) => {
   const normalized = Array.isArray(value) ? value[0] : value;
   const parsed = Number(normalized);
@@ -75,6 +65,140 @@ const normalizeSearchTerm = (value: unknown) => {
 };
 
 const normalizeExact = (value: unknown) => String(value ?? "").trim().toLowerCase();
+
+type StripeCancellationSubscription = {
+  cancel_at?: number | null;
+  cancel_at_period_end?: boolean;
+  current_period_end?: number | null;
+  status: string;
+};
+
+const asStripeSubscription = (
+  subscription: Stripe.Subscription | Stripe.Response<Stripe.Subscription>,
+) => subscription as StripeCancellationSubscription;
+
+router.post("/cancellation-operations/:operationId/reconcile", authenticateAdmin, async (req, res) => {
+  let reconciliationOperationId: string | null = null;
+  try {
+    const { operationId } = z.object({ operationId: z.string().uuid() }).parse(req.params);
+    const operationResult = await db.from("stripe_cancellation_operations").select("*").eq("id", operationId).single();
+    if (operationResult.error || !operationResult.data) return res.status(404).json({ error: "Cancellation operation not found" });
+    const operation = operationResult.data;
+    reconciliationOperationId = operationId;
+    if (operation.status === "completed") return res.json({ success: true, operationId, status: "completed" });
+    if (!["stripe_completed", "reconciliation_pending", "database_completed"].includes(operation.status)) {
+      return res.status(409).json({ error: "Stripe cancellation has not been confirmed for this operation." });
+    }
+
+    const stripe = getStripeClient();
+    let subscription: StripeCancellationSubscription | null = null;
+
+    if (operation.operation_type === "application") {
+      const application = await db.from("applications").select("id, status, payment_link_version, pending_checkout_session_id").eq("id", operation.application_id).single();
+      if (application.error || !application.data) return res.status(404).json({ error: "Application not found" });
+      if (Number(application.data.payment_link_version || 0) !== Number(operation.expected_payment_link_version || 0)) {
+        return res.status(409).json({ error: "Application payment version changed; reconciliation requires manual review." });
+      }
+      if (operation.stripe_checkout_session_id && application.data.pending_checkout_session_id && operation.stripe_checkout_session_id !== application.data.pending_checkout_session_id) {
+        return res.status(409).json({ error: "Application Checkout relationship changed; reconciliation requires manual review." });
+      }
+      let verifiedSubscriptionId = operation.stripe_subscription_id || null;
+      if (operation.stripe_checkout_session_id) {
+        const session = await stripe.checkout.sessions.retrieve(operation.stripe_checkout_session_id);
+        if (
+          String(session.metadata?.application_id || "") !== String(operation.application_id) ||
+          Number(session.metadata?.payment_link_version || 0) !== Number(operation.expected_payment_link_version || 0)
+        ) {
+          return res.status(409).json({ error: "Stripe Checkout relationship changed; reconciliation requires manual review." });
+        }
+        const sessionSubscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+        if (verifiedSubscriptionId && sessionSubscriptionId && verifiedSubscriptionId !== sessionSubscriptionId) {
+          return res.status(409).json({ error: "Stripe subscription relationship changed; reconciliation requires manual review." });
+        }
+        verifiedSubscriptionId = verifiedSubscriptionId || sessionSubscriptionId || null;
+      }
+      if (verifiedSubscriptionId) {
+        subscription = asStripeSubscription(
+          await stripe.subscriptions.retrieve(verifiedSubscriptionId),
+        );
+        if (subscription.status !== "canceled") {
+          return res.status(409).json({ error: "Stripe has not confirmed the requested cancellation state." });
+        }
+      }
+      if (application.data.status === "Cancelled") {
+        // A prior attempt completed the business update; only the durable operation needs finalizing.
+      } else {
+        let updateQuery = db.from("applications").update({
+          cancelled_at: new Date().toISOString(),
+          payment_link_version: Number(operation.expected_payment_link_version || 0) + 1,
+          pending_checkout_session_id: null,
+          status: "Cancelled",
+        }).eq("id", operation.application_id).eq("payment_link_version", operation.expected_payment_link_version).eq("status", application.data.status);
+        updateQuery = application.data.pending_checkout_session_id
+          ? updateQuery.eq("pending_checkout_session_id", application.data.pending_checkout_session_id)
+          : updateQuery.is("pending_checkout_session_id", null);
+        const update = await updateQuery.select("id").maybeSingle();
+        if (update.error || !update.data?.id) return res.status(409).json({ error: "Application changed; reconciliation requires manual review." });
+      }
+    } else {
+      if (!operation.stripe_subscription_id) return res.status(409).json({ error: "Cancellation operation has no Stripe subscription relationship." });
+      subscription = asStripeSubscription(
+        await stripe.subscriptions.retrieve(operation.stripe_subscription_id),
+      );
+      const stripeCancelled = subscription.status === "canceled";
+      const stripeScheduled = Boolean(subscription.cancel_at_period_end);
+      if (operation.requested_mode === "immediate" ? !stripeCancelled : !stripeScheduled && !stripeCancelled) {
+        return res.status(409).json({ error: "Stripe has not confirmed the requested cancellation state." });
+      }
+      const rental = await db.from("rentals").select("id, status, stripe_subscription_id").eq("id", operation.rental_id).single();
+      if (rental.error || !rental.data) return res.status(404).json({ error: "Rental not found" });
+      if (String(rental.data.stripe_subscription_id || "") !== String(operation.stripe_subscription_id)) {
+        return res.status(409).json({ error: "Rental subscription relationship changed; reconciliation requires manual review." });
+      }
+      const compat = await getSchemaCompat();
+      const effectiveEndSeconds = Number(subscription.cancel_at || subscription.current_period_end || 0);
+      if (!stripeCancelled && effectiveEndSeconds <= 0) return res.status(409).json({ error: "Stripe cancellation end date is unavailable." });
+      const effectiveEnd = stripeCancelled ? new Date() : new Date(effectiveEndSeconds * 1000);
+      const currentRentalStatus = String(rental.data.status || "Active");
+      const payload: Record<string, unknown> = {
+        status: stripeCancelled ? "Cancelled" : currentRentalStatus,
+      };
+      payload[compat.coreMode === "camel" ? "endDate" : "end_date"] = effectiveEnd.toISOString().slice(0, 10);
+      const update = await db
+        .from("rentals")
+        .update(payload)
+        .eq("id", operation.rental_id)
+        .eq("stripe_subscription_id", operation.stripe_subscription_id)
+        .eq("status", currentRentalStatus)
+        .select("id")
+        .maybeSingle();
+      if (update.error || !update.data?.id) throw update.error || new Error("Rental reconciliation did not update a row");
+    }
+
+    await updateCancellationOperation(operationId, "database_completed", {
+      database_completed_at: new Date().toISOString(), last_error_code: null, reconciled_at: new Date().toISOString(),
+    });
+    await recordAdminAuditEvent({
+      action: "cancellation_reconciled", actor: req.admin?.email || null,
+      metadata: { operationId }, targetId: String(operation.application_id || operation.rental_id),
+      targetType: operation.operation_type,
+    });
+    await updateCancellationOperation(operationId, "completed", { last_error_code: null });
+    return res.json({ success: true, operationId, status: "completed" });
+  } catch (error) {
+    if (reconciliationOperationId) {
+      await tryUpdateCancellationOperation(reconciliationOperationId, "reconciliation_pending", {
+        last_error_code: safeCancellationFailureCode(error),
+      });
+    }
+    if (error instanceof z.ZodError) return res.status(400).json({ error: "Validation failed", details: error.issues });
+    console.error("Cancellation reconciliation failed", {
+      category: error instanceof Error ? error.name : "UnknownError",
+      operation: "cancellation_reconciliation",
+    });
+    return res.status(503).json({ error: "Cancellation reconciliation is still pending." });
+  }
+});
 
 const splitFullName = (value: string) => {
   const parts = value.trim().split(/\s+/).filter(Boolean);
@@ -635,6 +759,9 @@ router.post("/:rentalId/cancel-subscription", authenticateAdmin, async (req, res
     return res.status(400).json({ error: "Rental ID is required" });
   }
 
+  let cancellationOperationId: string | null = null;
+  let stripeMutationStarted = false;
+  let stripeStateConfirmed = false;
   try {
     const { data: rental, error: rentalError } = await db
       .from("rentals")
@@ -656,12 +783,32 @@ router.post("/:rentalId/cancel-subscription", authenticateAdmin, async (req, res
     }
 
     const { cancelAtPeriodEnd, reason } = parsed.data;
-    const stripe = getStripeClient();
-    const idempotencyKey = buildCancellationIdempotencyKey({
-      cancelAtPeriodEnd,
+    const operation = await requestCancellationOperation({
+      mode: cancelAtPeriodEnd ? "period_end" : "immediate",
+      operationType: "rental",
       rentalId,
-      subscriptionId: stripeSubscriptionId,
+      requestedBy: req.admin?.email || null,
+      stripeSubscriptionId,
     });
+    cancellationOperationId = String(operation.id);
+    if (operation.status === "completed") {
+      return res.json({ success: true, operationId: operation.id, cancelAtPeriodEnd, stripeStatus: "cancelled", message: "Cancellation already completed." });
+    }
+    const claimedOperation = await claimCancellationOperation(operation.id);
+    if (!claimedOperation) {
+      return res.status(202).json({ success: false, reconciliationPending: true, operationId: operation.id, message: "Cancellation is already being processed." });
+    }
+    try {
+      await recordAdminAuditEvent({
+        action: "stripe_cancellation_requested", actor: req.admin?.email || null,
+        metadata: { cancelAtPeriodEnd, operationId: operation.id }, targetId: rentalId, targetType: "rental",
+      });
+    } catch {
+      await tryUpdateCancellationOperation(operation.id, "reconciliation_pending", { last_error_code: "AUDIT_REQUEST_FAILED" });
+      return res.status(202).json({ success: false, reconciliationPending: true, operationId: operation.id, message: "Cancellation reconciliation is pending." });
+    }
+    const stripe = getStripeClient();
+    const idempotencyKey = operation.idempotency_key;
     const metadata = {
       admin_cancelled_by: String(req.admin?.email || "admin"),
       admin_cancellation_reason: reason || "",
@@ -669,55 +816,108 @@ router.post("/:rentalId/cancel-subscription", authenticateAdmin, async (req, res
       maple_rental_id: rentalId,
     };
 
-    const existingSubscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+    const existingSubscription = asStripeSubscription(
+      await stripe.subscriptions.retrieve(stripeSubscriptionId),
+    );
+    stripeStateConfirmed =
+      existingSubscription.status === "canceled" ||
+      Boolean(cancelAtPeriodEnd && existingSubscription.cancel_at_period_end);
+    stripeMutationStarted =
+      !stripeStateConfirmed &&
+      existingSubscription.status !== "canceled";
     const subscription =
       existingSubscription.status === "canceled"
         ? existingSubscription
-        : cancelAtPeriodEnd
-          ? await stripe.subscriptions.update(
+        : cancelAtPeriodEnd && existingSubscription.cancel_at_period_end
+          ? existingSubscription
+          : cancelAtPeriodEnd
+          ? asStripeSubscription(await stripe.subscriptions.update(
               stripeSubscriptionId,
               {
                 cancel_at_period_end: true,
                 metadata,
               },
               { idempotencyKey },
-            )
-          : await stripe.subscriptions.cancel(
+            ))
+          : asStripeSubscription(await stripe.subscriptions.cancel(
               stripeSubscriptionId,
               {},
               { idempotencyKey },
-            );
+            ));
+    const effectiveEndSeconds = Number(subscription.cancel_at || subscription.current_period_end || 0);
+    const stripePersisted = await tryUpdateCancellationOperation(operation.id, "stripe_completed", {
+      stripe_cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+      stripe_completed_at: new Date().toISOString(),
+      stripe_effective_end_at: effectiveEndSeconds > 0 ? new Date(effectiveEndSeconds * 1000).toISOString() : null,
+    });
+    if (!stripePersisted) return res.status(202).json({ success: false, reconciliationPending: true, operationId: operation.id, message: "Stripe cancellation completed; reconciliation is pending." });
+    await recordAdminAuditEvent({
+      action: "stripe_cancellation_completed", actor: req.admin?.email || null,
+      metadata: { operationId: operation.id, stripeStatus: subscription.status }, targetId: rentalId, targetType: "rental",
+    });
 
-    if (!cancelAtPeriodEnd || existingSubscription.status === "canceled") {
+    {
       const compat = await getSchemaCompat();
-      const payload: Record<string, unknown> = { status: "Cancelled" };
-      payload[compat.coreMode === "camel" ? "endDate" : "end_date"] = new Date()
-        .toISOString()
-        .slice(0, 10);
-      const updateResult = await db.from("rentals").update(payload).eq("id", rentalId);
-      if (updateResult.error) {
-        throw updateResult.error;
+      const isCancelled = subscription.status === "canceled";
+      const effectiveEndSeconds = Number(subscription.cancel_at || subscription.current_period_end || 0);
+      if (!isCancelled && effectiveEndSeconds <= 0) throw new Error("STRIPE_EFFECTIVE_END_MISSING");
+      const effectiveEnd = isCancelled ? new Date() : new Date(effectiveEndSeconds * 1000);
+      const payload: Record<string, unknown> = { status: isCancelled ? "Cancelled" : String(rental.status || "Active") };
+      payload[compat.coreMode === "camel" ? "endDate" : "end_date"] = effectiveEnd.toISOString().slice(0, 10);
+      const updateResult = await db
+        .from("rentals")
+        .update(payload)
+        .eq("id", rentalId)
+        .eq("stripe_subscription_id", stripeSubscriptionId)
+        .eq("status", String(rental.status || "Active"))
+        .select("id")
+        .maybeSingle();
+      if (updateResult.error || !updateResult.data?.id) {
+        await updateCancellationOperation(operation.id, "reconciliation_pending", {
+          last_error_code: updateResult.error
+            ? safeCancellationFailureCode(updateResult.error)
+            : "RENTAL_COMPARE_AND_SET_CONFLICT",
+        });
+        return res.status(202).json({
+          success: false,
+          reconciliationPending: true,
+          operationId: operation.id,
+          message: "Stripe cancellation completed; rental reconciliation is pending.",
+        });
       }
     }
 
+    await updateCancellationOperation(operation.id, "completed", {
+      database_completed_at: new Date().toISOString(), reconciled_at: new Date().toISOString(),
+    });
+    await recordAdminAuditEvent({
+      action: "cancellation_database_completed", actor: req.admin?.email || null,
+      metadata: { operationId: operation.id }, targetId: rentalId, targetType: "rental",
+    });
+
     console.info("Admin updated Stripe subscription cancellation", {
-      adminEmail: req.admin?.email || null,
       cancelAtPeriodEnd,
-      rentalId,
+      operation: "rental_subscription_cancellation",
       stripeStatus: subscription.status,
-      stripeSubscriptionId,
     });
 
     res.json({
       success: true,
+      operationId: operation.id,
       rentalId,
-      stripeSubscriptionId,
       cancelAtPeriodEnd,
       stripeStatus: subscription.status,
       message: "Subscription cancellation updated.",
     });
   } catch (error) {
-    console.error("Admin subscription cancellation error:", error);
+    if (cancellationOperationId && (stripeMutationStarted || stripeStateConfirmed)) {
+      await tryUpdateCancellationOperation(cancellationOperationId, "reconciliation_pending", { last_error_code: safeCancellationFailureCode(error) });
+      return res.status(202).json({ success: false, reconciliationPending: true, operationId: cancellationOperationId, message: "Cancellation reconciliation is pending." });
+    }
+    console.error("Admin subscription cancellation error", {
+      category: error instanceof Error ? error.name : "UnknownError",
+      operation: "rental_subscription_cancellation",
+    });
     res.status(500).json({ error: "Failed to cancel Stripe subscription" });
   }
 });

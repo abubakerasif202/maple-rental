@@ -132,14 +132,14 @@ export const getCheckoutStatusPresentation = ({
   if (state === 'pending_webhook') {
     return {
       body:
-        'Stripe has confirmed your payment. We are finalizing your onboarding status now and this page refreshes automatically while that completes.' +
+        'Stripe has confirmed your payment. Your application payment status is updating now. Maple Rentals will contact you separately to finalise rental activation and vehicle handover.' +
         (pollingTimedOut ? timeoutSuffix : ''),
       isFailure: false,
       shouldRefetch: !pollingTimedOut,
       showSecurePaymentLink: false,
       showSpinner: !pollingTimedOut,
       state,
-      title: 'Payment Received',
+      title: 'Payment Confirmation Pending',
       tone: 'processing',
     };
   }
@@ -147,14 +147,14 @@ export const getCheckoutStatusPresentation = ({
   if (state === 'manual_review') {
     return {
       body:
-        'Stripe has already confirmed your payment. We are waiting for Maple Rentals to complete the final onboarding checks, and this page will keep checking automatically while that finishes. Maple Rentals will contact you if any manual action is still needed.' +
+        'Stripe has confirmed your payment, but your application payment status needs manual review. Maple Rentals will contact you separately to finalise rental activation and vehicle handover.' +
         (pollingTimedOut ? timeoutSuffix : ''),
       isFailure: false,
       shouldRefetch: !pollingTimedOut,
       showSecurePaymentLink: false,
       showSpinner: false,
       state,
-      title: 'Activation Pending',
+      title: 'Payment Review Pending',
       tone: 'review',
     };
   }
@@ -164,7 +164,7 @@ export const getCheckoutStatusPresentation = ({
 
     return {
       body: directDebit
-        ? "Your direct debit has been created. Bank payments can take a few business days to confirm. We'll update your rental status once Stripe confirms the payment." +
+        ? 'Your direct debit has been created. Bank payments can take a few business days to confirm. Your application payment status will update after Stripe confirms the payment. Maple Rentals will contact you separately to finalise rental activation and vehicle handover.' +
           (pollingTimedOut ? timeoutSuffix : '')
         : 'Stripe is still confirming this checkout session. This page refreshes automatically while the payment status updates.' +
           (pollingTimedOut ? timeoutSuffix : ''),
@@ -173,7 +173,7 @@ export const getCheckoutStatusPresentation = ({
       showSecurePaymentLink: false,
       showSpinner: !pollingTimedOut,
       state,
-      title: directDebit ? 'Payment Setup Received' : 'Payment Processing',
+      title: directDebit ? 'Payment Confirmation Pending' : 'Payment Processing',
       tone: 'processing',
     };
   }

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { getTodayInAustralia } from "../../shared/applicationSubmission.js";
+import { cancellationIdempotencyKey } from "../cancellationOperations.js";
 
 const addDaysToDateOnly = (dateOnly: string, days: number) => {
   const [year, month, day] = dateOnly.split("-").map(Number);
@@ -222,6 +223,7 @@ const {
     manual_invoices: [] as Array<Record<string, any>>,
     manual_invoice_items: [] as Array<Record<string, any>>,
     stripe_webhook_events: [] as Array<Record<string, any>>,
+    stripe_cancellation_operations: [] as Array<Record<string, any>>,
     stripe_balance_transactions: [] as Array<Record<string, any>>,
     admin_audit_events: [] as Array<Record<string, any>>,
     queryLog: [] as Array<{
@@ -232,6 +234,7 @@ const {
       table: string;
     }>,
     failOnDeleteTable: null as string | null,
+    failOnAuditAction: null as string | null,
     leaseAgreementInsertErrorMode: null as
       | null
       | "missing_vehicle_label"
@@ -484,6 +487,10 @@ vi.mock("../db/index.js", () => {
       return mockState.stripe_webhook_events;
     }
 
+    if (table === "stripe_cancellation_operations") {
+      return mockState.stripe_cancellation_operations;
+    }
+
     if (table === "stripe_balance_transactions") {
       return mockState.stripe_balance_transactions;
     }
@@ -558,6 +565,11 @@ vi.mock("../db/index.js", () => {
 
     if (table === "stripe_webhook_events") {
       mockState.stripe_webhook_events = rows;
+      return;
+    }
+
+    if (table === "stripe_cancellation_operations") {
+      mockState.stripe_cancellation_operations = rows;
       return;
     }
 
@@ -1305,7 +1317,7 @@ vi.mock("../db/index.js", () => {
         ? buildUuidFromSequence(nextSequence)
         : nextSequence;
     const insertedRow: Record<string, any> = { ...records[0], id: nextId };
-    const insertError =
+    const leaseAgreementInsertError =
       table === "lease_agreements" &&
       mockState.leaseAgreementInsertErrorMode === "missing_vehicle_label" &&
       Object.prototype.hasOwnProperty.call(insertedRow, "vehicle_label")
@@ -1337,6 +1349,19 @@ vi.mock("../db/index.js", () => {
                   message: "database statement was cancelled",
                 }
           : null;
+    const auditInsertError =
+      table === "admin_audit_events" &&
+      mockState.failOnAuditAction === insertedRow.action
+        ? {
+            code: "57014",
+            details: "Audit insert failed",
+            message: "database statement was cancelled",
+          }
+        : null;
+    if (auditInsertError) {
+      mockState.failOnAuditAction = null;
+    }
+    const insertError = auditInsertError || leaseAgreementInsertError;
 
     if (
       table === "stripe_webhook_events" &&
@@ -1353,6 +1378,26 @@ vi.mock("../db/index.js", () => {
         },
         select: vi.fn(() => ({
           single: vi.fn(async () => ({ data: null, error: null })),
+        })),
+      };
+    }
+
+    if (
+      table === "stripe_cancellation_operations" &&
+      mockState.stripe_cancellation_operations.some(
+        (operation) => operation.idempotency_key === insertedRow.idempotency_key,
+      )
+    ) {
+      return {
+        error: {
+          code: "23505",
+          message: "duplicate cancellation operation idempotency key",
+        },
+        select: vi.fn(() => ({
+          single: vi.fn(async () => ({
+            data: null,
+            error: { code: "23505", message: "duplicate cancellation operation idempotency key" },
+          })),
         })),
       };
     }
@@ -1453,7 +1498,16 @@ vi.mock("../db/index.js", () => {
       ];
     }
 
-    if (table === "admin_audit_events") {
+    if (table === "stripe_cancellation_operations") {
+      insertedRow.attempt_count = insertedRow.attempt_count || 0;
+      insertedRow.status = insertedRow.status || "requested";
+      mockState.stripe_cancellation_operations = [
+        ...mockState.stripe_cancellation_operations,
+        insertedRow,
+      ];
+    }
+
+    if (!insertError && table === "admin_audit_events") {
       mockState.admin_audit_events = [
         ...mockState.admin_audit_events,
         insertedRow,
@@ -1464,7 +1518,7 @@ vi.mock("../db/index.js", () => {
       error: insertError,
       select: vi.fn(() => ({
         single: vi.fn(async () => ({
-          data: insertError ? null : { id: insertedRow.id },
+          data: insertError ? null : insertedRow,
           error: insertError,
         })),
       })),
@@ -1896,8 +1950,10 @@ beforeEach(() => {
     },
   ];
   mockState.stripe_webhook_events = [];
+  mockState.stripe_cancellation_operations = [];
   mockState.stripe_balance_transactions = [];
   mockState.admin_audit_events = [];
+  mockState.failOnAuditAction = null;
   mockState.toll_transfer_notices = [];
   mockState.toll_transfer_notice_audit_events = [];
   mockState.toll_notice_delivery_attempts = [];
@@ -2036,6 +2092,17 @@ beforeEach(() => {
   mockDbRpc.mockImplementation(
     async (functionName: string, args: Record<string, unknown>) => {
       const now = new Date().toISOString();
+
+      if (functionName === "claim_stripe_cancellation_operation") {
+        const operation = mockState.stripe_cancellation_operations.find(
+          (row) => row.id === args.p_operation_id,
+        );
+        if (!operation) return { data: [], error: null };
+        const stale = operation.status === "stripe_processing" && String(operation.processing_started_at || "") < String(args.p_stale_before || "");
+        if (!["requested", "reconciliation_pending", "failed"].includes(operation.status) && !stale) return { data: [], error: null };
+        Object.assign(operation, { attempt_count: Number(operation.attempt_count || 0) + 1, processing_started_at: now, status: "stripe_processing", updated_at: now });
+        return { data: [operation], error: null };
+      }
 
       if (functionName === "get_admin_dashboard_summary") {
         return {
@@ -4845,6 +4912,9 @@ describe("Operational history API", () => {
       id: "sub_active",
       cancel_at_period_end: true,
       status: "active",
+      current_period_end: Math.floor(
+        new Date("2026-04-01T00:00:00Z").getTime() / 1000,
+      ),
     });
 
     const res = await request(app)
@@ -4865,13 +4935,12 @@ describe("Operational history API", () => {
           admin_cancellation_reason: "Driver returning vehicle",
         }),
       }),
-      expect.objectContaining({ idempotencyKey: expect.stringContaining("20") }),
+      expect.objectContaining({ idempotencyKey: expect.stringMatching(/^maple-cancel-/) }),
     );
     expect(mockState.rentals[0].status).toBe("Active");
     expect(res.body).toMatchObject({
       success: true,
       rentalId: "20",
-      stripeSubscriptionId: "sub_active",
       cancelAtPeriodEnd: true,
       stripeStatus: "active",
     });
@@ -4904,11 +4973,213 @@ describe("Operational history API", () => {
       "sub_active",
       {},
       expect.objectContaining({
-        idempotencyKey: expect.stringContaining("20"),
+        idempotencyKey: expect.stringMatching(/^maple-cancel-/),
       }),
     );
     expect(mockState.rentals[0].status).toBe("Cancelled");
     expect(res.body.stripeStatus).toBe("canceled");
+  });
+
+  it("POST /api/admin/rentals/:id/cancel-subscription atomically claims one concurrent operation and passes its persisted idempotency key to Stripe", async () => {
+    mockState.rentals = [{
+      id: 20,
+      application_id: APPROVED_APPLICATION_ID,
+      car_id: 1,
+      status: "Active",
+      start_date: "2026-03-01",
+      weekly_price: 250,
+      stripe_subscription_id: "sub_concurrent",
+    }];
+    let releaseStripeRetrieve!: () => void;
+    let markStripeRetrieveStarted!: () => void;
+    const stripeRetrieveStarted = new Promise<void>((resolve) => {
+      markStripeRetrieveStarted = resolve;
+    });
+    const stripeRetrieveRelease = new Promise<void>((resolve) => {
+      releaseStripeRetrieve = resolve;
+    });
+    mockStripe.subscriptionsRetrieve.mockImplementation(async () => {
+      markStripeRetrieveStarted();
+      await stripeRetrieveRelease;
+      return { id: "sub_concurrent", status: "active" };
+    });
+    mockStripe.subscriptionsCancel.mockResolvedValue({
+      id: "sub_concurrent",
+      status: "canceled",
+    });
+
+    const requests = [
+      request(app)
+        .post("/api/admin/rentals/20/cancel-subscription")
+        .set("Authorization", "Bearer fake-token")
+        .send({ confirm: "CANCEL SUBSCRIPTION", cancelAtPeriodEnd: false })
+        .then((response) => response),
+      request(app)
+        .post("/api/admin/rentals/20/cancel-subscription")
+        .set("Authorization", "Bearer fake-token")
+        .send({ confirm: "CANCEL SUBSCRIPTION", cancelAtPeriodEnd: false })
+        .then((response) => response),
+    ];
+    await stripeRetrieveStarted;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    releaseStripeRetrieve();
+    const [first, second] = await Promise.all(requests);
+
+    expect([first.status, second.status].sort()).toEqual([200, 202]);
+    expect(mockState.stripe_cancellation_operations).toHaveLength(1);
+    expect(mockStripe.subscriptionsCancel).toHaveBeenCalledTimes(1);
+    expect(mockStripe.subscriptionsCancel).toHaveBeenCalledWith(
+      "sub_concurrent",
+      {},
+      { idempotencyKey: mockState.stripe_cancellation_operations[0].idempotency_key },
+    );
+  });
+
+  it("POST /api/admin/rentals/:id/cancel-subscription reclaims a stale stripe_processing operation", async () => {
+    const idempotencyKey = cancellationIdempotencyKey({
+      operationType: "rental",
+      targetId: "20",
+      mode: "immediate",
+      relationshipId: "sub_stale_claim",
+    });
+    mockState.rentals = [{
+      id: 20,
+      application_id: APPROVED_APPLICATION_ID,
+      status: "Active",
+      stripe_subscription_id: "sub_stale_claim",
+    }];
+    mockState.stripe_cancellation_operations = [{
+      id: "77777777-7777-4777-8777-777777777777",
+      operation_type: "rental",
+      rental_id: 20,
+      requested_mode: "immediate",
+      stripe_subscription_id: "sub_stale_claim",
+      idempotency_key: idempotencyKey,
+      status: "stripe_processing",
+      attempt_count: 1,
+      processing_started_at: "2026-01-01T00:00:00.000Z",
+    }];
+    mockStripe.subscriptionsRetrieve.mockResolvedValue({ id: "sub_stale_claim", status: "active" });
+    mockStripe.subscriptionsCancel.mockResolvedValue({ id: "sub_stale_claim", status: "canceled" });
+
+    const res = await request(app)
+      .post("/api/admin/rentals/20/cancel-subscription")
+      .set("Authorization", "Bearer fake-token")
+      .send({ confirm: "CANCEL SUBSCRIPTION", cancelAtPeriodEnd: false });
+
+    expect(res.status).toBe(200);
+    expect(mockState.stripe_cancellation_operations[0].attempt_count).toBe(2);
+    expect(mockStripe.subscriptionsCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("POST /api/admin/rentals/:id/cancel-subscription keeps confirmed Stripe state reconcilable when the completion audit fails", async () => {
+    mockState.rentals = [{
+      id: 20,
+      application_id: APPROVED_APPLICATION_ID,
+      status: "Active",
+      stripe_subscription_id: "sub_audit_failure",
+    }];
+    mockState.failOnAuditAction = "stripe_cancellation_completed";
+    mockStripe.subscriptionsRetrieve.mockResolvedValue({ id: "sub_audit_failure", status: "active" });
+    mockStripe.subscriptionsCancel.mockResolvedValue({ id: "sub_audit_failure", status: "canceled" });
+
+    const res = await request(app)
+      .post("/api/admin/rentals/20/cancel-subscription")
+      .set("Authorization", "Bearer fake-token")
+      .send({ confirm: "CANCEL SUBSCRIPTION", cancelAtPeriodEnd: false });
+
+    expect(res.status).toBe(202);
+    expect(mockStripe.subscriptionsCancel).toHaveBeenCalledTimes(1);
+    expect(mockState.stripe_cancellation_operations[0]).toMatchObject({
+      status: "reconciliation_pending",
+      stripe_completed_at: expect.any(String),
+    });
+    expect(mockState.stripe_cancellation_operations[0].status).not.toBe("failed");
+  });
+
+  it("POST /api/admin/rentals/cancellation-operations/:operationId/reconcile verifies Stripe and saves the period-end effective date", async () => {
+    const operationId = "88888888-8888-4888-8888-888888888888";
+    mockState.rentals = [{
+      id: 20,
+      application_id: APPROVED_APPLICATION_ID,
+      status: "Active",
+      stripe_subscription_id: "sub_period_reconcile",
+    }];
+    mockState.stripe_cancellation_operations = [{
+      id: operationId,
+      operation_type: "rental",
+      rental_id: 20,
+      requested_mode: "period_end",
+      stripe_subscription_id: "sub_period_reconcile",
+      status: "reconciliation_pending",
+    }];
+    mockStripe.subscriptionsRetrieve.mockResolvedValue({
+      id: "sub_period_reconcile",
+      status: "active",
+      cancel_at_period_end: true,
+      current_period_end: Math.floor(new Date("2026-04-15T00:00:00Z").getTime() / 1000),
+    });
+
+    const res = await request(app)
+      .post(`/api/admin/rentals/cancellation-operations/${operationId}/reconcile`)
+      .set("Authorization", "Bearer fake-token")
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(mockStripe.subscriptionsRetrieve).toHaveBeenCalledWith("sub_period_reconcile");
+    expect(mockState.rentals[0]).toMatchObject({ status: "Active", end_date: "2026-04-15" });
+    expect(mockState.stripe_cancellation_operations[0].status).toBe("completed");
+  });
+
+  it("POST /api/admin/rentals/cancellation-operations/:operationId/reconcile rejects a stale application payment-link version before Stripe access", async () => {
+    const operationId = "99999999-9999-4999-8999-999999999998";
+    mockState.applications[0].payment_link_version = 4;
+    mockState.stripe_cancellation_operations = [{
+      id: operationId,
+      operation_type: "application",
+      application_id: PENDING_APPLICATION_ID,
+      expected_payment_link_version: 3,
+      requested_mode: "immediate",
+      status: "stripe_completed",
+    }];
+
+    const res = await request(app)
+      .post(`/api/admin/rentals/cancellation-operations/${operationId}/reconcile`)
+      .set("Authorization", "Bearer fake-token")
+      .send({});
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain("payment version changed");
+    expect(mockStripe.subscriptionsRetrieve).not.toHaveBeenCalled();
+  });
+
+  it("POST /api/admin/rentals/cancellation-operations/:operationId/reconcile rejects a changed rental subscription relationship after verifying Stripe", async () => {
+    const operationId = "99999999-9999-4999-8999-999999999997";
+    mockState.rentals = [{
+      id: 20,
+      application_id: APPROVED_APPLICATION_ID,
+      status: "Active",
+      stripe_subscription_id: "sub_replaced",
+    }];
+    mockState.stripe_cancellation_operations = [{
+      id: operationId,
+      operation_type: "rental",
+      rental_id: 20,
+      requested_mode: "immediate",
+      stripe_subscription_id: "sub_original",
+      status: "stripe_completed",
+    }];
+    mockStripe.subscriptionsRetrieve.mockResolvedValue({ id: "sub_original", status: "canceled" });
+
+    const res = await request(app)
+      .post(`/api/admin/rentals/cancellation-operations/${operationId}/reconcile`)
+      .set("Authorization", "Bearer fake-token")
+      .send({});
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain("subscription relationship changed");
+    expect(mockStripe.subscriptionsRetrieve).toHaveBeenCalledWith("sub_original");
+    expect(mockState.rentals[0].status).toBe("Active");
   });
 
   it("POST /api/admin/maintenance/reset-imported-data/dry-run rejects missing confirmation", async () => {
@@ -6221,9 +6492,13 @@ describe("Stripe API", () => {
       expect(mockStripe.subscriptionsRetrieve).toHaveBeenCalledWith(
         "sub_cancel_linked",
       );
-      expect(mockStripe.subscriptionsCancel).toHaveBeenCalledWith(
-        "sub_cancel_linked",
-      );
+    expect(mockStripe.subscriptionsCancel).toHaveBeenCalledWith(
+      "sub_cancel_linked",
+      {},
+      expect.objectContaining({
+        idempotencyKey: expect.stringMatching(/^maple-cancel-/),
+      }),
+    );
       expect(mockStripe.subscriptionsCancel).toHaveBeenCalledTimes(1);
       expect(mockState.applications[0]).toMatchObject({
         cancelled_at: expect.any(String),
@@ -6247,8 +6522,11 @@ describe("Stripe API", () => {
         .set("Authorization", "Bearer fake-token")
         .send({ cancel_reason: "Driver withdrew" });
 
-      expect(res.status).toBe(409);
-      expect(res.body.error).toContain("changed while cancelling");
+      expect(res.status).toBe(202);
+      expect(res.body).toMatchObject({
+        reconciliationPending: true,
+        success: false,
+      });
       expect(mockStripe.checkoutSessionsRetrieve).not.toHaveBeenCalled();
       expect(mockStripe.checkoutSessionsExpire).not.toHaveBeenCalled();
       expect(mockStripe.subscriptionsCancel).not.toHaveBeenCalled();
@@ -6294,6 +6572,10 @@ describe("Stripe API", () => {
       expect(res.status).toBe(200);
       expect(mockStripe.subscriptionsCancel).toHaveBeenCalledWith(
         "sub_payment_only",
+        {},
+        expect.objectContaining({
+          idempotencyKey: expect.stringMatching(/^maple-cancel-/),
+        }),
       );
       expect(mockState.applications[0].status).toBe("Cancelled");
       expect(mockState.rentals).toHaveLength(0);
@@ -6346,12 +6628,16 @@ describe("Stripe API", () => {
       );
       expect(mockStripe.subscriptionsCancel).toHaveBeenCalledWith(
         "sub_legacy_payment_only",
+        {},
+        expect.objectContaining({
+          idempotencyKey: expect.stringMatching(/^maple-cancel-/),
+        }),
       );
       expect(mockState.applications[0].status).toBe("Cancelled");
       expect(mockState.rentals).toHaveLength(0);
     });
 
-    it("POST /api/applications/:id/cancel does not commit cancellation when Stripe cleanup fails", async () => {
+    it("POST /api/applications/:id/cancel returns reconciliation pending when Stripe cleanup fails after confirmation", async () => {
       mockState.applications[0].status = "Paid";
       mockState.applications[0].payment_link_version = 3;
       mockState.applications[0].pending_checkout_session_id = null;
@@ -6379,7 +6665,11 @@ describe("Stripe API", () => {
         .set("Authorization", "Bearer fake-token")
         .send({ cancel_reason: "Driver withdrew" });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(202);
+      expect(res.body).toMatchObject({
+        reconciliationPending: true,
+        success: false,
+      });
       expect(mockState.applications[0]).toMatchObject({
         cancel_reason: null,
         payment_link_version: 3,
