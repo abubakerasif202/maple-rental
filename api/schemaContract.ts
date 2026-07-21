@@ -90,8 +90,24 @@ export const PRODUCTION_SCHEMA_CONTRACT_REQUIRED_COLUMNS = {
   invoices: [
     { label: 'is_imported', acceptable: ['is_imported'] },
   ],
+  stripe_cancellation_operations: [
+    { label: 'idempotency_key', acceptable: ['idempotency_key'] },
+    { label: 'expected_payment_link_version', acceptable: ['expected_payment_link_version'] },
+    { label: 'processing_started_at', acceptable: ['processing_started_at'] },
+    { label: 'requested_mode', acceptable: ['requested_mode'] },
+    { label: 'status', acceptable: ['status'] },
+    { label: 'stripe_subscription_id', acceptable: ['stripe_subscription_id'] },
+  ],
+  lease_agreement_pdf_artifacts: [
+    { label: 'source_agreement_id', acceptable: ['source_agreement_id'] },
+    { label: 'generation_status', acceptable: ['generation_status'] },
+    { label: 'generation_started_at', acceptable: ['generation_started_at'] },
+    { label: 'storage_path', acceptable: ['storage_path'] },
+    { label: 'sha256', acceptable: ['sha256'] },
+  ],
   stripe_webhook_events: [
     { label: 'application_id', acceptable: ['application_id'] },
+    { label: 'stripe_customer_id', acceptable: ['stripe_customer_id'] },
     { label: 'stripe_subscription_id', acceptable: ['stripe_subscription_id'] },
   ],
 } as const;

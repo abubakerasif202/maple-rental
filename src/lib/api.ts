@@ -98,7 +98,7 @@ export const fetchRentals = async (
 export interface CancelSubscriptionResponse {
   success: boolean;
   rentalId: string;
-  stripeSubscriptionId: string;
+  operationId: string;
   cancelAtPeriodEnd: boolean;
   stripeStatus: string;
   message?: string;
@@ -521,6 +521,26 @@ export const saveLeaseAgreement = async (payload: {
 
 export const fetchSavedLeaseAgreements = async (): Promise<SavedLeaseAgreement[]> => {
   const { data } = await api.get('/agreements');
+  return data;
+};
+
+export const generateSavedAgreementPdf = async (id: number): Promise<{
+  artifact_status: 'generating' | 'ready';
+  signed_url?: string;
+}> => {
+  const { data } = await api.post(`/agreements/${id}/pdf`);
+  return data;
+};
+
+export interface AgreementPdfStatus {
+  artifact_status: 'pending' | 'generating' | 'ready' | 'failed';
+  failure_code?: string | null;
+  generated_at?: string | null;
+  signed_url?: string;
+}
+
+export const fetchSavedAgreementPdfStatus = async (id: number): Promise<AgreementPdfStatus> => {
+  const { data } = await api.get(`/agreements/${id}/pdf`);
   return data;
 };
 

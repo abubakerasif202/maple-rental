@@ -139,6 +139,9 @@ const writeAudit = async (
 };
 
 export const runCleanup = async ({ apply = false, graceDays = DEFAULT_GRACE_DAYS } = {}) => {
+  if (apply && process.env.DOCUMENT_CLEANUP_APPLY_ENABLED !== 'true') {
+    throw new Error('Document cleanup apply mode is disabled. Set DOCUMENT_CLEANUP_APPLY_ENABLED=true only for an approved run.');
+  }
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) {
@@ -167,7 +170,7 @@ export const runCleanup = async ({ apply = false, graceDays = DEFAULT_GRACE_DAYS
     referencedFiles: referencedPaths.size,
   };
 
-  console.log(JSON.stringify(summary, null, 2));
+  console.log(JSON.stringify({ event: 'document_cleanup_summary', ...summary }));
   await writeAudit(supabase, apply ? 'document_cleanup_apply_started' : 'document_cleanup_dry_run', {
     ...summary,
     orphanedFiles: orphanedFiles.length,

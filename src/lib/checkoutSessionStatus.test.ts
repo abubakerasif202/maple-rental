@@ -69,8 +69,10 @@ describe('checkout session status presentation', () => {
       isError: false,
     });
 
-    expect(presentation.title).toBe('Payment Setup Received');
+    expect(presentation.title).toBe('Payment Confirmation Pending');
     expect(presentation.body).toContain('Your direct debit has been created');
+    expect(presentation.body).toContain('application payment status');
+    expect(presentation.body).not.toContain('rental status');
     expect(presentation.isFailure).toBe(false);
     expect(presentation.showSecurePaymentLink).toBe(false);
     expect(presentation.shouldRefetch).toBe(true);
@@ -106,7 +108,7 @@ describe('checkout session status presentation', () => {
       isError: false,
     });
 
-    expect(presentation.title).toBe('Payment Received');
+    expect(presentation.title).toBe('Payment Confirmation Pending');
     expect(presentation.isFailure).toBe(false);
     expect(presentation.showSecurePaymentLink).toBe(false);
     expect(presentation.shouldRefetch).toBe(true);
@@ -124,10 +126,22 @@ describe('checkout session status presentation', () => {
       pollingTimedOut: true,
     });
 
-    expect(presentation.title).toBe('Payment Received');
+    expect(presentation.title).toBe('Payment Confirmation Pending');
     expect(presentation.isFailure).toBe(false);
     expect(presentation.shouldRefetch).toBe(false);
     expect(presentation.showSpinner).toBe(false);
     expect(presentation.body).toContain('stopped automatic checks');
+  });
+
+  it('keeps manual review wording payment-only', () => {
+    const presentation = getCheckoutStatusPresentation({
+      data: { ...baseStatus, internal_status: 'manual_review', state: 'manual_review' },
+      hasVerificationContext: true,
+      isError: false,
+    });
+    expect(presentation.title).toBe('Payment Review Pending');
+    expect(presentation.body).toContain('application payment status');
+    expect(presentation.body).toContain('vehicle handover');
+    expect(`${presentation.title} ${presentation.body}`.toLowerCase()).not.toMatch(/update your rental status|rental activated automatically|activation pending/);
   });
 });

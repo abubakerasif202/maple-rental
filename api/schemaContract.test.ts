@@ -17,6 +17,18 @@ const HARDENING_DEFINITIONS = {
     },
   },
   invoices: { properties: { is_imported: { type: 'boolean' } } },
+  stripe_cancellation_operations: {
+    properties: {
+      idempotency_key: {}, expected_payment_link_version: {}, processing_started_at: {},
+      requested_mode: {}, status: {}, stripe_subscription_id: {},
+    },
+  },
+  lease_agreement_pdf_artifacts: {
+    properties: {
+      source_agreement_id: {}, generation_status: {}, generation_started_at: {},
+      storage_path: {}, sha256: {},
+    },
+  },
 };
 
 describe('schemaContract', () => {
@@ -79,6 +91,7 @@ describe('schemaContract', () => {
             stripe_webhook_events: {
               properties: {
                 application_id: { type: 'string' },
+                stripe_customer_id: { type: 'string' },
                 stripe_event_id: { type: 'string' },
                 stripe_subscription_id: { type: 'string' },
                 status: { type: 'string' },
@@ -144,6 +157,7 @@ describe('schemaContract', () => {
             stripe_webhook_events: {
               properties: {
                 application_id: { type: 'string' },
+                stripe_customer_id: { type: 'string' },
                 stripe_event_id: { type: 'string' },
                 stripe_subscription_id: { type: 'string' },
                 status: { type: 'string' },

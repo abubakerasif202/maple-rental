@@ -4,8 +4,13 @@ import {
   extractStoragePath,
   selectEligibleOrphans,
 } from './cleanup-orphaned-documents.js';
+import { readFileSync } from 'node:fs';
 
 describe('document cleanup safety', () => {
+  it('keeps apply mode disabled by default', () => {
+    const source = readFileSync(new URL('./cleanup-orphaned-documents.ts', import.meta.url), 'utf8');
+    expect(source).toContain("process.env.DOCUMENT_CLEANUP_APPLY_ENABLED !== 'true'");
+  });
   it('collects every current and legacy document field independently', () => {
     const paths = collectReferencedPaths([{
       license_photo: 'front.png',

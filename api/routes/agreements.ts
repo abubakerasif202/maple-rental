@@ -10,6 +10,7 @@ import {
   isImportedApplicationRecord,
 } from '../importedDataFilters.js';
 import { recordAdminAuditEvent } from '../adminAudit.js';
+import { AgreementPdfProcessingError, createAgreementPdfSignedUrl, generateAgreementPdfArtifact, getAgreementPdfArtifact } from '../agreementPdfArtifacts.js';
 
 const router = express.Router();
 
@@ -302,6 +303,52 @@ router.get('/:id', authenticateAdmin, async (req, res) => {
   } catch (error) {
     console.error('Fetch lease agreement error:', error);
     res.status(500).json({ error: 'Failed to fetch lease agreement' });
+  }
+});
+
+router.post('/:id/pdf', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = z.object({ id: z.coerce.number().int().positive() }).parse(req.params);
+    const artifact = await generateAgreementPdfArtifact(id);
+    const signedUrl = await createAgreementPdfSignedUrl(String(artifact.storage_path));
+    await recordAdminAuditEvent({
+      action: 'lease_agreement_pdf_accessed', actor: req.admin?.email || null,
+      metadata: { artifactId: artifact.id, generationStatus: artifact.generation_status },
+      targetId: id, targetType: 'lease_agreement',
+    });
+    res.json({
+      artifact_status: artifact.generation_status,
+      byte_size: artifact.byte_size,
+      generated_at: artifact.generated_at,
+      sha256: artifact.sha256,
+      signed_url: signedUrl,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: 'Validation failed', details: error.issues });
+    if (error instanceof AgreementPdfProcessingError) return res.status(202).json({ artifact_status: 'generating', retry_after_seconds: 2 });
+    const code = error instanceof Error && /^[A-Z_]+$/.test(error.message) ? error.message : 'PDF_GENERATION_FAILED';
+    const status = code === 'AGREEMENT_NOT_FOUND' ? 404 : 503;
+    res.status(status).json({ error: 'Agreement PDF is not ready. Retry safely.', code });
+  }
+});
+
+router.get('/:id/pdf', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = z.object({ id: z.coerce.number().int().positive() }).parse(req.params);
+    const artifact = await getAgreementPdfArtifact(id);
+    if (!artifact) return res.json({ artifact_status: 'pending' });
+    const response: Record<string, unknown> = {
+      artifact_status: artifact.generation_status,
+      failure_code: artifact.failure_code,
+      generated_at: artifact.generated_at,
+    };
+    if (artifact.generation_status === 'ready' && artifact.storage_path) {
+      response.signed_url = await createAgreementPdfSignedUrl(String(artifact.storage_path));
+    }
+    return res.json(response);
+  } catch (error) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: 'Validation failed', details: error.issues });
+    return res.status(503).json({ error: 'Agreement PDF status is unavailable.' });
   }
 });
 
