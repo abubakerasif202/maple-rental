@@ -29,7 +29,7 @@
     "typecheck": "tsc --noEmit",
     "lint:code": "eslint . --max-warnings=0",
     "lint": "npm run typecheck && npm run lint:code",
-    "test": "vitest run --passWithNoTests",
+    "test": "cross-env NODE_ENV=test vitest run --passWithNoTests",
     "validate": "npm run lint && npm run test"
   },
   "dependencies": {
@@ -81,6 +81,7 @@
     "@types/supertest": "^7.2.0",
     "@typescript-eslint/parser": "^8.46.0",
     "autoprefixer": "^10.4.21",
+    "cross-env": "^10.1.0",
     "eslint": "^9.39.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^7.0.0",
