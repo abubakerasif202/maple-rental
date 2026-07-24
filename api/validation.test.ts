@@ -3,6 +3,7 @@ import {
   adminLoginSchema,
   applicationApprovalSchema,
   carSchema,
+  createLeaseAgreementSchema,
   modelYearSchema,
   uuidSchema,
   vehicleCheckoutLinkSchema,
@@ -383,5 +384,59 @@ describe('vehicleCheckoutLinkSchema', () => {
   it('accepts a missing car_id', () => {
     const { car_id: _carId, ...withoutCarId } = valid;
     expect(() => vehicleCheckoutLinkSchema.parse(withoutCarId)).not.toThrow();
+  });
+});
+
+describe('createLeaseAgreementSchema', () => {
+  const valid = {
+    application_id: '11111111-1111-4111-8111-111111111111',
+    content: 'Signed lease agreement content',
+    vehicle_label: 'ABC123 - Toyota Camry',
+  };
+
+  it('accepts a manual vehicle label without requiring a car_id', () => {
+    const result = createLeaseAgreementSchema.parse(valid);
+
+    expect(result).toMatchObject({
+      application_id: valid.application_id,
+      content: valid.content,
+      status: 'generated',
+      vehicle_label: 'ABC123 - Toyota Camry',
+    });
+    expect('car_id' in result).toBe(false);
+  });
+
+  it('accepts a positive immutable template version when saving an agreement', () => {
+    const result = createLeaseAgreementSchema.parse({
+      ...valid,
+      agreement_template_version: '3',
+    });
+
+    expect(result.agreement_template_version).toBe(3);
+  });
+
+  it('rejects invalid application identifiers and empty agreement content', () => {
+    expect(() =>
+      createLeaseAgreementSchema.parse({
+        ...valid,
+        application_id: 'not-a-uuid',
+      })
+    ).toThrow();
+
+    expect(() =>
+      createLeaseAgreementSchema.parse({
+        ...valid,
+        content: '',
+      })
+    ).toThrow();
+  });
+
+  it('rejects non-positive template versions so saved agreements cannot point at invalid history', () => {
+    expect(() =>
+      createLeaseAgreementSchema.parse({
+        ...valid,
+        agreement_template_version: 0,
+      })
+    ).toThrow();
   });
 });
