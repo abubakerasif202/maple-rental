@@ -985,6 +985,9 @@ export default function AdminDashboard() {
             <button
               type="button"
               onClick={() => setIsSidebarOpen(true)}
+              aria-label="Open admin navigation"
+              aria-expanded={isSidebarOpen}
+              aria-controls="admin-navigation"
               className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white transition-all hover:bg-white/10"
             >
               <Menu className="h-5 w-5" />
@@ -1151,6 +1154,9 @@ export default function AdminDashboard() {
       <AnimatePresence>
         {notification && (
           <motion.div
+            role={notification.type === 'success' ? 'status' : 'alert'}
+            aria-live={notification.type === 'success' ? 'polite' : 'assertive'}
+            aria-atomic="true"
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 24 }}

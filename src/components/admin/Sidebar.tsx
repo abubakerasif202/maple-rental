@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@fluentui/react-components';
 import {
@@ -46,13 +47,85 @@ export default function Sidebar({
   onToggleCollapse,
   setActiveTab,
 }: SidebarProps) {
+  const sidebarRef = useRef<HTMLElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : false,
+  );
   const collapsedClass = isCollapsed ? 'lg:w-24' : 'lg:w-72';
+  const isMobileSidebarHidden = !isDesktop && !isOpen;
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(min-width: 1024px)');
+    const handleChange = () => setIsDesktop(mediaQuery.matches);
+
+    handleChange();
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (isDesktop || !isOpen) {
+      return;
+    }
+
+    previouslyFocusedRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    sidebarRef.current?.querySelector<HTMLElement>('a[href], button:not([disabled])')?.focus();
+
+    return () => {
+      previouslyFocusedRef.current?.focus();
+      previouslyFocusedRef.current = null;
+    };
+  }, [isDesktop, isOpen]);
+
+  useEffect(() => {
+    if (isDesktop || !isOpen) {
+      return;
+    }
+
+    const handleMobileKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      const focusableElements = Array.from(
+        sidebarRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements.at(-1);
+
+      if (!firstElement || !lastElement) {
+        event.preventDefault();
+        sidebarRef.current?.focus();
+      } else if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleMobileKeyDown);
+    return () => document.removeEventListener('keydown', handleMobileKeyDown);
+  }, [isDesktop, isOpen, onClose]);
 
   return (
     <>
       <button
         type="button"
         aria-label="Close admin navigation"
+        aria-hidden={!isOpen}
+        tabIndex={isOpen ? 0 : -1}
         onClick={onClose}
         className={`fixed inset-0 z-30 bg-brand-navy/70 backdrop-blur-sm transition-opacity lg:hidden ${
           isOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
@@ -60,6 +133,14 @@ export default function Sidebar({
       />
 
       <aside
+        ref={sidebarRef}
+        id="admin-navigation"
+        role={isDesktop ? undefined : 'dialog'}
+        aria-label={isDesktop ? undefined : 'Admin navigation'}
+        aria-modal={!isDesktop && isOpen ? true : undefined}
+        aria-hidden={isMobileSidebarHidden}
+        inert={isMobileSidebarHidden}
+        tabIndex={-1}
         className={`fixed inset-y-0 left-0 z-40 flex h-full w-72 max-w-[85vw] flex-col border-r border-white/10 bg-[#061425] shadow-[24px_0_80px_rgba(0,0,0,0.24)] transition-all duration-300 lg:z-20 lg:max-w-none lg:overflow-hidden ${collapsedClass} ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
@@ -104,6 +185,7 @@ export default function Sidebar({
                 <button
                   key={item.id}
                   type="button"
+                  aria-current={selected ? 'page' : undefined}
                   onClick={() => {
                     setActiveTab(item.id);
                     onClose();

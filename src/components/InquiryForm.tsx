@@ -96,7 +96,7 @@ export default function InquiryForm() {
                 className={`w-full bg-brand-navy border ${errors.name ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
               />
             </div>
-            {errors.name && <p id="inquiry-name-error" role="alert" className="text-red-500 text-[10px] uppercase tracking-widest">{errors.name.message}</p>}
+            {errors.name && <p id="inquiry-name-error" role="alert" className="text-red-300 text-[10px] uppercase tracking-widest">{errors.name.message}</p>}
           </div>
           <div className="space-y-2">
             <label htmlFor="inquiry-email" className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Email Address</label>
@@ -111,7 +111,7 @@ export default function InquiryForm() {
                 className={`w-full bg-brand-navy border ${errors.email ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
               />
             </div>
-            {errors.email && <p id="inquiry-email-error" role="alert" className="text-red-500 text-[10px] uppercase tracking-widest">{errors.email.message}</p>}
+            {errors.email && <p id="inquiry-email-error" role="alert" className="text-red-300 text-[10px] uppercase tracking-widest">{errors.email.message}</p>}
           </div>
         </div>
 
@@ -129,7 +129,7 @@ export default function InquiryForm() {
                 className={`w-full bg-brand-navy border ${errors.phone ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
               />
             </div>
-            {errors.phone && <p id="inquiry-phone-error" role="alert" className="text-red-500 text-[10px] uppercase tracking-widest">{errors.phone.message}</p>}
+            {errors.phone && <p id="inquiry-phone-error" role="alert" className="text-red-300 text-[10px] uppercase tracking-widest">{errors.phone.message}</p>}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -142,7 +142,7 @@ export default function InquiryForm() {
                 {...register('startDate')}
                 className={`w-full bg-brand-navy border ${errors.startDate ? 'border-red-500' : 'border-white/10'} p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors`}
               />
-              {errors.startDate && <p id="inquiry-start-date-error" role="alert" className="text-red-500 text-[10px] uppercase tracking-widest">{errors.startDate.message}</p>}
+              {errors.startDate && <p id="inquiry-start-date-error" role="alert" className="text-red-300 text-[10px] uppercase tracking-widest">{errors.startDate.message}</p>}
             </div>
             <div className="space-y-2">
               <label htmlFor="inquiry-end-date" className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">End Date</label>
@@ -154,7 +154,7 @@ export default function InquiryForm() {
                 {...register('endDate')}
                 className={`w-full bg-brand-navy border ${errors.endDate ? 'border-red-500' : 'border-white/10'} p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors`}
               />
-              {errors.endDate && <p id="inquiry-end-date-error" role="alert" className="text-red-500 text-[10px] uppercase tracking-widest">{errors.endDate.message}</p>}
+              {errors.endDate && <p id="inquiry-end-date-error" role="alert" className="text-red-300 text-[10px] uppercase tracking-widest">{errors.endDate.message}</p>}
             </div>
           </div>
         </div>

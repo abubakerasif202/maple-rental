@@ -27,4 +27,31 @@ describe('public form and navigation accessibility contracts', () => {
     expect(navbarSource).toContain("event.key !== 'Tab'");
     expect(navbarSource).toContain('mobileToggleRef.current?.focus()');
   });
+
+  it('names admin navigation controls and announces dynamic admin feedback', () => {
+    const dashboardSource = readSource('src/pages/AdminDashboard.tsx');
+    const sidebarSource = readSource('src/components/admin/Sidebar.tsx');
+
+    expect(dashboardSource).toContain('aria-label="Open admin navigation"');
+    expect(dashboardSource).toContain('aria-expanded={isSidebarOpen}');
+    expect(dashboardSource).toContain('aria-controls="admin-navigation"');
+    expect(dashboardSource).toContain("role={notification.type === 'success' ? 'status' : 'alert'}");
+    expect(dashboardSource).toContain('aria-atomic="true"');
+    expect(sidebarSource).toContain("aria-current={selected ? 'page' : undefined}");
+  });
+
+  it('moves focus to each newly displayed application step', () => {
+    const applySource = readSource('src/pages/Apply.tsx');
+
+    expect(applySource).toContain('document.getElementById(`application-step-${step}-title`)?.focus()');
+    expect(applySource).toContain('role="status" aria-live="polite" aria-atomic="true"');
+    expect(applySource).toContain('headingId="application-step-2-title"');
+  });
+
+  it('uses contrast-safe error text tokens in the inquiry form', () => {
+    const inquirySource = readSource('src/components/InquiryForm.tsx');
+
+    expect(inquirySource).not.toContain('role="alert" className="text-red-500');
+    expect(inquirySource).toContain('role="alert" className="text-red-300');
+  });
 });

@@ -411,7 +411,7 @@ export default function DataTable<T>({
                     />
                     Select
                   </label>
-                  <span className="max-w-[55%] truncate font-mono text-[10px] text-slate-500">
+                  <span className="max-w-[55%] truncate font-mono text-[10px] text-slate-400">
                     #{rowId}
                   </span>
                 </div>
@@ -422,7 +422,7 @@ export default function DataTable<T>({
                       key={column.id}
                       className={column.id === 'actions' ? 'space-y-2' : 'min-w-0'}
                     >
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
                         {column.header}
                       </p>
                       <div className="mt-1 min-w-0 text-sm text-white">
@@ -466,6 +466,15 @@ export default function DataTable<T>({
                   return (
                     <th
                       key={column.id}
+                      aria-sort={
+                        isSortable
+                          ? isSorted
+                            ? sortState?.direction === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none'
+                          : undefined
+                      }
                       className={`px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-400 ${alignClasses[column.align ?? 'left']}`}
                       style={column.minWidth ? { minWidth: column.minWidth } : undefined}
                     >
@@ -473,6 +482,13 @@ export default function DataTable<T>({
                         <button
                           type="button"
                           onClick={() => handleSort(column)}
+                          aria-label={`Sort by ${
+                            typeof column.header === 'string' ? column.header : column.id
+                          }${
+                            isSorted
+                              ? `, currently ${sortState?.direction === 'asc' ? 'ascending' : 'descending'}`
+                              : ''
+                          }`}
                           className={`inline-flex items-center gap-2 transition-colors hover:text-white ${
                             column.align === 'right' ? 'justify-end' : ''
                           }`}
@@ -547,7 +563,7 @@ export default function DataTable<T>({
 
         <div className="flex flex-col gap-4 border-t border-[#1e3a5f] bg-[#061425] px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
-            <span>
+            <span role="status" aria-live="polite" aria-atomic="true">
               Page {page} of {totalPages}
             </span>
             <span>|</span>
@@ -567,7 +583,10 @@ export default function DataTable<T>({
             </label>
           </div>
 
-          <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
+          <nav
+            aria-label="Table pagination"
+            className="flex flex-wrap items-center justify-start gap-2 lg:justify-end"
+          >
             <button
               type="button"
               onClick={() => handlePageChange(page - 1)}
@@ -586,6 +605,8 @@ export default function DataTable<T>({
                   type="button"
                   onClick={() => handlePageChange(pageNumber)}
                   disabled={pagination?.isFetching}
+                  aria-label={`Page ${pageNumber}`}
+                  aria-current={pageNumber === page ? 'page' : undefined}
                   className={`min-h-11 min-w-11 rounded-lg border px-3 text-xs font-bold transition-all ${
                     pageNumber === page
                       ? 'border-[#dfb125] bg-[#dfb125] text-[#061425]'
@@ -605,7 +626,7 @@ export default function DataTable<T>({
               Next
               <ChevronRight className="h-4 w-4" />
             </button>
-          </div>
+          </nav>
         </div>
       </div>
     </div>

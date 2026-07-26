@@ -99,6 +99,7 @@
   },
   "overrides": {
     "esbuild": "^0.28.1",
+    "postcss": "8.5.18",
     "uuid": "^14.0.0"
   }
 }

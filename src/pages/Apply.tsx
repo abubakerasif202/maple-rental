@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -183,12 +184,14 @@ function FieldError({ id, message }: { id: string; message?: string }) {
 
 function SectionShell({
   eyebrow,
+  headingId,
   title,
   description,
   icon: Icon,
   children,
 }: {
   eyebrow: string;
+  headingId: string;
   title: string;
   description: string;
   icon: typeof User;
@@ -210,7 +213,11 @@ function SectionShell({
           <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-brand-gold">
             {eyebrow}
           </p>
-          <h2 className="mt-2 text-xl sm:text-2xl font-bold tracking-tight text-white">
+          <h2
+            id={headingId}
+            tabIndex={-1}
+            className="mt-2 text-xl sm:text-2xl font-bold tracking-tight text-white"
+          >
             {title}
           </h2>
           <p className="mt-2 max-w-2xl text-sm sm:text-[15px] leading-7 text-brand-grey">
@@ -269,6 +276,7 @@ function StepBadge({
 }
 
 export default function Apply() {
+  const previousStepRef = useRef(1);
   const [step, setStep] = useState(1);
   const [pageError, setPageError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -300,6 +308,17 @@ export default function Apply() {
     register("agreement_accepted");
     register("agreement_signature");
   }, [register]);
+
+  useEffect(() => {
+    if (previousStepRef.current === step) {
+      return;
+    }
+
+    previousStepRef.current = step;
+    window.requestAnimationFrame(() => {
+      document.getElementById(`application-step-${step}-title`)?.focus();
+    });
+  }, [step]);
 
   const licensePhoto = watch("license_photo");
   const licenseBackPhoto = watch("license_back_photo");
@@ -728,6 +747,9 @@ export default function Apply() {
                   <div className="hidden h-px flex-1 bg-white/10 sm:block" />
                   <StepBadge step="3" label="Agreement" active={step >= 3} />
                 </div>
+                <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                  Step {step} of 3
+                </p>
               </div>
 
               <div className="space-y-6 p-6 sm:p-8">
@@ -746,6 +768,7 @@ export default function Apply() {
                   {step === 1 && (
                     <SectionShell
                       eyebrow="Step 1"
+                      headingId="application-step-1-title"
                       title="Personal Info"
                       description="Tell us who you are and how we can reach you. We keep this fast, clear, and mobile-friendly."
                       icon={User}
@@ -826,6 +849,7 @@ export default function Apply() {
                   {step === 2 && (
                     <SectionShell
                       eyebrow="Step 2"
+                      headingId="application-step-2-title"
                       title="Licence Details"
                       description="Upload your documents and share the driving information we need for review."
                       icon={ShieldCheck}
@@ -1022,6 +1046,7 @@ export default function Apply() {
                   {step === 3 && (
                     <SectionShell
                       eyebrow="Step 3"
+                      headingId="application-step-3-title"
                       title="Agreement Review"
                       description="Review Maple Rentals' final legal rental agreement from the shared template, confirm you accept it, and sign with your full name before submitting."
                       icon={Loader2}
