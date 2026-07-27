@@ -8377,11 +8377,8 @@ describe("Stripe API", () => {
       .send("{}");
 
     expect(res.status).toBe(200);
-    expect(mockStripe.checkoutSessionsRetrieve).not.toHaveBeenCalled();
-    expect(mockStripe.checkoutSessionsList).toHaveBeenCalledWith({
-      limit: 1,
-      subscription: "sub_future_start",
-    });
+    expect(mockStripe.checkoutSessionsRetrieve).toHaveBeenCalledWith("cs_future_start");
+    expect(mockStripe.checkoutSessionsList).not.toHaveBeenCalled();
     expect(mockState.applications[1].status).toBe("Paid");
     expect(mockState.applications[1].paid_at).toEqual(expect.any(String));
     expect(mockState.applications[1].pending_checkout_session_id).toBeNull();
