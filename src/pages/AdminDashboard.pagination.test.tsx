@@ -4,7 +4,7 @@ import React from 'react';
 import { FluentProvider, Toaster } from '@fluentui/react-components';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from '../lib/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { mapleFluentTheme } from '../theme/mapleFluentTheme';

@@ -1,7 +1,7 @@
 import { FluentProvider, Toaster } from '@fluentui/react-components';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { Suspense, useEffect, useState, lazy } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate } from '../lib/router';
 import { verifyAdminSession } from '../lib/api';
 import { classifyAdminSessionFailure } from '../lib/adminSession';
 import { mapleFluentTheme } from '../theme/mapleFluentTheme';

@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from '../lib/router';
 import { ArrowUpRight, Menu, Phone, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 

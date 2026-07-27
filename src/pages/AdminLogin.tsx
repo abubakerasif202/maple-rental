@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '../lib/router';
 import axios from 'axios';
 import Seo from '../components/Seo';
 import api from '../lib/api';

@@ -1,5 +1,5 @@
 import { ArrowLeft, FileText } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from '../lib/router';
 import Seo from '../components/Seo';
 
 export default function NotFound() {

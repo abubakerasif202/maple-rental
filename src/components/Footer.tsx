@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from '../lib/router';
 import { ArrowUpRight, Mail, MapPin, Phone, ShieldCheck } from 'lucide-react';
 
 const quickLinks = [

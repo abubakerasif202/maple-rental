@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from '../../lib/router';
 import { Button } from '@fluentui/react-components';
 import {
   FileText,

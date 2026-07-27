@@ -1,6 +1,6 @@
 import { Suspense, lazy } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from './lib/router';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import { ErrorBoundary } from './components/ErrorBoundary';

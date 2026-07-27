@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from '../lib/router';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle, Home, Loader2, RefreshCw } from 'lucide-react';
 import Seo from '../components/Seo';

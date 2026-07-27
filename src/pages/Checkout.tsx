@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from '../lib/router';
 import { motion } from 'motion/react';
 import { ArrowLeft, CreditCard, Info, Loader2, ShieldCheck } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';

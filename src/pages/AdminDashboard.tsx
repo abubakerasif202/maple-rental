@@ -34,7 +34,7 @@ import {
   BadgeCheck,
   Menu,
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from '../lib/router';
 import {
   getDateRangeForPreset,
   type DateRangeValue,

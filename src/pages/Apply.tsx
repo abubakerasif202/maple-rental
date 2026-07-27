@@ -18,7 +18,7 @@ import {
   Upload,
   User,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "../lib/router";
 import { useForm, type FieldPath } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
