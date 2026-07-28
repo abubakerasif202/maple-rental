@@ -186,4 +186,25 @@ describe('migration safety guards', () => {
     expect(migration).toContain('TO service_role');
     expect(migration).toContain("NOTIFY pgrst, 'reload schema'");
   });
+
+  it('stops new applications from inheriting a legacy identity value', () => {
+    const migration = fs.readFileSync(
+      path.resolve(
+        process.cwd(),
+        'supabase/migrations/20260728090000_fix_application_legacy_identity.sql'
+      ),
+      'utf8'
+    );
+
+    expect(migration).toContain('ALTER COLUMN legacy_id DROP IDENTITY IF EXISTS');
+    expect(migration).toContain('ALTER COLUMN legacy_id DROP NOT NULL');
+    expect(migration).toContain('UPDATE public.applications');
+    expect(migration).toContain("COALESCE(lower(email), '') NOT LIKE '%@example.invalid'");
+    expect(migration).toContain(
+      "COALESCE(lower(experience), '') NOT LIKE '%imported from live fleet data%'"
+    );
+    expect(migration).toContain("NOTIFY pgrst, 'reload schema'");
+    expect(migration).toContain('BEGIN;');
+    expect(migration).toContain('COMMIT;');
+  });
 });
