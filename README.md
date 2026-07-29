@@ -2,8 +2,12 @@
 
 Maple Rental is a single-service full-stack rental platform for weekly vehicle rentals. Vehicles are identified operationally by registration text rather than a separate fleet catalogue. The same Express process serves the API and the built React/Vite frontend in production.
 
-Client-ready deployment and release notes are documented in [docs/CLIENT_HANDOFF.md](docs/CLIENT_HANDOFF.md).
-Stripe operational setup and reset steps are documented in [docs/STRIPE_SETUP.md](docs/STRIPE_SETUP.md).
+Client-ready deployment notes are documented in [docs/CLIENT_HANDOFF.md](docs/CLIENT_HANDOFF.md).
+Canonical engineering contracts are in
+[payment lifecycle](docs/architecture/payment-lifecycle.md),
+[security model](docs/security-model.md), and
+[deployment safety](docs/deployment.md).
+Stripe operational setup and reset steps remain in [docs/STRIPE_SETUP.md](docs/STRIPE_SETUP.md).
 
 ## Executive Summary
 
@@ -50,8 +54,8 @@ Stripe operational setup and reset steps are documented in [docs/STRIPE_SETUP.md
   - `POST /api/stripe/vehicle-checkout-link`
   - `POST /api/stripe/vehicle-checkout-session`
 - The hosted checkout session remains Stripe Checkout in `subscription` mode with:
-  - one-time line items for bond and setup fees when approved
-  - a recurring rental line item for the ongoing weekly charge
+  - one recurring rental line item for the approved weekly charge
+  - no bond or setup-fee charge; bond handling remains manual
 - Stripe checkout recovery and state resolution use:
   - `GET /api/stripe/payment-context`
   - `GET /api/stripe/checkout-sessions/:sessionId`
@@ -215,7 +219,7 @@ What each command does:
 - `npm run stripe:handoff`: strict Stripe readiness gate for client handoff; requires a live key, valid webhook setup, and reports whether payment activation is automatic or manual-review
 - `npm run migrate:stripe-webhook-ledger`: apply the Stripe webhook event ledger migration when the production schema is missing the webhook processing columns
 - `npm run stripe:reset`: preview a destructive Stripe test-data reset
-- `npm run lint`: TypeScript type-check
+- `npm run lint`: TypeScript type-check plus ESLint with zero warnings
 - `npm run test`: Vitest suite
 - `npm run validate`: lint plus tests
 - `npm run build`: client plus server production build
@@ -292,7 +296,7 @@ What each command does:
 `paymentActivationMode` will be:
 
 - `transactional` when the selected direct database (`DATABASE_URL` first, then `SUPABASE_DB_URL`) is session-capable
-- `restricted` when the app is running without a session-capable direct Postgres connection; payment links and payment-only completion still work, but transactional locking is unavailable
+- `restricted` outside production when the app is running without a session-capable direct Postgres connection; production health fails closed with HTTP 503 in this state
 
 ## Security and Operational Notes
 

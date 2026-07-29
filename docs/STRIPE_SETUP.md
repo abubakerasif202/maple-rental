@@ -77,7 +77,8 @@ The server handler at `POST /api/stripe/webhook` reacts to:
 - `checkout.session.async_payment_failed` and `checkout.session.expired` — clear the application's `pending_checkout_session_id` when the terminated session still matches the current `payment_link_version`.
 - `invoice.payment_failed` — move rentals to `Overdue`.
 - `customer.subscription.updated` — reconcile rental status to `Active` or `Overdue`.
-- `customer.subscription.deleted` — move rentals to `Completed` or `Cancelled` and release the vehicle when the cancellation was explicit.
+- `customer.subscription.deleted` — update only a rental linked by exact
+  `stripe_subscription_id`; never mutate vehicle state or create a rental.
 
 Unsubscribed or unrecognised events are logged and acknowledged without side effects.
 

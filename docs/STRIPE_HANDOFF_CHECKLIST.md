@@ -79,14 +79,17 @@ npm run migrate:stripe-webhook-ledger
 }
 ```
 
-If the deployment intentionally runs without a session-capable Postgres connection, expect `paymentActivationMode: "restricted"`; payment-only completion remains available but loses transactional locking.
+Production must not intentionally run without a session-capable Postgres
+connection. `paymentActivationMode: "restricted"` is a failed production handoff
+and `/api/health` must return HTTP 503.
 
 - Payment links open the correct public `/checkout/:applicationId#checkout_token=...` URL.
 - Successful Checkout redirects back to `/success` on the same domain.
 - A successful Checkout marks the application `Paid` only and clears `pending_checkout_session_id`.
 - No Checkout completion creates or updates rentals or cars.
 - Failed recurring invoices move rentals to `Overdue`.
-- Subscription deletion updates the rental state and releases the vehicle when appropriate.
+- Subscription events may update only an existing rental linked by exact
+  `stripe_subscription_id`; they do not mutate vehicle state or create a rental.
 
 ## Test before go-live
 

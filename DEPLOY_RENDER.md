@@ -1,5 +1,8 @@
 # Deploy Maple Rental to Render
 
+Follow [`docs/deployment.md`](docs/deployment.md) for authorization, migration,
+release-evidence, stop, and recovery requirements. This file describes Render setup.
+
 ## Goal
 
 Deploy the application as a single Render web service where:
@@ -145,7 +148,9 @@ A healthy response should look like:
 }
 ```
 
-If `paymentActivationMode` is `restricted`, the service is up but the selected direct Postgres connection is missing or not session-capable.
+If `paymentActivationMode` is `restricted`, local/non-production payment processing
+lacks transactional locking. In production, `/api/health` returns HTTP 503 for this
+state; do not send traffic or declare the release healthy.
 
 ## Authenticated admin smoke test
 
