@@ -15,7 +15,8 @@ import {
   Upload,
 } from "lucide-react";
 
-import * as api from "../../../lib/api";
+import * as fleetImportApi from "../../../lib/fleetImportApi";
+import { fetchRentals } from "../../../lib/api";
 import { getApiErrorMessage } from "../../../lib/errorHandling";
 import AccessibleDialog from "../AccessibleDialog";
 
@@ -55,8 +56,8 @@ export default function FleetImportsTab() {
     text: string;
   } | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [editingRow, setEditingRow] = useState<api.FleetImportRow | null>(null);
-  const [matchingRow, setMatchingRow] = useState<api.FleetImportRow | null>(null);
+  const [editingRow, setEditingRow] = useState<fleetImportApi.FleetImportRow | null>(null);
+  const [matchingRow, setMatchingRow] = useState<fleetImportApi.FleetImportRow | null>(null);
   const [editDriverName, setEditDriverName] = useState("");
   const [editWeeklyRate, setEditWeeklyRate] = useState("");
   const [editNotes, setEditNotes] = useState("");
@@ -70,7 +71,7 @@ export default function FleetImportsTab() {
   const history = useQuery({
     queryKey: ["fleet-imports", historyPage, historySearch],
     queryFn: ({ signal }) =>
-      api.fetchFleetImports(
+      fleetImportApi.fetchFleetImports(
         { page: historyPage, pageSize: 25, search: historySearch },
         signal,
       ),
@@ -78,13 +79,13 @@ export default function FleetImportsTab() {
   });
   const summary = useQuery({
     queryKey: ["fleet-import", selectedImportId],
-    queryFn: ({ signal }) => api.fetchFleetImport(selectedImportId!, signal),
+    queryFn: ({ signal }) => fleetImportApi.fetchFleetImport(selectedImportId!, signal),
     enabled: Boolean(selectedImportId),
   });
   const rows = useQuery({
     queryKey: ["fleet-import-rows", selectedImportId, page, search, status],
     queryFn: ({ signal }) =>
-      api.fetchFleetImportRows(
+      fleetImportApi.fetchFleetImportRows(
         selectedImportId!,
         { page, pageSize: 25, search, status: status || undefined },
         signal,
@@ -94,12 +95,12 @@ export default function FleetImportsTab() {
   });
   const audit = useQuery({
     queryKey: ["fleet-import-audit", selectedImportId, auditPage],
-    queryFn: ({ signal }) => api.fetchFleetImportAudit(selectedImportId!, auditPage, signal),
+    queryFn: ({ signal }) => fleetImportApi.fetchFleetImportAudit(selectedImportId!, auditPage, signal),
     enabled: Boolean(selectedImportId),
   });
   const rentalMatches = useQuery({
     queryKey: ["fleet-rental-matches", matchingRow?.id, rentalPage, rentalSearch],
-    queryFn: ({ signal }) => api.fetchRentals({ page: rentalPage, pageSize: 10, search: rentalSearch || matchingRow?.vehicle_registration_original }, signal),
+    queryFn: ({ signal }) => fetchRentals({ page: rentalPage, pageSize: 10, search: rentalSearch || matchingRow?.vehicle_registration_original }, signal),
     enabled: Boolean(matchingRow),
   });
   const invalidate = async () => {
@@ -117,7 +118,7 @@ export default function FleetImportsTab() {
     ]);
   };
   const uploadMutation = useMutation({
-    mutationFn: api.uploadFleetImport,
+    mutationFn: fleetImportApi.uploadFleetImport,
     onSuccess: async (created) => {
       await invalidate();
       setSelectedImportId(created.id);
@@ -133,7 +134,7 @@ export default function FleetImportsTab() {
       }),
   });
   const dryRunMutation = useMutation({
-    mutationFn: () => api.dryRunFleetImport(selectedImportId!, [...selected]),
+    mutationFn: () => fleetImportApi.dryRunFleetImport(selectedImportId!, [...selected]),
     onSuccess: (result) => {
       setDryRun(result);
       setMessage(
@@ -156,7 +157,7 @@ export default function FleetImportsTab() {
   });
   const applyMutation = useMutation({
     mutationFn: () =>
-      api.applyFleetImport(selectedImportId!, [...selected], idempotencyKey),
+      fleetImportApi.applyFleetImport(selectedImportId!, [...selected], idempotencyKey),
     onSuccess: async () => {
       setConfirmApply(false);
       setSelected(new Set());
@@ -176,7 +177,7 @@ export default function FleetImportsTab() {
   });
   const rejectMutation = useMutation({
     mutationFn: () =>
-      api.rejectFleetImportRows(
+      fleetImportApi.rejectFleetImportRows(
         selectedImportId!,
         [...selected],
         rejectReason,
@@ -197,7 +198,7 @@ export default function FleetImportsTab() {
   });
   const acknowledgeMutation = useMutation({
     mutationFn: (rowId: string) =>
-      api.updateFleetImportRow(selectedImportId!, rowId, {
+      fleetImportApi.updateFleetImportRow(selectedImportId!, rowId, {
         acknowledgeWarnings: true,
       }),
     onSuccess: invalidate,
@@ -210,7 +211,7 @@ export default function FleetImportsTab() {
   const editMutation = useMutation({
     mutationFn: async () => {
       if (!editingRow) throw new Error("No staged row selected.");
-      await api.updateFleetImportRow(selectedImportId!, editingRow.id, {
+      await fleetImportApi.updateFleetImportRow(selectedImportId!, editingRow.id, {
         driverName: editDriverName.trim() || null,
         sourceNotes: editNotes.trim() || null,
         weeklyRate: Number(editWeeklyRate),
@@ -230,7 +231,7 @@ export default function FleetImportsTab() {
       }),
   });
   const matchMutation = useMutation({
-    mutationFn: (rentalId: number | null) => api.matchFleetImportRow(selectedImportId!, matchingRow!.id, rentalId),
+    mutationFn: (rentalId: number | null) => fleetImportApi.matchFleetImportRow(selectedImportId!, matchingRow!.id, rentalId),
     onSuccess: async (_row, rentalId) => {
       setMatchingRow(null);
       setSelected(new Set());
@@ -241,12 +242,12 @@ export default function FleetImportsTab() {
     onError: (error) => setMessage({ type: "error", text: getApiErrorMessage(error, "Rental matching failed.") }),
   });
   const revalidateMutation = useMutation({
-    mutationFn: (rowId: string) => api.revalidateFleetImportRow(selectedImportId!, rowId),
+    mutationFn: (rowId: string) => fleetImportApi.revalidateFleetImportRow(selectedImportId!, rowId),
     onSuccess: async () => { setSelected(new Set()); setDryRun(null); await invalidate(); setMessage({ type: "success", text: "Row revalidated." }); },
     onError: (error) => setMessage({ type: "error", text: getApiErrorMessage(error, "Revalidation failed.") }),
   });
   const cancelMutation = useMutation({
-    mutationFn: () => api.cancelFleetImport(selectedImportId!),
+    mutationFn: () => fleetImportApi.cancelFleetImport(selectedImportId!),
     onSuccess: async () => {
       await invalidate();
       setSelectedImportId(null);
@@ -278,7 +279,7 @@ export default function FleetImportsTab() {
     if (isDownloading) return;
     setIsDownloading(true);
     try {
-      const blob = await api.downloadFleetImportRejectedRows(selectedImportId!);
+      const blob = await fleetImportApi.downloadFleetImportRejectedRows(selectedImportId!);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -298,13 +299,13 @@ export default function FleetImportsTab() {
       setIsDownloading(false);
     }
   };
-  const openRowEditor = (row: api.FleetImportRow) => {
+  const openRowEditor = (row: fleetImportApi.FleetImportRow) => {
     setEditingRow(row);
     setEditDriverName(row.driver_name_original || "");
     setEditWeeklyRate(String(row.weekly_rate));
     setEditNotes(row.source_notes || "");
   };
-  const openMatcher = (row: api.FleetImportRow) => {
+  const openMatcher = (row: fleetImportApi.FleetImportRow) => {
     setMatchingRow(row);
     setRentalSearch(row.vehicle_registration_original);
     setRentalPage(1);
