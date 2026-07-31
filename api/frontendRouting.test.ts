@@ -22,17 +22,25 @@ const createRequest = ({
 
 describe('shouldServeSpaEntry', () => {
   it('allows known client routes', () => {
+    const adminRoutes = [
+      '/admin',
+      '/admin/dashboard',
+      '/admin/applications',
+      '/admin/rentals',
+      '/admin/customers',
+      '/admin/invoices',
+      '/admin/financials',
+      '/admin/agreements',
+      '/admin/toll-notices',
+      '/admin/maintenance',
+      '/admin/fleet-imports',
+    ];
+
     expect(shouldServeSpaEntry(createRequest({ path: '/' }))).toBe(true);
     expect(shouldServeSpaEntry(createRequest({ path: '/cars/1' }))).toBe(true);
-    expect(
-      shouldServeSpaEntry(createRequest({ path: '/admin/dashboard' }))
-    ).toBe(true);
-    expect(
-      shouldServeSpaEntry(createRequest({ path: '/admin/toll-notices' }))
-    ).toBe(true);
-    expect(
-      shouldServeSpaEntry(createRequest({ path: '/admin/agreements' }))
-    ).toBe(true);
+    adminRoutes.forEach((path) => {
+      expect(shouldServeSpaEntry(createRequest({ path }))).toBe(true);
+    });
     expect(shouldServeSpaEntry(createRequest({ path: '/missing-page' }))).toBe(true);
   });
 

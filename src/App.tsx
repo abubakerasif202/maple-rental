@@ -60,9 +60,17 @@ function AppShell() {
               <Route path="/apply" element={<Apply />} />
               <Route path="/success" element={<Success />} />
               <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/applications" element={<AdminDashboard />} />
+              <Route path="/admin/rentals" element={<AdminDashboard />} />
+              <Route path="/admin/customers" element={<AdminDashboard />} />
+              <Route path="/admin/invoices" element={<AdminDashboard />} />
+              <Route path="/admin/financials" element={<AdminDashboard />} />
               <Route path="/admin/agreements" element={<AdminDashboard />} />
               <Route path="/admin/toll-notices" element={<AdminDashboard />} />
+              <Route path="/admin/maintenance" element={<AdminDashboard />} />
+              <Route path="/admin/fleet-imports" element={<AdminDashboard />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
