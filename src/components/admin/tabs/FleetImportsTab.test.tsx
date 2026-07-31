@@ -10,9 +10,20 @@ import { mapleFluentTheme } from '../../../theme/mapleFluentTheme';
 import FleetImportsTab from './FleetImportsTab';
 
 const apiMocks = vi.hoisted(() => ({ fetchFleetImports: vi.fn() }));
-vi.mock('../../../lib/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../lib/api')>()),
+vi.mock('../../../lib/fleetImportApi', () => ({
+  applyFleetImport: vi.fn(),
+  cancelFleetImport: vi.fn(),
+  downloadFleetImportRejectedRows: vi.fn(),
+  dryRunFleetImport: vi.fn(),
+  fetchFleetImport: vi.fn(),
+  fetchFleetImportAudit: vi.fn(),
+  fetchFleetImportRows: vi.fn(),
   fetchFleetImports: apiMocks.fetchFleetImports,
+  matchFleetImportRow: vi.fn(),
+  rejectFleetImportRows: vi.fn(),
+  revalidateFleetImportRow: vi.fn(),
+  updateFleetImportRow: vi.fn(),
+  uploadFleetImport: vi.fn(),
 }));
 
 const renderTab = () => {
