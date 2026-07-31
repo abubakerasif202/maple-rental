@@ -61,4 +61,10 @@ describe('Sidebar accessibility', () => {
     ).toBe('page');
     expect(document.activeElement).toBe(screen.getByRole('link', { name: /MAPLE/i }));
   });
+
+  it('exposes the fleet import workflow as a labelled navigation action', () => {
+    renderSidebar(true, 'fleet-imports');
+    const button = screen.getByRole('button', { name: 'Fleet Imports' });
+    expect(button.getAttribute('aria-current')).toBe('page');
+  });
 });

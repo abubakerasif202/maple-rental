@@ -36,6 +36,7 @@ import applicationRoutes from './routes/applications.js';
 import authRoutes from './routes/auth.js';
 import customerRoutes from './routes/customers.js';
 import financialRoutes from './routes/financials.js';
+import fleetImportRoutes from './routes/fleetImports.js';
 import indexNowAdminRoutes from './routes/indexNowAdmin.js';
 import inquiryRoutes from './routes/inquiries.js';
 import invoiceRoutes from './routes/invoices.js';
@@ -569,6 +570,7 @@ const registerCoreRoutes = (app: express.Express) => {
   app.use('/api/customers', customerRoutes);
   app.use('/api/invoices', invoiceRoutes);
   app.use('/api/admin/manual-invoices', manualInvoiceRoutes);
+  app.use('/api/admin/fleet-imports', fleetImportRoutes);
   app.use('/api/admin/maintenance', adminMaintenanceRoutes);
   app.use('/admin', indexNowAdminRoutes);
 

@@ -25,6 +25,7 @@ vi.mock('../components/admin/Sidebar', () => ({
       <button type="button" onClick={() => setActiveTab('applications')}>Applications</button>
       <button type="button" onClick={() => setActiveTab('rentals')}>Rentals</button>
       <button type="button" onClick={() => setActiveTab('invoices')}>Invoices</button>
+      <button type="button" onClick={() => setActiveTab('fleet-imports')}>Fleet Imports</button>
     </nav>
   ),
 }));
@@ -96,6 +97,10 @@ vi.mock('../components/admin/tabs/InvoicesTab', () => ({
   ),
 }));
 
+vi.mock('../components/admin/tabs/FleetImportsTab', () => ({
+  default: () => <section>Fleet Register Import Workspace</section>,
+}));
+
 const pageDataset = (page: number, totalPages: number) => ({
   available: true,
   items: [],
@@ -106,7 +111,7 @@ const pageDataset = (page: number, totalPages: number) => ({
   totalPages,
 });
 
-const renderDashboard = () => {
+const renderDashboard = (initialPath = '/admin/dashboard') => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -120,7 +125,7 @@ const renderDashboard = () => {
     <FluentProvider theme={mapleFluentTheme}>
       <Toaster toasterId="maple-admin-toaster" />
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/admin/dashboard']}>
+        <MemoryRouter initialEntries={[initialPath]}>
           <AdminDashboard />
         </MemoryRouter>
       </QueryClientProvider>
@@ -136,6 +141,11 @@ afterEach(() => {
 });
 
 describe('Admin Dashboard server-corrected pagination', () => {
+  it('restores a directly linked admin section instead of resetting to overview', async () => {
+    apiMocks.fetchDashboardSummary.mockResolvedValue({});
+    renderDashboard('/admin/fleet-imports');
+    expect(await screen.findByText('Fleet Register Import Workspace')).not.toBeNull();
+  });
   it('reconciles an invalid Applications page without a request loop', async () => {
     let resolvePageTwo: (dataset: ReturnType<typeof pageDataset>) => void = () => undefined;
     const pageTwoResponse = new Promise<ReturnType<typeof pageDataset>>((resolve) => {

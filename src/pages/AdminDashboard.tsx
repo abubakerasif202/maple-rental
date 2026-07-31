@@ -66,8 +66,14 @@ const InvoicesTab = lazy(() => import('../components/admin/tabs/InvoicesTab'));
 const AgreementsTab = lazy(() => import('../components/admin/tabs/AgreementsTab'));
 const TollStatDecTab = lazy(() => import('../components/admin/tabs/TollStatDecTab'));
 const MaintenanceTab = lazy(() => import('../components/admin/tabs/MaintenanceTab'));
+const FleetImportsTab = lazy(() => import('../components/admin/tabs/FleetImportsTab'));
 
 const OPERATIONAL_PAGE_SIZE = 25;
+const adminTabs = ['dashboard', 'applications', 'rentals', 'customers', 'invoices', 'financials', 'agreements', 'toll-notices', 'maintenance', 'fleet-imports'] as const;
+const getAdminTabFromPath = (pathname: string) => {
+  const candidate = pathname.match(/^\/admin\/([^/]+)$/)?.[1];
+  return adminTabs.find((tab) => tab === candidate) || 'dashboard';
+};
 
 const bondStatusLabels = {
   to_collect: 'To be collected by admin',
@@ -99,6 +105,7 @@ const adminTabLabels: Record<string, string> = {
   rentals: 'Rentals',
   'toll-notices': 'Toll Notices',
   maintenance: 'Maintenance',
+  'fleet-imports': 'Fleet Register Import',
 };
 
 const copyTextToClipboard = async (value: string) => {
@@ -145,7 +152,7 @@ export default function AdminDashboard() {
     queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
   const { dispatchToast } = useToastController('maple-admin-toaster');
   const notificationTimeoutRef = useRef<number | null>(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState<string>(() => getAdminTabFromPath(location.pathname));
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
@@ -202,7 +209,9 @@ export default function AdminDashboard() {
 
     if (location.pathname === '/admin/toll-notices') {
       setActiveTab('toll-notices');
+      return;
     }
+    setActiveTab(getAdminTabFromPath(location.pathname));
   }, [location.pathname]);
 
   const openTollNotices = (searchValue = '') => {
@@ -216,9 +225,7 @@ export default function AdminDashboard() {
     navigate(
       tab === 'toll-notices'
         ? '/admin/toll-notices'
-        : tab === 'agreements'
-          ? '/admin/agreements'
-          : '/admin/dashboard'
+        : `/admin/${tab}`
     );
   };
   const debouncedApplicationSearch = useDebouncedValue(applicationSearch.trim());
@@ -1145,6 +1152,10 @@ export default function AdminDashboard() {
 
           {activeTab === 'maintenance' && (
             <MaintenanceTab />
+          )}
+
+          {activeTab === 'fleet-imports' && (
+            <FleetImportsTab />
           )}
         </AnimatePresence>
         </Suspense>

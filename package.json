@@ -59,6 +59,7 @@
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.71.2",
     "react-simple-code-editor": "^0.14.1",
+    "read-excel-file": "^9.3.5",
     "recharts": "^3.8.1",
     "resend": "^6.9.3",
     "stripe": "^22.3.1",

@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   DollarSign,
+  Sheet,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -36,6 +37,7 @@ const menuItems = [
   { id: 'agreements', icon: FileText, label: 'Agreements' },
   { id: 'toll-notices', icon: ScrollText, label: 'Toll Notices' },
   { id: 'maintenance', icon: Settings, label: 'Maintenance' },
+  { id: 'fleet-imports', icon: Sheet, label: 'Fleet Imports' },
 ];
 
 export default function Sidebar({

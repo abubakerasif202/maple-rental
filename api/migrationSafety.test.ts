@@ -207,4 +207,50 @@ describe('migration safety guards', () => {
     expect(migration).toContain('BEGIN;');
     expect(migration).toContain('COMMIT;');
   });
+
+  it('keeps fleet imports staged, private, indexed and idempotent', () => {
+    const migration = fs.readFileSync(
+      path.resolve(process.cwd(), 'supabase/migrations/20260731100000_add_fleet_register_imports.sql'),
+      'utf8'
+    );
+    expect(migration).toContain('CREATE TABLE public.fleet_imports');
+    expect(migration).toContain('CREATE TABLE public.fleet_import_rows');
+    expect(migration).toContain('CREATE TABLE public.fleet_import_apply_operations');
+    expect(migration).toContain('file_checksum TEXT NOT NULL UNIQUE');
+    expect(migration).toContain('UNIQUE (import_id, source_row_number)');
+    expect(migration).not.toContain('UNIQUE (import_id, vehicle_registration_normalized)');
+    expect(migration).toContain('CREATE INDEX idx_fleet_import_rows_import_registration ON public.fleet_import_rows (import_id, vehicle_registration_normalized)');
+    expect(migration).toContain('UNIQUE (import_id, idempotency_key)');
+    for (const table of ['fleet_imports', 'fleet_import_rows', 'fleet_import_apply_operations']) {
+      expect(migration).toContain(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`);
+    }
+    expect(migration).toContain('REVOKE ALL ON public.fleet_imports, public.fleet_import_rows, public.fleet_import_apply_operations FROM anon, authenticated');
+    expect(migration).toContain('GRANT ALL ON public.fleet_imports, public.fleet_import_rows, public.fleet_import_apply_operations TO service_role');
+    expect(migration).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*fleet_import[^;]*TO\s+(?:anon|authenticated)/i);
+    expect(migration).toContain('BEGIN;');
+    expect(migration).toContain('COMMIT;');
+  });
+
+  it('applies the shared trusted-origin guard to fleet-import routes', () => {
+    const route = fs.readFileSync(
+      path.resolve(process.cwd(), 'api/routes/fleetImports.ts'),
+      'utf8'
+    );
+    expect(route).toContain("import { authenticateAdmin, requireTrustedAdminWriteOrigin } from '../middleware/auth.js';");
+    expect(route).toContain('router.use(authenticateAdmin, requireTrustedAdminWriteOrigin);');
+    expect(route).toContain('driver_name_original=CASE WHEN $3 THEN $4 ELSE driver_name_original END');
+    expect(route).toContain('driver_name_normalized=CASE WHEN $3 THEN $5 ELSE driver_name_normalized END');
+  });
+
+  it('keeps fleet import application payment-only and limits rental writes to weekly rate', () => {
+    const route = fs.readFileSync(
+      path.resolve(process.cwd(), 'api/routes/fleetImports.ts'),
+      'utf8'
+    );
+    expect(route).not.toMatch(/UPDATE\s+public\.applications/i);
+    expect(route).not.toMatch(/INSERT\s+INTO\s+public\.rentals/i);
+    expect(route).not.toMatch(/UPDATE\s+public\.rentals\s+SET[^;]*(?:status|vehicle_registration)/i);
+    expect(route).not.toMatch(/stripe|paymentActivation|approved_vehicle|car_id|carId/i);
+    expect(route).toContain('UPDATE public.rentals SET weekly_price=$1, updated_at=now() WHERE id=$2');
+  });
 });
