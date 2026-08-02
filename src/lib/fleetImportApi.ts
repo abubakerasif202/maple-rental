@@ -65,12 +65,16 @@ const fleetImportSummarySchema = z.object({
   total_weekly_rate: z.union([z.number(), z.string()]).optional(), matched_rows: z.number().optional(),
   unmatched_rows: z.number().optional(), proposed_increases: z.number().optional(), proposed_decreases: z.number().optional(),
 }).passthrough();
+const positiveSafeIntegerSchema = z.union([
+  z.number(),
+  z.string().regex(/^\d+$/),
+]).transform(Number).pipe(z.number().int().positive().max(Number.MAX_SAFE_INTEGER));
 const fleetImportRowSchema = z.object({
   id: z.string().uuid(), source_row_number: z.number(), driver_name_original: z.string().nullable(),
   vehicle_registration_original: z.string(), make_original: z.string(), model_original: z.string(),
   weekly_rate: z.union([z.number(), z.string()]), snapshot_date: z.string(), source_notes: z.string().nullable(),
   validation_status: z.enum(['ready', 'needs_review']), validation_errors: z.array(z.string()),
-  validation_warnings: z.array(z.string()), matched_rental_id: z.number().nullable(),
+  validation_warnings: z.array(z.string()), matched_rental_id: positiveSafeIntegerSchema.nullable(),
   existing_registration: z.string().nullable(), existing_weekly_rate: z.union([z.number(), z.string()]).nullable(),
   apply_status: z.enum(['pending', 'applied', 'rejected', 'conflict']),
 }).passthrough();

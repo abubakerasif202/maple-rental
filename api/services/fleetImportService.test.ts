@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import type { PoolClient } from 'pg';
+import { describe, expect, it, vi } from 'vitest';
 
+import { revalidateFleetRow } from '../routes/fleetImports.js';
 import {
   assertFleetRentalRegistrationMatch,
   assertMutableFleetImportRow,
@@ -144,6 +146,88 @@ describe('fleet register parser', () => {
     expect(result.validationStatus).toBe('needs_review');
   });
 
+  it('treats a stored Date as equal to the staged snapshot date during revalidation', async () => {
+    const row = {
+      id: '22222222-2222-4222-8222-222222222222',
+      import_id: '11111111-1111-4111-8111-111111111111',
+      import_status: 'ready',
+      apply_status: 'pending',
+      driver_name_original: 'Sam Driver',
+      vehicle_registration_original: 'ABC123',
+      vehicle_registration_normalized: 'ABC123',
+      make_original: 'Toyota',
+      model_original: 'Camry',
+      weekly_rate: 250,
+      snapshot_date: '2026-09-30',
+      source_notes: null,
+      review_acknowledged_at: null,
+      has_duplicate_registration: false,
+    };
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ ...row, import_snapshot_date: new Date('2026-09-30T00:00:00.000Z') }] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [row] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [row] });
+
+    await revalidateFleetRow(queryClient(query), row.import_id, row.id);
+
+    const updateParameters = query.mock.calls[2][1] as unknown[];
+    expect(JSON.parse(updateParameters[2] as string)).toEqual([]);
+  });
+
+  it('still rejects a genuinely different import snapshot date during revalidation', async () => {
+    const row = {
+      id: '22222222-2222-4222-8222-222222222222',
+      import_id: '11111111-1111-4111-8111-111111111111',
+      import_status: 'ready',
+      apply_status: 'pending',
+      driver_name_original: 'Sam Driver',
+      vehicle_registration_original: 'ABC123',
+      vehicle_registration_normalized: 'ABC123',
+      make_original: 'Toyota',
+      model_original: 'Camry',
+      weekly_rate: 250,
+      snapshot_date: '2026-09-29',
+      source_notes: null,
+      review_acknowledged_at: null,
+      has_duplicate_registration: false,
+    };
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ ...row, import_snapshot_date: new Date('2026-09-30T00:00:00.000Z') }] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [row] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [row] });
+
+    await revalidateFleetRow(queryClient(query), row.import_id, row.id);
+
+    const updateParameters = query.mock.calls[2][1] as unknown[];
+    expect(JSON.parse(updateParameters[2] as string)).toContain('Snapshot date must match the import snapshot date.');
+  });
+
+  it('fails closed when the stored import snapshot date is invalid', async () => {
+    const row = {
+      id: '22222222-2222-4222-8222-222222222222',
+      import_id: '11111111-1111-4111-8111-111111111111',
+      import_status: 'ready',
+      apply_status: 'pending',
+      driver_name_original: 'Sam Driver',
+      vehicle_registration_original: 'ABC123',
+      vehicle_registration_normalized: 'ABC123',
+      make_original: 'Toyota',
+      model_original: 'Camry',
+      weekly_rate: 250,
+      snapshot_date: '2026-09-30',
+      source_notes: null,
+      review_acknowledged_at: null,
+      has_duplicate_registration: false,
+    };
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ ...row, import_snapshot_date: 'invalid-date' }] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [row] });
+
+    await expect(revalidateFleetRow(queryClient(query), row.import_id, row.id))
+      .rejects.toMatchObject({ message: 'Stored fleet import snapshot date is invalid.', status: 500 });
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
   it('does not allow acknowledgement or dry-run to bypass an unresolved duplicate', () => {
     const validation = validateFleetStagedRow({
       driver_name_original: 'Sam Driver', vehicle_registration_original: 'AB12',
@@ -218,3 +302,5 @@ describe('fleet register parser', () => {
     })).rejects.toThrow('must not exceed 1000 data rows');
   });
 });
+
+const queryClient = (query: ReturnType<typeof vi.fn>) => ({ query }) as unknown as PoolClient;

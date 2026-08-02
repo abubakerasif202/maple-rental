@@ -15,6 +15,7 @@ import {
   normalizeFleetRegistration,
   getFleetDryRunValidationConflict,
   parseFleetRegister,
+  toDateOnly,
   toRejectedRowsCsv,
   validateFleetStagedRow,
 } from '../services/fleetImportService.js';
@@ -60,7 +61,7 @@ const lockMutableFleetRow = async (client: import('pg').PoolClient, importId: st
   return result.rows[0];
 };
 
-const revalidateFleetRow = async (
+export const revalidateFleetRow = async (
   client: import('pg').PoolClient,
   importId: string,
   rowId: string,
@@ -82,7 +83,9 @@ const revalidateFleetRow = async (
   );
   if (!result.rowCount) throw fail('Fleet import row not found.', 404);
   const row = result.rows[0];
-  const validation = validateFleetStagedRow(row, row.has_duplicate_registration, String(mutableRow.import_snapshot_date).slice(0, 10));
+  const importSnapshotDate = toDateOnly(mutableRow.import_snapshot_date);
+  if (!importSnapshotDate) throw fail('Stored fleet import snapshot date is invalid.', 500);
+  const validation = validateFleetStagedRow(row, row.has_duplicate_registration, importSnapshotDate);
   const saved = await client.query(
     `UPDATE public.fleet_import_rows SET validation_errors=$3::jsonb,
       validation_warnings=$4::jsonb,validation_status=$5,updated_at=now()
