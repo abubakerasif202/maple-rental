@@ -324,6 +324,17 @@ export const persistVerifiedStripeRelationship = async (
     );
   }
 
+  // An operational customer represents a real paying Maple customer. Verified
+  // Stripe identity alone is NOT sufficient to create one: a subscription can
+  // exist against an application that never reached verified payment (for
+  // example an Approved application whose subscription was later canceled).
+  // Recording identity above is safe bookkeeping; asserting an operational
+  // customer is not. The payment-only fulfilment path sets 'Paid' before it
+  // calls this function, so this gate never blocks a genuine paid checkout.
+  if (!PAID_APPLICATION_STATUSES.has(String(application.status))) {
+    return { customerId: null };
+  }
+
   const customerId = await resolveOperationalCustomer(application, input.customerId);
   return { customerId };
 };

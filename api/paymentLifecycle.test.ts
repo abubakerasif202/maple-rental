@@ -339,6 +339,48 @@ describe('persistVerifiedStripeRelationship', () => {
 
     expect(tables.customers).toHaveLength(0);
   });
+
+  it('does not create an operational customer for an Approved application that is not yet Paid', async () => {
+    seedPaidApplication({ status: 'Approved' });
+
+    const result = await persistVerifiedStripeRelationship(verifiedRelationship());
+
+    expect(result).toEqual({ customerId: null });
+    expect(tables.customers).toHaveLength(0);
+    expect(writeLog.some((entry) => entry.table === 'customers')).toBe(false);
+  });
+
+  it('still records verified Stripe identity for a not-yet-Paid application', async () => {
+    seedPaidApplication({ status: 'Approved' });
+
+    await persistVerifiedStripeRelationship(verifiedRelationship());
+
+    expect(tables.applications[0]).toMatchObject({
+      stripe_customer_id: CUSTOMER_ID,
+      stripe_subscription_id: SUBSCRIPTION_ID,
+    });
+  });
+
+  it('creates no operational customer for any non-Paid application status', async () => {
+    for (const status of ['Approved', 'Payment Review', 'Rejected']) {
+      harness.reset();
+      seedPaidApplication({ status });
+
+      const result = await persistVerifiedStripeRelationship(verifiedRelationship());
+
+      expect(result).toEqual({ customerId: null });
+      expect(tables.customers).toHaveLength(0);
+    }
+  });
+
+  it('never creates a rental for a not-yet-Paid application carrying Stripe identity', async () => {
+    seedPaidApplication({ status: 'Approved' });
+
+    await persistVerifiedStripeRelationship(verifiedRelationship());
+
+    expect(tables.rentals).toHaveLength(0);
+    expect(writeLog.some((entry) => entry.table === 'rentals')).toBe(false);
+  });
 });
 
 describe('persistCheckoutRelationshipFromSession', () => {

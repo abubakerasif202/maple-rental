@@ -227,7 +227,15 @@ const run = async () => {
     let linked = alreadyLinked;
     // Ambiguous and missing relationships already returned above, so anything
     // reaching here has a single trusted application/customer resolution.
-    if (shouldApply && !alreadyLinked) {
+    //
+    // A subscription in an unsafe state (canceled, unpaid, incomplete, paused)
+    // is not a live operational relationship, so reconciliation records nothing
+    // for it. Linking it would surface a dead subscription in the admin
+    // activation queue, and for an application that never reached verified
+    // payment it would assert an operational customer that does not exist.
+    // Such records are reported for manual review instead.
+    const writable = classification !== 'unsafe_subscription_state';
+    if (shouldApply && !alreadyLinked && writable) {
       // --apply links identity only. It never activates a rental.
       try {
         await persistVerifiedStripeRelationship({
