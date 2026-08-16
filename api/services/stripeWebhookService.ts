@@ -8,7 +8,7 @@ import {
   handleVehicleCheckoutCompletion,
 } from '../paymentActivation.js';
 import { getTodayInAustralia } from '../../shared/applicationSubmission.js';
-import { persistVerifiedStripeRelationship, syncStripeInvoice } from '../paymentLifecycle.js';
+import { syncStripeInvoice } from '../paymentLifecycle.js';
 
 const getStripe = () => getStripeClient();
 
@@ -763,10 +763,14 @@ export const processStripeWebhookWorkItem = async (
         const subscriptionId = typeof subscriptionReference === 'string' ? subscriptionReference : subscriptionReference?.id || null;
         if (subscriptionId) {
           const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
-          const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null;
-          if (subscription.metadata?.application_id && customerId) {
-            await persistVerifiedStripeRelationship({ applicationId: subscription.metadata.application_id, customerId, subscriptionId });
-          }
+          const customerId =
+            typeof subscription.customer === 'string'
+              ? subscription.customer
+              : subscription.customer?.id || null;
+          // A failed payment is not evidence of a legitimate paid relationship,
+          // so it must never create an operational customer. The invoice is
+          // mirrored only when the customer was already linked by a verified
+          // Checkout completion.
           await syncStripeInvoice(invoice, customerId, subscriptionId);
           await updateRentalBySubscriptionIdentityOrSkip(
             subscriptionId,
@@ -782,11 +786,10 @@ export const processStripeWebhookWorkItem = async (
         const subscriptionId = typeof subscriptionReference === 'string' ? subscriptionReference : subscriptionReference?.id || null;
         if (subscriptionId) {
           const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
-          const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null;
-          if (subscription.metadata?.application_id && customerId) {
-            await persistVerifiedStripeRelationship({ applicationId: subscription.metadata.application_id, customerId, subscriptionId });
-          }
-          await syncStripeInvoice(invoice, customerId, subscriptionId);
+          const customerId =
+            typeof subscription.customer === 'string'
+              ? subscription.customer
+              : subscription.customer?.id || null;
           if (
             subscription.metadata.checkout_kind === 'vehicle' &&
             Number(invoice.amount_paid || 0) > 0
@@ -865,6 +868,9 @@ export const processStripeWebhookWorkItem = async (
             }
 
             fulfillmentOutcome = await handleVehicleCheckoutCompletion(session);
+            // Mirrored after fulfilment so the verified operational customer
+            // already exists and the invoice can be linked to it.
+            await syncStripeInvoice(invoice, customerId, subscriptionId);
           }
           if (subscription.status === 'active') {
             await updateRentalBySubscriptionIdentityOrSkip(
@@ -878,10 +884,9 @@ export const processStripeWebhookWorkItem = async (
       }
       case 'customer.subscription.created': {
         const subscription = event.data.object as Stripe.Subscription;
-        const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null;
-        if (subscription.metadata?.application_id && customerId) {
-          await persistVerifiedStripeRelationship({ applicationId: subscription.metadata.application_id, customerId, subscriptionId: subscription.id });
-        }
+        // Subscription creation is not proof of payment: an `incomplete`
+        // subscription may never pay. Operational customers are created only
+        // by verified Checkout fulfilment, so nothing is persisted here.
         if (subscription.status === 'active') {
           await updateRentalBySubscriptionIdentityOrSkip(
             subscription.id,
@@ -908,10 +913,8 @@ export const processStripeWebhookWorkItem = async (
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription;
         const subscriptionId = subscription.id;
-        const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null;
-        if (subscription.metadata?.application_id && customerId) {
-          await persistVerifiedStripeRelationship({ applicationId: subscription.metadata.application_id, customerId, subscriptionId });
-        }
+        // Status transitions never establish identity. `past_due` and `unpaid`
+        // in particular must not create an operational customer.
         const status = subscription.status;
         if (status === 'past_due' || status === 'unpaid') {
           await updateRentalBySubscriptionIdentityOrSkip(

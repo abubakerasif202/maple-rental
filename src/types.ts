@@ -42,11 +42,29 @@ export interface Rental {
   car_name?: string;
   start_date: string;
   weekly_price: number;
-  status: 'Active' | 'Completed' | 'Cancelled' | 'Overdue' | 'Paid — Awaiting Rental Activation';
-  pending_activation?: boolean;
+  status: 'Active' | 'Completed' | 'Cancelled' | 'Overdue';
   stripe_subscription_id?: string | null;
   stripe_customer_id?: string | null;
   created_at: string;
+}
+
+/**
+ * A Paid application with a verified Stripe subscription that has no live
+ * rental yet.
+ *
+ * This is deliberately NOT a `Rental`. It has no `rentals.id`, so rental-only
+ * actions (cancel subscription, toll notices, maintenance) are not
+ * representable against it.
+ */
+export interface PendingRentalActivation {
+  application_id: string;
+  applicant_name: string;
+  approved_vehicle?: string | null;
+  approved_weekly_price?: number | null;
+  paid_at?: string | null;
+  start_date?: string | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
 }
 
 export type BondStatus = 'unpaid' | 'paid_manually' | 'waived' | 'refunded';
@@ -149,6 +167,12 @@ export interface AdminDatasetResponse<T> {
   pageSize: number;
   totalItems: number;
   totalPages: number;
+}
+
+/** Response of the dedicated pending-activation endpoint. */
+export interface PendingRentalActivationsResponse {
+  items: PendingRentalActivation[];
+  totalItems: number;
 }
 
 export interface OperationalCustomer {

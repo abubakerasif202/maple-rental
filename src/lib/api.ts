@@ -5,6 +5,7 @@ import {
   DashboardStats,
   DashboardSummaryResponse,
   AdminDatasetResponse,
+  PendingRentalActivationsResponse,
   OperationalCustomer,
   OperationalInvoice,
   ManualInvoice,
@@ -95,7 +96,17 @@ export const fetchRentals = async (
   return data;
 };
 
-export const activateRental = async (applicationId: string): Promise<{ success: boolean; rental: Rental }> => {
+export const fetchPendingRentalActivations = async (
+  params: { search?: string } = {},
+  signal?: AbortSignal
+): Promise<PendingRentalActivationsResponse> => {
+  const { data } = await api.get('/rentals/pending-activations', { params, signal });
+  return data;
+};
+
+export const activateRental = async (
+  applicationId: string
+): Promise<{ success: boolean; created: boolean; rental: Rental }> => {
   const { data } = await api.post(`/rentals/applications/${applicationId}/activate`);
   return data;
 };

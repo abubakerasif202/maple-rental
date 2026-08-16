@@ -15,7 +15,12 @@ import {
 import { isImportedApplicationRecord } from "../importedDataFilters.js";
 import { isPostgrestInvalidRangeError } from "../pagination.js";
 import { recordAdminAuditEvent } from "../adminAudit.js";
-import { activateRentalForApplication } from "../paymentLifecycle.js";
+import {
+  activateRentalForApplication,
+  listPendingRentalActivations,
+  PaymentLifecycleError,
+} from "../paymentLifecycle.js";
+import { uuidSchema } from "../validation.js";
 
 const router = express.Router();
 const DEFAULT_PAGE_SIZE = 25;
@@ -605,45 +610,7 @@ export const loadAdminRentalDataset = async (params: {
 }) => {
   const { applicationsById: _applicationsById, ...dataset } =
     await loadAdminRentalDatasetWithApplications(params);
-  const { data: paidApplications, error: paidApplicationsError } = await db
-    .from("applications")
-    .select("id, name, approved_vehicle, approved_weekly_price, intended_start_date, stripe_customer_id, stripe_subscription_id, status")
-    .eq("status", "Paid")
-    .not("stripe_subscription_id", "is", null)
-    .not("stripe_customer_id", "is", null)
-    .order("paid_at", { ascending: false });
-  if (paidApplicationsError) throw paidApplicationsError;
-  const linkedRentalsResult = (paidApplications || []).length > 0
-    ? await db.from("rentals").select("application_id").in("application_id", paidApplications.map((row) => row.id))
-    : { data: [], error: null };
-  const { data: linkedRentals, error: linkedRentalsError } = linkedRentalsResult;
-  if (linkedRentalsError && (paidApplications || []).length > 0) throw linkedRentalsError;
-  const linkedApplicationIds = new Set((linkedRentals || []).map((row) => String(row.application_id)));
-  const searchTerm = normalizeSearchTerm(params.search).toLowerCase();
-  const pending = (paidApplications || [])
-    .filter((application) => !linkedApplicationIds.has(String(application.id)))
-    .filter((application) => !searchTerm || [application.name, application.approved_vehicle, application.stripe_customer_id, application.stripe_subscription_id]
-      .some((value) => String(value || "").toLowerCase().includes(searchTerm)))
-    .map((application, index) => ({
-      id: -(index + 1),
-      application_id: application.id,
-      applicant_name: application.name,
-      vehicle_registration: application.approved_vehicle,
-      car_name: application.approved_vehicle,
-      start_date: application.intended_start_date,
-      weekly_price: application.approved_weekly_price,
-      status: "Paid — Awaiting Rental Activation",
-      stripe_customer_id: application.stripe_customer_id,
-      stripe_subscription_id: application.stripe_subscription_id,
-      pending_activation: true,
-      created_at: new Date().toISOString(),
-    }));
-  return {
-    ...dataset,
-    items: [...dataset.items, ...pending],
-    totalItems: dataset.totalItems + pending.length,
-    total: dataset.totalItems + pending.length,
-  };
+  return dataset;
 };
 
 const quotePostgrestValue = (value: string) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
@@ -801,21 +768,65 @@ router.get("/", authenticateAdmin, async (req, res) => {
   }
 });
 
-router.post("/applications/:applicationId/activate", authenticateAdmin, async (req, res) => {
+/**
+ * Paid subscriptions that are verified but not yet operationally activated.
+ *
+ * A dedicated endpoint rather than part of the rentals dataset: these are not
+ * rentals, they have no rentals.id, and keeping them separate preserves exact
+ * rental pagination and counts.
+ */
+router.get("/pending-activations", authenticateAdmin, async (req, res) => {
   try {
-    const applicationId = z.string().uuid().parse(req.params.applicationId);
-    const rental = await activateRentalForApplication(applicationId, req.admin?.email || null);
-    return res.json({ success: true, rental });
+    const search = normalizeSearchTerm(req.query.search);
+    const items = await listPendingRentalActivations({ search });
+    return res.json({ items, totalItems: items.length });
   } catch (error) {
-    if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid application ID" });
-    const message = error instanceof Error ? error.message : "Failed to activate rental";
-    if (/not found|Only Paid|required|different Stripe|another application|missing/i.test(message)) {
-      return res.status(409).json({ error: message });
-    }
-    console.error("Rental activation failed", { errorName: error instanceof Error ? error.name : "UnknownError" });
-    return res.status(500).json({ error: "Failed to activate rental" });
+    console.error("Failed to load pending rental activations", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
+    return res
+      .status(500)
+      .json({ error: "Failed to load paid subscriptions awaiting activation" });
   }
 });
+
+router.post(
+  "/applications/:applicationId/activate",
+  authenticateAdmin,
+  async (req, res) => {
+    try {
+      const applicationId = z
+        .object({ applicationId: uuidSchema })
+        .parse(req.params).applicationId;
+      const { created, rental } = await activateRentalForApplication(
+        applicationId,
+        req.admin?.email || null,
+      );
+
+      // Repeated activation is a no-op that returns the same live rental, so
+      // the response reports whether this call created it.
+      return res.json({ success: true, created, rental });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid application ID" });
+      }
+
+      // Lifecycle errors carry a machine-readable code and a safe, operator
+      // facing message. Everything else is an unexpected fault and must not
+      // leak its message to the client.
+      if (error instanceof PaymentLifecycleError) {
+        return res
+          .status(error.status)
+          .json({ error: error.message, code: error.code });
+      }
+
+      console.error("Rental activation failed", {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+      return res.status(500).json({ error: "Failed to activate rental" });
+    }
+  },
+);
 
 router.post("/:rentalId/cancel-subscription", authenticateAdmin, async (req, res) => {
   const parsed = cancelSubscriptionSchema.safeParse(req.body);

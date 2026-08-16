@@ -450,12 +450,9 @@ export const handleVehicleCheckoutCompletion = async (
       );
     }
 
+    let paymentOutcome: Awaited<ReturnType<typeof applyVehicleCheckoutPaymentOnlyWrites>>;
     try {
-      // This is deliberately separate from rental activation. The verified
-      // Stripe identity must survive payment-only fulfillment for admin
-      // operations and later, explicit rental activation.
-      await persistCheckoutRelationshipFromSession(session);
-      return await applyVehicleCheckoutPaymentOnlyWrites({
+      paymentOutcome = await applyVehicleCheckoutPaymentOnlyWrites({
         applicationId,
         expectedPaymentLinkVersion: sessionPaymentLinkVersion,
         fulfillmentSessionId: session.id,
@@ -468,5 +465,31 @@ export const handleVehicleCheckoutCompletion = async (
           : 'Payment was received but could not be recorded automatically.'
       );
     }
+
+    // The operational identity bridge runs only after the payment-only write
+    // has succeeded, and is deliberately non-fatal. It records who paid and
+    // which Stripe subscription they hold so admins can see the paid
+    // subscription and later activate a rental explicitly. It still creates no
+    // rental, assigns no vehicle, and mutates no fleet state.
+    //
+    // A failure here must never downgrade a payment Maple has already
+    // recorded, so it is logged for reconciliation instead of rethrown.
+    try {
+      await persistCheckoutRelationshipFromSession(session);
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          message: 'payment_lifecycle.identity_link_deferred',
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+          reason:
+            error instanceof Error && 'code' in error
+              ? String((error as { code?: string }).code)
+              : 'unknown',
+          resolution: 'Run npm run reconcile:stripe-lifecycle to link this payment.',
+        })
+      );
+    }
+
+    return paymentOutcome;
   });
 };

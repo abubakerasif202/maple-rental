@@ -40,6 +40,7 @@ describe('admin tab error states', () => {
         onCreateTollNotice={vi.fn()}
         onRentalPageChange={vi.fn()}
         onRentalPageSizeChange={vi.fn()}
+        pendingActivations={[]}
         rentalSearch=""
         rentals={[]}
         rentalsError="Failed to fetch rentals"

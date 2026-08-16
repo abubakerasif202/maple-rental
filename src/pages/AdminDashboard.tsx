@@ -339,6 +339,15 @@ export default function AdminDashboard() {
     placeholderData: (previousData) => previousData,
   });
 
+  // Paid subscriptions awaiting activation are fetched separately so rental
+  // pagination and counts stay exact.
+  const pendingActivationsQuery = useQuery({
+    queryKey: ['pending-rental-activations', debouncedRentalSearch],
+    queryFn: ({ signal }) =>
+      api.fetchPendingRentalActivations({ search: debouncedRentalSearch }, signal),
+    enabled: shouldLoadRentals,
+  });
+
   const customerDatasetQuery = useQuery<AdminDatasetResponse<OperationalCustomer>>({
     queryKey: ['operational-customers', debouncedCustomerSearch, customerPage, OPERATIONAL_PAGE_SIZE],
     queryFn: ({ signal }) =>
@@ -502,11 +511,17 @@ export default function AdminDashboard() {
 
   const activateRentalMutation = useMutation({
     mutationFn: (applicationId: string) => api.activateRental(applicationId),
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['rentals'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-rental-activations'] });
       queryClient.invalidateQueries({ queryKey: ['operational-customers'] });
       invalidateDashboardSummary();
-      showNotification('Rental activated successfully.', 'success');
+      showNotification(
+        result.created
+          ? 'Rental activated.'
+          : 'This subscription already has a live rental.',
+        'success',
+      );
     },
     onError: (error) => showNotification(getApiErrorMessage(error, 'Failed to activate rental.'), 'error'),
   });
@@ -888,6 +903,7 @@ export default function AdminDashboard() {
     : rentalsDataset?.page || rentalPage;
   const rentalsTotalItems = rentalsDataset?.totalItems || 0;
   const rentalsTotalPages = rentalsDataset?.totalPages || 1;
+  const pendingActivations = pendingActivationsQuery.data?.items || [];
   const selectedAgreementApplication =
     approvedApplications.find((app) => app.id === selected_agreement_application_id) ||
     applications.find((app) => app.id === selected_agreement_application_id);
@@ -1064,7 +1080,15 @@ export default function AdminDashboard() {
               onCancelSubscription={(payload) =>
                 cancelRentalSubscriptionMutation.mutateAsync(payload)
               }
-              onActivateRental={(applicationId) => activateRentalMutation.mutateAsync(applicationId)}
+              activatingApplicationId={
+                activateRentalMutation.isPending
+                  ? activateRentalMutation.variables ?? null
+                  : null
+              }
+              pendingActivations={pendingActivations}
+              onActivateRental={(applicationId) =>
+                activateRentalMutation.mutateAsync(applicationId)
+              }
               onCreateTollNotice={(rental) =>
                 openTollNotices(
                   String(rental.application_id || rental.applicant_name || rental.car_name || '')

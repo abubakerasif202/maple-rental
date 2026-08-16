@@ -65,7 +65,17 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
     },
     test: {
-      exclude: [...configDefaults.exclude, 'server-dist/**', 'dist/**', 'tmp/**'],
+      // `.claude/**` keeps agent worktrees under .claude/worktrees/ out of test
+      // discovery. A worktree is a full copy of the repository, so without this
+      // Vitest collects every suite twice; the duplicate Supertest servers then
+      // fail with ECONNREFUSED, timeouts, and cross-suite mock interference.
+      exclude: [
+        ...configDefaults.exclude,
+        '.claude/**',
+        'server-dist/**',
+        'dist/**',
+        'tmp/**',
+      ],
     },
   };
 });
