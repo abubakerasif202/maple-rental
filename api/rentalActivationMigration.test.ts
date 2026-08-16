@@ -8,24 +8,30 @@ const migration = readFileSync(
   ),
   'utf8'
 );
+const executableMigration = migration.replace(/^--.*$/gm, '');
 const rentalRoutes = readFileSync(new URL('./routes/rentals.ts', import.meta.url), 'utf8');
 
 describe('UUID-native rental activation migration', () => {
-  it('restores the existing sequence default and permits a null legacy application id', () => {
-    expect(migration).toMatch(
-      /ALTER COLUMN id SET DEFAULT nextval\('public\.rentals_id_seq'::regclass\)/i
-    );
+  it('preserves the existing BY DEFAULT identity and permits a null legacy application id', () => {
+    expect(migration).toContain("column_info.is_identity");
+    expect(migration).toContain("column_info.identity_generation");
+    expect(migration).toContain("rental_id_is_identity IS DISTINCT FROM 'YES'");
+    expect(migration).toContain("rental_id_generation IS DISTINCT FROM 'BY DEFAULT'");
+    expect(migration).toContain("pg_get_serial_sequence('public.rentals', 'id')");
     expect(migration).toMatch(/ALTER COLUMN legacy_application_id DROP NOT NULL/i);
-    expect(migration).toContain("to_regclass('public.rentals_id_seq')");
-    expect(migration).toContain("rental_id_sequence_kind <> 'S'");
+    expect(executableMigration).not.toMatch(/ALTER\s+COLUMN\s+id\s+SET\s+DEFAULT/i);
+    expect(executableMigration).not.toMatch(/DROP\s+IDENTITY/i);
+    expect(executableMigration).not.toMatch(/ADD\s+GENERATED/i);
+    expect(executableMigration).not.toMatch(/CREATE\s+SEQUENCE/i);
+    expect(executableMigration).not.toMatch(/ALTER\s+SEQUENCE/i);
   });
 
-  it('aligns the sequence without MAX(id) plus one application-side allocation', () => {
+  it('fails closed when the existing identity sequence position is unsafe without mutating it', () => {
     expect(migration).toContain('LOCK TABLE public.rentals IN ACCESS EXCLUSIVE MODE');
-    expect(migration).toContain('sequence_last_value <= highest_rental_id');
-    expect(migration).toContain('GREATEST(sequence_last_value, highest_rental_id)');
-    expect(migration).toMatch(/pg_catalog\.setval\([\s\S]*true[\s\S]*\)/i);
-    expect(migration).not.toMatch(/max\s*\(\s*id\s*\)\s*\+\s*1/i);
+    expect(migration).toContain('sequence_is_called AND sequence_last_value < highest_rental_id');
+    expect(migration).toContain('NOT sequence_is_called AND sequence_last_value <= highest_rental_id');
+    expect(executableMigration).not.toMatch(/\bsetval\s*\(/i);
+    expect(executableMigration).not.toMatch(/\bnextval\s*\(/i);
   });
 
   it('does not rewrite historical rows, fabricate legacy ids, or edit rental ids', () => {
