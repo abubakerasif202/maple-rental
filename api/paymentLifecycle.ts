@@ -72,6 +72,18 @@ const stripeObjectId = (value: string | { id?: string } | null | undefined) =>
   typeof value === 'string' ? value : value?.id || null;
 
 /**
+ * What a customer resolution actually changed about operational identity.
+ *
+ * `unchanged` covers replay: the operational customer already carries both the
+ * application link and the Stripe customer id, so no identity mutation
+ * occurred and no audit event may be written for it.
+ */
+type OperationalCustomerOperation = 'create' | 'link' | 'unchanged';
+
+/** Audit source for anything driven by verified Stripe lifecycle identity. */
+const VERIFIED_STRIPE_AUDIT_SOURCE = 'verified-stripe-lifecycle';
+
+/**
  * Canonical, alias-mapped application projection. Column names differ between
  * the snake_case and camelCase deployments, so every read goes through
  * schemaCompat and is aliased back to canonical snake_case keys.
@@ -221,13 +233,23 @@ const resolveOperationalCustomer = async (
   };
 
   if (target?.id) {
+    // Replay detection: the durable identity link is exactly these two columns.
+    // If both already point at this application and this Stripe customer, the
+    // update below only refreshes contact details and is not a new link.
+    const alreadyLinked =
+      String(target.application_id || '') === applicationId &&
+      String(target.stripe_customer_id || '') === stripeCustomerId;
+
     const update = await db.from('customers').update(contactPayload).eq('id', target.id);
     if (update.error) {
       throw new Error(
         `Failed to update operational customer: ${update.error.message || 'Unknown error'}`
       );
     }
-    return Number(target.id);
+    return {
+      customerId: Number(target.id),
+      operation: (alreadyLinked ? 'unchanged' : 'link') as OperationalCustomerOperation,
+    };
   }
 
   const inserted = await db
@@ -241,18 +263,25 @@ const resolveOperationalCustomer = async (
     .single();
 
   if (!inserted.error) {
-    return Number(inserted.data.id);
+    return {
+      customerId: Number(inserted.data.id),
+      operation: 'create' as OperationalCustomerOperation,
+    };
   }
 
   // A concurrent webhook may have won the partial unique index. Re-read rather
-  // than inserting a duplicate operational customer.
+  // than inserting a duplicate operational customer. The winning writer records
+  // the create audit event, so this loser reports no mutation of its own.
   const raced = await db
     .from('customers')
     .select('id')
     .eq('stripe_customer_id', stripeCustomerId)
     .maybeSingle();
   if (raced.data?.id) {
-    return Number(raced.data.id);
+    return {
+      customerId: Number(raced.data.id),
+      operation: 'unchanged' as OperationalCustomerOperation,
+    };
   }
 
   throw new Error(
@@ -335,7 +364,39 @@ export const persistVerifiedStripeRelationship = async (
     return { customerId: null };
   }
 
-  const customerId = await resolveOperationalCustomer(application, input.customerId);
+  const { customerId, operation } = await resolveOperationalCustomer(
+    application,
+    input.customerId
+  );
+
+  // Creating or linking an operational customer is a real business mutation and
+  // must leave an append-only trail. A replay resolves to `unchanged`, so it
+  // never produces a misleading duplicate mutation record.
+  //
+  // The metadata is deliberately redacted: identifiers and the operation only.
+  // No Stripe or Supabase credentials, no payment method data, and no applicant
+  // contact details are recorded here.
+  if (operation !== 'unchanged') {
+    await recordAdminAuditEvent({
+      action:
+        operation === 'create'
+          ? 'operational_customer_created'
+          : 'operational_customer_linked',
+      actor: null,
+      metadata: {
+        applicationId,
+        customerId,
+        operation,
+        paymentLinkVersion: currentVersion,
+        source: VERIFIED_STRIPE_AUDIT_SOURCE,
+        stripeCustomerId: input.customerId,
+        stripeSubscriptionId: input.subscriptionId,
+      },
+      targetId: applicationId,
+      targetType: 'application',
+    });
+  }
+
   return { customerId };
 };
 
@@ -603,7 +664,7 @@ export const activateRentalForApplication = async (
       );
     }
 
-    const customerId = await resolveOperationalCustomer(application, storedCustomerId);
+    const { customerId } = await resolveOperationalCustomer(application, storedCustomerId);
 
     const rentalPayload: Record<string, unknown> = {
       [rentalApplicationIdColumn]: applicationId,

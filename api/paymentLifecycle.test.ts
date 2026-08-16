@@ -168,6 +168,7 @@ vi.mock('./adminAudit.js', () => ({
 }));
 
 import {
+  ACTIVATION_ELIGIBLE_SUBSCRIPTION_STATUSES,
   activateRentalForApplication,
   listPendingRentalActivations,
   PaymentLifecycleError,
@@ -380,6 +381,182 @@ describe('persistVerifiedStripeRelationship', () => {
 
     expect(tables.rentals).toHaveLength(0);
     expect(writeLog.some((entry) => entry.table === 'rentals')).toBe(false);
+  });
+});
+
+describe('operational customer audit trail', () => {
+  /** Metadata keys that would leak credentials, PII, or payment data. */
+  const FORBIDDEN_METADATA_KEYS = [
+    'address',
+    'cardBrand',
+    'email',
+    'last4',
+    'name',
+    'paymentMethod',
+    'phone',
+    'stripeSecretKey',
+    'supabaseKey',
+    'supabaseServiceRoleKey',
+  ];
+
+  it('audits the operational customer create for a paid, eligible reconciliation', async () => {
+    seedPaidApplication();
+
+    const result = await persistVerifiedStripeRelationship(verifiedRelationship());
+
+    // The trusted relationship is persisted...
+    expect(tables.applications[0]).toMatchObject({
+      stripe_customer_id: CUSTOMER_ID,
+      stripe_subscription_id: SUBSCRIPTION_ID,
+    });
+    expect(tables.customers).toHaveLength(1);
+
+    // ...and the operational customer mutation is audited exactly once.
+    expect(mockRecordAdminAuditEvent).toHaveBeenCalledTimes(1);
+    expect(mockRecordAdminAuditEvent).toHaveBeenCalledWith({
+      action: 'operational_customer_created',
+      actor: null,
+      metadata: {
+        applicationId: APPLICATION_ID,
+        customerId: result.customerId,
+        operation: 'create',
+        paymentLinkVersion: 2,
+        source: 'verified-stripe-lifecycle',
+        stripeCustomerId: CUSTOMER_ID,
+        stripeSubscriptionId: SUBSCRIPTION_ID,
+      },
+      targetId: APPLICATION_ID,
+      targetType: 'application',
+    });
+  });
+
+  it('audits a link when an existing operational customer is attached instead of created', async () => {
+    seedPaidApplication();
+    tables.customers.push({
+      application_id: APPLICATION_ID,
+      full_name: 'Test Driver',
+      id: 99,
+      stripe_customer_id: null,
+    });
+
+    await persistVerifiedStripeRelationship(verifiedRelationship());
+
+    expect(tables.customers).toHaveLength(1);
+    expect(mockRecordAdminAuditEvent).toHaveBeenCalledTimes(1);
+    expect(mockRecordAdminAuditEvent.mock.calls[0][0]).toMatchObject({
+      action: 'operational_customer_linked',
+      metadata: { customerId: 99, operation: 'link' },
+    });
+  });
+
+  it('records no credentials, payment data, or applicant contact details', async () => {
+    seedPaidApplication();
+
+    await persistVerifiedStripeRelationship(verifiedRelationship());
+
+    const { metadata } = mockRecordAdminAuditEvent.mock.calls[0][0];
+    FORBIDDEN_METADATA_KEYS.forEach((key) => {
+      expect(metadata).not.toHaveProperty(key);
+    });
+    const serialized = JSON.stringify(metadata);
+    expect(serialized).not.toContain('driver@example.com');
+    expect(serialized).not.toContain('0400000000');
+    expect(serialized).not.toContain('1 Test Street');
+    expect(serialized).not.toContain('sk_');
+  });
+
+  it('performs no write and no audit mutation for a cancelled application', async () => {
+    seedPaidApplication({ status: 'Cancelled' });
+
+    await expect(
+      persistVerifiedStripeRelationship(verifiedRelationship())
+    ).rejects.toMatchObject({ code: 'application_cancelled' });
+
+    expect(writeLog).toHaveLength(0);
+    expect(tables.customers).toHaveLength(0);
+    expect(mockRecordAdminAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it.each(['canceled', 'past_due', 'unpaid', 'incomplete', 'incomplete_expired', 'paused'])(
+    'writes and audits nothing for a subscription in %s state',
+    async (subscriptionStatus) => {
+      seedPaidApplication();
+
+      // Mirrors the reconciliation gate: an unsafe subscription state is never
+      // writable, so persistence is never reached. Using the real exported
+      // allow-list means widening it would fail this test.
+      const writable = ACTIVATION_ELIGIBLE_SUBSCRIPTION_STATUSES.has(subscriptionStatus);
+      expect(writable).toBe(false);
+      if (writable) {
+        await persistVerifiedStripeRelationship(verifiedRelationship());
+      }
+
+      expect(writeLog).toHaveLength(0);
+      expect(tables.customers).toHaveLength(0);
+      expect(mockRecordAdminAuditEvent).not.toHaveBeenCalled();
+    }
+  );
+
+  it('performs no write and no audit mutation when the application is missing', async () => {
+    await expect(
+      persistVerifiedStripeRelationship(verifiedRelationship())
+    ).rejects.toMatchObject({ code: 'application_missing' });
+
+    expect(writeLog).toHaveLength(0);
+    expect(tables.customers).toHaveLength(0);
+    expect(mockRecordAdminAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it('does not audit a duplicate mutation on webhook or reconciliation replay', async () => {
+    seedPaidApplication();
+
+    await persistVerifiedStripeRelationship(verifiedRelationship());
+    await persistVerifiedStripeRelationship(verifiedRelationship());
+    await persistVerifiedStripeRelationship(verifiedRelationship());
+
+    expect(tables.customers).toHaveLength(1);
+    expect(mockRecordAdminAuditEvent).toHaveBeenCalledTimes(1);
+    expect(mockRecordAdminAuditEvent.mock.calls[0][0]).toMatchObject({
+      action: 'operational_customer_created',
+    });
+  });
+
+  it('does not audit an already-linked operational customer', async () => {
+    seedPaidApplication();
+    tables.customers.push({
+      application_id: APPLICATION_ID,
+      full_name: 'Test Driver',
+      id: 42,
+      stripe_customer_id: CUSTOMER_ID,
+    });
+
+    const result = await persistVerifiedStripeRelationship(verifiedRelationship());
+
+    expect(result).toEqual({ customerId: 42 });
+    expect(tables.customers).toHaveLength(1);
+    expect(mockRecordAdminAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it('never audits an operational customer for a not-yet-Paid application', async () => {
+    seedPaidApplication({ status: 'Approved' });
+
+    await persistVerifiedStripeRelationship(verifiedRelationship());
+
+    expect(mockRecordAdminAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it('creates no rental and touches no fleet state while auditing the link', async () => {
+    seedPaidApplication();
+
+    await persistVerifiedStripeRelationship(verifiedRelationship());
+
+    const touchedTables = new Set(writeLog.map((entry) => entry.table));
+    expect(touchedTables.has('rentals')).toBe(false);
+    expect(touchedTables.has('cars')).toBe(false);
+    expect(touchedTables.has('fleet_imports')).toBe(false);
+    expect(tables.rentals).toHaveLength(0);
+    // Reconciliation records identity only; application status is untouched.
+    expect(tables.applications[0].status).toBe('Paid');
   });
 });
 
