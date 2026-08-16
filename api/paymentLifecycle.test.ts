@@ -29,7 +29,15 @@ const harness = vi.hoisted(() => {
     payload: HRow;
   }> = [];
 
-  const state = { nextId: 1 };
+  const state: {
+    nextId: number;
+    rentalInsertError: HRow | null;
+    rentalSequenceLastValue: number;
+  } = {
+    nextId: 1,
+    rentalInsertError: null,
+    rentalSequenceLastValue: 692,
+  };
 
   const matchesFilters = (row: HRow, filters: Array<[string, string, any]>) =>
   filters.every(([type, column, value]) => {
@@ -48,20 +56,49 @@ const harness = vi.hoisted(() => {
 
   const applyWrite = () => {
     if (mode === 'insert') {
-      const inserted = { id: state.nextId++, ...payload };
+      if (table === 'rentals' && state.rentalInsertError) {
+        return { error: state.rentalInsertError, rows: [] };
+      }
+
+      if (table === 'rentals') {
+        const duplicateLiveRental = tables.rentals.some((rental) =>
+          String(rental.status || '').trim().toLowerCase() !== 'completed' &&
+          String(rental.status || '').trim().toLowerCase() !== 'cancelled' &&
+          (String(rental.application_id) === String(payload.application_id) ||
+            String(rental.stripe_subscription_id) === String(payload.stripe_subscription_id))
+        );
+        if (duplicateLiveRental) {
+          return {
+            error: {
+              code: '23505',
+              message: 'duplicate key value violates unique constraint "rentals_live_application_unique"',
+            },
+            rows: [],
+          };
+        }
+      }
+
+      const inserted = table === 'rentals'
+        ? {
+            bond_paid: 0,
+            id: ++state.rentalSequenceLastValue,
+            legacy_application_id: null,
+            ...payload,
+          }
+        : { id: state.nextId++, ...payload };
       tables[table].push(inserted);
       writeLog.push({ operation: 'insert', payload, table });
-      return [inserted];
+      return { error: null, rows: [inserted] };
     }
 
     if (mode === 'update') {
       const updated = resolveRows();
       updated.forEach((row) => Object.assign(row, payload));
       writeLog.push({ operation: 'update', payload, table });
-      return updated;
+      return { error: null, rows: updated };
     }
 
-    return resolveRows();
+    return { error: null, rows: resolveRows() };
   };
 
   const builder: any = {
@@ -94,19 +131,22 @@ const harness = vi.hoisted(() => {
       return builder;
     },
     async maybeSingle() {
-      const rows = applyWrite();
-      return { data: rows[0] ?? null, error: null };
+      const { error, rows } = applyWrite();
+      return { data: rows[0] ?? null, error };
     },
     async single() {
-      const rows = applyWrite();
+      const { error, rows } = applyWrite();
+      if (error) {
+        return { data: null, error };
+      }
       if (rows.length !== 1) {
         return { data: null, error: { message: 'Expected exactly one row' } };
       }
       return { data: rows[0], error: null };
     },
     then(resolve: (value: any) => unknown) {
-      const rows = applyWrite();
-      return Promise.resolve(resolve({ data: rows, error: null }));
+      const { error, rows } = applyWrite();
+      return Promise.resolve(resolve({ data: rows, error }));
     },
   };
 
@@ -119,17 +159,20 @@ const harness = vi.hoisted(() => {
     });
     writeLog.length = 0;
     state.nextId = 1;
+    state.rentalInsertError = null;
+    state.rentalSequenceLastValue = 692;
   };
 
   return {
     mockDb: { from: (table: string) => createBuilder(table) },
     reset,
+    state,
     tables,
     writeLog,
   };
 });
 
-const { tables, writeLog } = harness;
+const { state, tables, writeLog } = harness;
 
 const mockSubscriptionsRetrieve = vi.hoisted(() => vi.fn());
 const mockRecordAdminAuditEvent = vi.hoisted(() => vi.fn());
@@ -170,8 +213,10 @@ vi.mock('./adminAudit.js', () => ({
 import {
   ACTIVATION_ELIGIBLE_SUBSCRIPTION_STATUSES,
   activateRentalForApplication,
+  getRentalActivationErrorLog,
   listPendingRentalActivations,
   PaymentLifecycleError,
+  RentalActivationPersistenceError,
   persistCheckoutRelationshipFromSession,
   persistVerifiedStripeRelationship,
 } from './paymentLifecycle.js';
@@ -189,6 +234,7 @@ const seedPaidApplication = (overrides: Row = {}) => {
     email: 'driver@example.com',
     id: APPLICATION_ID,
     intended_start_date: '2026-09-01',
+    legacy_id: null,
     name: 'Test Driver',
     paid_at: '2026-08-16T00:00:00.000Z',
     payment_link_version: 2,
@@ -644,6 +690,10 @@ describe('activateRentalForApplication', () => {
     expect(tables.rentals).toHaveLength(1);
     expect(tables.rentals[0]).toMatchObject({
       application_id: APPLICATION_ID,
+      bond_paid: 0,
+      customer_id: 1,
+      id: 693,
+      legacy_application_id: null,
       start_date: '2026-09-01',
       status: 'Active',
       stripe_customer_id: CUSTOMER_ID,
@@ -654,7 +704,7 @@ describe('activateRentalForApplication', () => {
     expect(mockRecordAdminAuditEvent).toHaveBeenCalledTimes(1);
   });
 
-  it('does not write a bond amount, because bond never flows through Stripe', async () => {
+  it('omits bond_paid so the existing database default supplies zero', async () => {
     seedPaidApplication({
       stripe_customer_id: CUSTOMER_ID,
       stripe_subscription_id: SUBSCRIPTION_ID,
@@ -663,7 +713,11 @@ describe('activateRentalForApplication', () => {
 
     await activateRentalForApplication(APPLICATION_ID, 'admin@example.com');
 
-    expect(tables.rentals[0]).not.toHaveProperty('bond_paid');
+    const rentalInsert = writeLog.find(
+      (entry) => entry.operation === 'insert' && entry.table === 'rentals'
+    );
+    expect(rentalInsert?.payload).not.toHaveProperty('bond_paid');
+    expect(tables.rentals[0].bond_paid).toBe(0);
   });
 
   it('is idempotent when activated twice', async () => {
@@ -682,6 +736,29 @@ describe('activateRentalForApplication', () => {
     expect(mockRecordAdminAuditEvent).toHaveBeenCalledTimes(1);
   });
 
+  it('uses the database uniqueness guard for concurrent activation', async () => {
+    seedPaidApplication({
+      stripe_customer_id: CUSTOMER_ID,
+      stripe_subscription_id: SUBSCRIPTION_ID,
+    });
+    tables.customers.push({
+      application_id: APPLICATION_ID,
+      id: 91,
+      stripe_customer_id: CUSTOMER_ID,
+    });
+    mockSubscriptionsRetrieve.mockResolvedValue(activeSubscription());
+
+    const results = await Promise.all([
+      activateRentalForApplication(APPLICATION_ID, 'admin@example.com'),
+      activateRentalForApplication(APPLICATION_ID, 'admin@example.com'),
+    ]);
+
+    expect(results.map((result) => result.created).sort()).toEqual([false, true]);
+    expect(tables.rentals).toHaveLength(1);
+    expect(results[0].rental.id).toBe(results[1].rental.id);
+    expect(mockRecordAdminAuditEvent).toHaveBeenCalledTimes(1);
+  });
+
   it('activates despite a historical cancelled rental instead of returning it', async () => {
     seedPaidApplication({
       stripe_customer_id: CUSTOMER_ID,
@@ -690,16 +767,63 @@ describe('activateRentalForApplication', () => {
     tables.rentals.push({
       application_id: APPLICATION_ID,
       id: 900,
+      legacy_application_id: 101,
       status: 'Cancelled',
       stripe_subscription_id: 'sub_old',
     });
+    state.rentalSequenceLastValue = 900;
     mockSubscriptionsRetrieve.mockResolvedValue(activeSubscription());
 
     const result = await activateRentalForApplication(APPLICATION_ID, 'admin@example.com');
 
     expect(result.created).toBe(true);
-    expect(result.rental.id).not.toBe(900);
+    expect(result.rental.id).toBe(901);
     expect(tables.rentals).toHaveLength(2);
+    expect(tables.rentals[0]).toMatchObject({
+      id: 900,
+      legacy_application_id: 101,
+      stripe_subscription_id: 'sub_old',
+    });
+    expect(tables.rentals[1].legacy_application_id).toBeNull();
+  });
+
+  it('exposes only sanitized database diagnostics for an unexpected insert failure', async () => {
+    seedPaidApplication({
+      stripe_customer_id: CUSTOMER_ID,
+      stripe_subscription_id: SUBSCRIPTION_ID,
+    });
+    mockSubscriptionsRetrieve.mockResolvedValue(activeSubscription());
+    state.rentalInsertError = {
+      code: '23502',
+      details: 'Failing row contains driver@example.com and secret customer data',
+      message: 'null value in column "id" of relation "rentals" violates not-null constraint',
+    };
+
+    const error = await activateRentalForApplication(
+      APPLICATION_ID,
+      'admin@example.com'
+    ).catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(RentalActivationPersistenceError);
+    expect(getRentalActivationErrorLog(error)).toEqual({
+      databaseCode: '23502',
+      databaseMessage:
+        'null value in column "id" of relation "rentals" violates not-null constraint',
+      errorName: 'RentalActivationPersistenceError',
+    });
+    expect(JSON.stringify(getRentalActivationErrorLog(error))).not.toContain('secret customer data');
+
+    const customErrorLog = getRentalActivationErrorLog(
+      new RentalActivationPersistenceError({
+        code: 'P0001',
+        message: `Driver Name at 1 Private Street has customer ${CUSTOMER_ID}`,
+      })
+    );
+    expect(customErrorLog).toMatchObject({
+      databaseCode: 'P0001',
+      databaseMessage: 'Database insert failed.',
+    });
+    expect(JSON.stringify(customErrorLog)).not.toContain('Driver Name');
   });
 
   it('rejects an application that is not Paid', async () => {

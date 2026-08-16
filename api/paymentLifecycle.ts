@@ -46,6 +46,74 @@ export class PaymentLifecycleError extends Error {
   }
 }
 
+const databaseErrorField = (error: unknown, field: string) => {
+  if (!error || typeof error !== 'object') {
+    return '';
+  }
+
+  const value = (error as Record<string, unknown>)[field];
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+const sanitizeDatabaseErrorCode = (error: unknown) => {
+  const code = databaseErrorField(error, 'code');
+  return /^[a-z0-9_]{1,32}$/i.test(code) ? code : 'unknown';
+};
+
+const sanitizeDatabaseErrorMessage = (error: unknown) => {
+  const message = databaseErrorField(error, 'message');
+  if (!message) {
+    return 'Database insert failed.';
+  }
+
+  const sanitized = message
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
+    .replace(/\b(?:cus|sub|cs|pi|pm|in|evt|price|prod|sk|pk)_[a-z0-9_]+\b/gi, '[redacted-id]')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, '[redacted-uuid]')
+    .replace(/\b(?:\+?61|0)4(?:[ -]?\d){8}\b/g, '[redacted-phone]')
+    .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240);
+
+  const safeConstraintMessagePatterns = [
+    /^null value in column "[a-z_][a-z0-9_]*" of relation "[a-z_][a-z0-9_]*" violates not-null constraint$/i,
+    /^duplicate key value violates unique constraint "[a-z_][a-z0-9_]*"$/i,
+    /^insert or update on table "[a-z_][a-z0-9_]*" violates foreign key constraint "[a-z_][a-z0-9_]*"$/i,
+    /^new row for relation "[a-z_][a-z0-9_]*" violates check constraint "[a-z_][a-z0-9_]*"$/i,
+    /^column "[a-z_][a-z0-9_]*" of relation "[a-z_][a-z0-9_]*" does not exist$/i,
+    /^relation "[a-z_][a-z0-9_.]*" does not exist$/i,
+    /^permission denied for (?:table|sequence) [a-z_][a-z0-9_]*$/i,
+    /^Could not find the '[a-z_][a-z0-9_]*' column of '[a-z_][a-z0-9_]*' in the schema cache$/i,
+  ];
+
+  return safeConstraintMessagePatterns.some((pattern) => pattern.test(sanitized))
+    ? sanitized
+    : 'Database insert failed.';
+};
+
+export class RentalActivationPersistenceError extends Error {
+  readonly databaseCode: string;
+  readonly databaseMessage: string;
+
+  constructor(databaseError: unknown) {
+    super('Rental persistence failed.');
+    this.name = 'RentalActivationPersistenceError';
+    this.databaseCode = sanitizeDatabaseErrorCode(databaseError);
+    this.databaseMessage = sanitizeDatabaseErrorMessage(databaseError);
+  }
+}
+
+export const getRentalActivationErrorLog = (error: unknown) => ({
+  errorName: error instanceof Error ? error.name : 'UnknownError',
+  ...(error instanceof RentalActivationPersistenceError
+    ? {
+        databaseCode: error.databaseCode,
+        databaseMessage: error.databaseMessage,
+      }
+    : {}),
+});
+
 const conflict = (code: string, message: string) =>
   new PaymentLifecycleError(message, { code, status: 409 });
 
@@ -696,9 +764,7 @@ export const activateRentalForApplication = async (
         return { created: false as const, rental: raced };
       }
 
-      throw new Error(
-        `Failed to create the rental: ${inserted.error.message || 'Unknown error'}`
-      );
+      throw new RentalActivationPersistenceError(inserted.error);
     }
 
     await recordAdminAuditEvent({

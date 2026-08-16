@@ -17,6 +17,7 @@ import { isPostgrestInvalidRangeError } from "../pagination.js";
 import { recordAdminAuditEvent } from "../adminAudit.js";
 import {
   activateRentalForApplication,
+  getRentalActivationErrorLog,
   listPendingRentalActivations,
   PaymentLifecycleError,
 } from "../paymentLifecycle.js";
@@ -820,9 +821,7 @@ router.post(
           .json({ error: error.message, code: error.code });
       }
 
-      console.error("Rental activation failed", {
-        errorName: error instanceof Error ? error.name : "UnknownError",
-      });
+      console.error("Rental activation failed", getRentalActivationErrorLog(error));
       return res.status(500).json({ error: "Failed to activate rental" });
     }
   },
