@@ -8,6 +8,7 @@ import {
   handleVehicleCheckoutCompletion,
 } from '../paymentActivation.js';
 import { getTodayInAustralia } from '../../shared/applicationSubmission.js';
+import { persistVerifiedStripeRelationship, syncStripeInvoice } from '../paymentLifecycle.js';
 
 const getStripe = () => getStripeClient();
 
@@ -762,6 +763,11 @@ export const processStripeWebhookWorkItem = async (
         const subscriptionId = typeof subscriptionReference === 'string' ? subscriptionReference : subscriptionReference?.id || null;
         if (subscriptionId) {
           const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+          const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null;
+          if (subscription.metadata?.application_id && customerId) {
+            await persistVerifiedStripeRelationship({ applicationId: subscription.metadata.application_id, customerId, subscriptionId });
+          }
+          await syncStripeInvoice(invoice, customerId, subscriptionId);
           await updateRentalBySubscriptionIdentityOrSkip(
             subscriptionId,
             await getRentalStatusUpdatePayload('Overdue'),
@@ -776,6 +782,11 @@ export const processStripeWebhookWorkItem = async (
         const subscriptionId = typeof subscriptionReference === 'string' ? subscriptionReference : subscriptionReference?.id || null;
         if (subscriptionId) {
           const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+          const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null;
+          if (subscription.metadata?.application_id && customerId) {
+            await persistVerifiedStripeRelationship({ applicationId: subscription.metadata.application_id, customerId, subscriptionId });
+          }
+          await syncStripeInvoice(invoice, customerId, subscriptionId);
           if (
             subscription.metadata.checkout_kind === 'vehicle' &&
             Number(invoice.amount_paid || 0) > 0
@@ -867,6 +878,10 @@ export const processStripeWebhookWorkItem = async (
       }
       case 'customer.subscription.created': {
         const subscription = event.data.object as Stripe.Subscription;
+        const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null;
+        if (subscription.metadata?.application_id && customerId) {
+          await persistVerifiedStripeRelationship({ applicationId: subscription.metadata.application_id, customerId, subscriptionId: subscription.id });
+        }
         if (subscription.status === 'active') {
           await updateRentalBySubscriptionIdentityOrSkip(
             subscription.id,
@@ -893,6 +908,10 @@ export const processStripeWebhookWorkItem = async (
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription;
         const subscriptionId = subscription.id;
+        const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null;
+        if (subscription.metadata?.application_id && customerId) {
+          await persistVerifiedStripeRelationship({ applicationId: subscription.metadata.application_id, customerId, subscriptionId });
+        }
         const status = subscription.status;
         if (status === 'past_due' || status === 'unpaid') {
           await updateRentalBySubscriptionIdentityOrSkip(

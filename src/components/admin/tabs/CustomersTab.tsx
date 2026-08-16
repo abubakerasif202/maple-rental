@@ -156,7 +156,7 @@ export default function CustomersTab({
                         {customer.full_name}
                       </p>
                       <p className="text-[10px] uppercase tracking-widest text-brand-grey">
-                        {customer.staff_number || customer.external_id || 'Customer record'}
+                        {customer.stripe_customer_id || customer.staff_number || customer.external_id || 'Customer record'}
                       </p>
                     </div>
                     <span className="shrink-0 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-brand-gold">
@@ -223,7 +223,7 @@ export default function CustomersTab({
                           {customer.full_name}
                         </p>
                         <p className="text-[10px] text-brand-grey uppercase tracking-widest">
-                          {customer.staff_number || customer.external_id || 'Customer record'}
+                          {customer.stripe_customer_id || customer.staff_number || customer.external_id || 'Customer record'}
                         </p>
                       </div>
                     </td>

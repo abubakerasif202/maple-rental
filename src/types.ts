@@ -42,7 +42,8 @@ export interface Rental {
   car_name?: string;
   start_date: string;
   weekly_price: number;
-  status: 'Active' | 'Completed' | 'Cancelled' | 'Overdue';
+  status: 'Active' | 'Completed' | 'Cancelled' | 'Overdue' | 'Paid — Awaiting Rental Activation';
+  pending_activation?: boolean;
   stripe_subscription_id?: string | null;
   stripe_customer_id?: string | null;
   created_at: string;
@@ -152,6 +153,8 @@ export interface AdminDatasetResponse<T> {
 
 export interface OperationalCustomer {
   id: number;
+  application_id?: string | null;
+  stripe_customer_id?: string | null;
   external_id?: string | null;
   staff_number?: string | null;
   full_name: string;

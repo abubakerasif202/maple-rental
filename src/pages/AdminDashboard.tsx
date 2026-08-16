@@ -500,6 +500,17 @@ export default function AdminDashboard() {
       ),
   });
 
+  const activateRentalMutation = useMutation({
+    mutationFn: (applicationId: string) => api.activateRental(applicationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rentals'] });
+      queryClient.invalidateQueries({ queryKey: ['operational-customers'] });
+      invalidateDashboardSummary();
+      showNotification('Rental activated successfully.', 'success');
+    },
+    onError: (error) => showNotification(getApiErrorMessage(error, 'Failed to activate rental.'), 'error'),
+  });
+
   const handleLogout = async () => {
     try {
       await completeAdminLogout({
@@ -1053,6 +1064,7 @@ export default function AdminDashboard() {
               onCancelSubscription={(payload) =>
                 cancelRentalSubscriptionMutation.mutateAsync(payload)
               }
+              onActivateRental={(applicationId) => activateRentalMutation.mutateAsync(applicationId)}
               onCreateTollNotice={(rental) =>
                 openTollNotices(
                   String(rental.application_id || rental.applicant_name || rental.car_name || '')

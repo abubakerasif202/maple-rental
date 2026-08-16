@@ -95,6 +95,11 @@ export const fetchRentals = async (
   return data;
 };
 
+export const activateRental = async (applicationId: string): Promise<{ success: boolean; rental: Rental }> => {
+  const { data } = await api.post(`/rentals/applications/${applicationId}/activate`);
+  return data;
+};
+
 export interface CancelSubscriptionResponse {
   success: boolean;
   rentalId: string;

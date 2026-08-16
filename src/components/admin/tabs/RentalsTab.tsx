@@ -23,6 +23,7 @@ interface RentalsTabProps {
     reason?: string;
     rentalId: number;
   }) => Promise<CancelSubscriptionResponse>;
+  onActivateRental?: (applicationId: string) => Promise<unknown>;
   onCreateTollNotice?: (rental: Rental) => void;
   onRentalPageChange: (page: number) => void;
   onRentalPageSizeChange: (pageSize: number) => void;
@@ -53,6 +54,7 @@ export default function RentalsTab({
   isFetchingRentals,
   isLoadingRentals,
   onCancelSubscription,
+  onActivateRental,
   onCreateTollNotice,
   onRentalPageChange,
   onRentalPageSizeChange,
@@ -244,6 +246,15 @@ export default function RentalsTab({
                 Create Toll Notice
               </button>
             )}
+            {rental.pending_activation && onActivateRental && (
+              <button
+                type="button"
+                onClick={() => onActivateRental(String(rental.application_id))}
+                className="inline-flex items-center justify-center rounded-lg border border-brand-gold/40 bg-brand-gold/10 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-brand-gold hover:bg-brand-gold/20"
+              >
+                Activate Rental
+              </button>
+            )}
             <button
               type="button"
               disabled={!onCancelSubscription || !rental.stripe_subscription_id}
@@ -264,9 +275,10 @@ export default function RentalsTab({
         ),
       },
     ],
-    [onCancelSubscription, onCreateTollNotice],
+    [onActivateRental, onCancelSubscription, onCreateTollNotice],
   );
 
+  const pendingCount = rentals.filter((rental) => rental.pending_activation).length;
   const emptyTitle = rentalSearch ? 'No matching rentals' : 'No active rentals yet';
   const emptyDescription = rentalSearch
     ? 'No rental records match the current search.'
@@ -299,6 +311,17 @@ export default function RentalsTab({
               className="w-full rounded-xl border border-white/10 bg-white/5 py-4 pl-12 pr-6 text-sm text-white outline-none transition-all focus:border-brand-gold md:w-72"
             />
           </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-grey">Active Rentals</p>
+          <p className="mt-2 text-3xl font-bold text-white">{rentals.filter((rental) => rental.status === 'Active').length}</p>
+        </div>
+        <div className="rounded-2xl border border-brand-gold/20 bg-brand-gold/5 p-5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-gold">Paid Subscriptions Awaiting Activation</p>
+          <p className="mt-2 text-3xl font-bold text-white">{pendingCount}</p>
         </div>
       </div>
 

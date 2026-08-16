@@ -18,6 +18,7 @@ import {
 import { escapeHtml, getResend, sendResendEmail } from './email.js';
 import { hasTransactionalPaymentProcessing } from './paymentProcessing.js';
 import { normalizeUuid } from '../shared/uuid.js';
+import { persistCheckoutRelationshipFromSession } from './paymentLifecycle.js';
 
 const VEHICLE_CHECKOUT_FULFILLMENT_EVENT_TYPE =
   'vehicle_checkout.fulfillment.processed';
@@ -450,6 +451,10 @@ export const handleVehicleCheckoutCompletion = async (
     }
 
     try {
+      // This is deliberately separate from rental activation. The verified
+      // Stripe identity must survive payment-only fulfillment for admin
+      // operations and later, explicit rental activation.
+      await persistCheckoutRelationshipFromSession(session);
       return await applyVehicleCheckoutPaymentOnlyWrites({
         applicationId,
         expectedPaymentLinkVersion: sessionPaymentLinkVersion,
