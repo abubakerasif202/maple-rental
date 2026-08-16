@@ -56,27 +56,39 @@ const homeJsonLd = {
 const showcaseVehicles = [
   {
     height: 600,
-    image: '/camry-deep-blue-800.webp',
-    imageSmall: '/camry-deep-blue-480.webp',
-    title: 'Deep blue 2026 Toyota Camry',
+    image: '/2026-camry-hybrid-se-fwd-red.webp',
+    imageSmall: '/2026-camry-hybrid-se-fwd-red-480.webp',
+    title: '2026 Camry Hybrid SE FWD',
+    alt: 'Red 2026 Toyota Camry Hybrid SE FWD',
     width: 800,
-    body: 'A generic Camry colour visual for presentation only. Vehicle / Number Plate is confirmed manually after review.',
+    body: 'A 2026 Camry Hybrid SE FWD visual for presentation only. Vehicle / Number Plate is confirmed manually after review.',
   },
   {
     height: 600,
-    image: '/camry-pearl-white-800.webp',
-    imageSmall: '/camry-pearl-white-480.webp',
-    title: 'Pearl white 2026 Toyota Camry',
+    image: '/2026-camry-hybrid-se-upgrade-awd-white.webp',
+    imageSmall: '/2026-camry-hybrid-se-upgrade-awd-white-480.webp',
+    title: '2026 Camry Hybrid SE Upgrade AWD',
+    alt: 'White 2026 Toyota Camry Hybrid SE Upgrade AWD',
     width: 800,
-    body: 'Maple Rentals records the approved vehicle and number plate as text instead of public fleet selection.',
+    body: 'A 2026 Camry Hybrid SE Upgrade AWD visual for presentation only, not a claim of confirmed public inventory.',
   },
   {
     height: 600,
-    image: '/camry-red-800.webp',
-    imageSmall: '/camry-red-480.webp',
-    title: 'Red 2026 Toyota Camry',
+    image: '/2026-camry-hybrid-xle-awd-blue.webp',
+    imageSmall: '/2026-camry-hybrid-xle-awd-blue-480.webp',
+    title: '2026 Camry Hybrid XLE AWD',
+    alt: 'Blue 2026 Toyota Camry Hybrid XLE AWD',
     width: 800,
-    body: 'Stripe checkout stays tied to the approved application and weekly payment, not a catalogue image.',
+    body: 'A 2026 Camry Hybrid XLE AWD visual for presentation only. Approved vehicle details are recorded by admin after review.',
+  },
+  {
+    height: 600,
+    image: '/2026-camry-hybrid-xse-awd-blue.webp',
+    imageSmall: '/2026-camry-hybrid-xse-awd-blue-480.webp',
+    title: '2026 Camry Hybrid XSE AWD',
+    alt: 'Blue 2026 Toyota Camry Hybrid XSE AWD',
+    width: 800,
+    body: 'A 2026 Camry Hybrid XSE AWD visual for presentation only. Stripe checkout stays tied to the approved application, not a catalogue image.',
   },
 ];
 
@@ -199,17 +211,17 @@ export default function Home() {
           >
             <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#1b1713] shadow-[0_40px_120px_rgba(0,0,0,0.45)]">
               <div className="aspect-[4/3] overflow-hidden">
-                  <img
-                    src="/camry-deep-blue-960.webp"
-                    srcSet="/camry-deep-blue-640.webp 640w, /camry-deep-blue-960.webp 960w, /camry-deep-blue-1200.webp 1200w"
-                    sizes="(min-width: 1280px) 519px, (min-width: 1024px) calc(45vw - 58px), calc(100vw - 48px)"
-                    alt="Deep blue generic 2026 Toyota Camry"
-                    decoding="async"
-                    fetchPriority="high"
-                    height={718}
-                    width={960}
-                    className="h-full w-full object-cover"
-                  />
+                <img
+                  src="/2026-camry-hybrid-xse-awd-blue.webp"
+                  srcSet="/2026-camry-hybrid-xse-awd-blue-480.webp 480w, /2026-camry-hybrid-xse-awd-blue.webp 800w, /2026-camry-hybrid-xse-awd-blue-1200.webp 1200w"
+                  sizes="(min-width: 1280px) 519px, (min-width: 1024px) calc(45vw - 58px), calc(100vw - 48px)"
+                  alt="Bright metallic blue 2026 Toyota Camry Hybrid XSE AWD"
+                  decoding="async"
+                  fetchPriority="high"
+                  height={600}
+                  width={800}
+                  className="h-full w-full object-cover"
+                />
               </div>
               <div className="space-y-5 p-7">
                 <div className="flex items-center justify-between">
@@ -378,7 +390,7 @@ export default function Home() {
           <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="max-w-3xl">
             <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-brand-gold">Vehicle Visuals</p>
             <h2 className="mt-5 text-4xl font-serif font-bold text-white sm:text-5xl">
-              Generic 2026 Toyota Camry colours without public fleet selection.
+              2026 Toyota Camry Hybrid range visuals without public fleet selection.
             </h2>
             <p className="mt-6 text-lg font-light leading-8 text-stone-300">
               Maple Rentals keeps the site visual and premium while avoiding number-plate-specific
@@ -387,7 +399,7 @@ export default function Home() {
             </p>
           </motion.div>
 
-          <div className="mt-12 grid gap-8 md:grid-cols-3">
+          <div className="mt-12 grid gap-8 sm:grid-cols-2 xl:grid-cols-4">
             {showcaseVehicles.map((vehicle, index) => (
               <motion.article
                 key={`${vehicle.title}-${index}`}
@@ -401,8 +413,8 @@ export default function Home() {
                   <img
                     src={vehicle.image}
                     srcSet={`${vehicle.imageSmall} 480w, ${vehicle.image} 800w`}
-                    sizes="(min-width: 1280px) 384px, (min-width: 1024px) calc((100vw - 128px) / 3), (min-width: 768px) calc((100vw - 112px) / 3), calc(100vw - 48px)"
-                    alt={vehicle.title}
+                    sizes="(min-width: 1280px) 280px, (min-width: 1024px) calc((100vw - 96px) / 2), (min-width: 640px) calc((100vw - 80px) / 2), calc(100vw - 48px)"
+                    alt={vehicle.alt}
                     className="h-full w-full object-cover transition-transform duration-700 hover:scale-105"
                     decoding="async"
                     height={vehicle.height}
