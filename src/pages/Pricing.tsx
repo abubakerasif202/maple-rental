@@ -64,18 +64,22 @@ export default function Pricing() {
       <section className="py-20 md:py-24 px-4">
         <div className="max-w-6xl mx-auto">
           {isLoading && (
-            <div className="rounded-3xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm">
-              <Loader2 className="w-8 h-8 animate-spin text-brand-gold mx-auto mb-4" />
-              <p className="text-sm uppercase tracking-[0.2em] font-bold text-slate-500">
+            <div
+              role="status"
+              aria-live="polite"
+              className="rounded-3xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm"
+            >
+              <Loader2 aria-hidden="true" className="w-8 h-8 animate-spin text-brand-gold mx-auto mb-4" />
+              <p className="text-sm uppercase tracking-[0.2em] font-bold text-slate-600">
                 Loading plan options
               </p>
             </div>
           )}
 
           {isError && (
-            <div className="rounded-3xl border border-red-200 bg-white px-6 py-16 text-center shadow-sm">
-              <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-4" />
-              <p className="text-sm uppercase tracking-[0.2em] font-bold text-red-500 mb-3">
+            <div role="alert" className="rounded-3xl border border-red-300 bg-white px-6 py-16 text-center shadow-sm">
+              <AlertCircle aria-hidden="true" className="w-8 h-8 text-red-700 mx-auto mb-4" />
+              <p className="text-sm uppercase tracking-[0.2em] font-bold text-red-700 mb-3">
                 Plans unavailable
               </p>
               <p className="text-slate-600 mb-6">
@@ -86,7 +90,7 @@ export default function Pricing() {
                 to="/apply"
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-navy px-5 py-4 text-xs font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-brand-navy-light"
               >
-                Start Application <ArrowRight className="w-4 h-4" />
+                Start Application <ArrowRight aria-hidden="true" className="w-4 h-4" />
               </Link>
             </div>
           )}
@@ -103,13 +107,13 @@ export default function Pricing() {
                 >
                   {plan.popular && (
                     <div className="absolute top-5 right-5 flex items-center gap-1 rounded-full bg-brand-gold px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-brand-navy">
-                      <Star className="w-3 h-3 fill-current" />
+                      <Star aria-hidden="true" className="w-3 h-3 fill-current" />
                       Most Popular
                     </div>
                   )}
 
                   <div className="p-8 flex-1">
-                    <p className={`text-[10px] font-bold uppercase tracking-[0.35em] mb-4 ${plan.popular ? 'text-brand-gold' : 'text-slate-400'}`}>
+                    <p className={`text-[10px] font-bold uppercase tracking-[0.35em] mb-4 ${plan.popular ? 'text-brand-gold' : 'text-slate-600'}`}>
                       {plan.highlight}
                     </p>
                     <h2 className="text-3xl font-serif font-bold mb-3">{plan.name}</h2>
@@ -118,7 +122,7 @@ export default function Pricing() {
                     </p>
 
                     <div className={`rounded-2xl border p-4 mb-8 ${plan.popular ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-slate-50'}`}>
-                      <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-2 ${plan.popular ? 'text-slate-400' : 'text-slate-500'}`}>
+                      <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-2 ${plan.popular ? 'text-slate-300' : 'text-slate-600'}`}>
                         Billing cadence
                       </p>
                       <p className="text-2xl font-bold">{plan.cadenceLabel}</p>
@@ -131,7 +135,7 @@ export default function Pricing() {
                     <ul className="space-y-4">
                       {plan.features.map((feature) => (
                         <li key={feature} className="flex items-start gap-3 text-sm">
-                          <Check className={`w-4 h-4 mt-0.5 ${plan.popular ? 'text-brand-gold' : 'text-brand-navy'}`} />
+                          <Check aria-hidden="true" className={`w-4 h-4 mt-0.5 ${plan.popular ? 'text-brand-gold' : 'text-brand-navy'}`} />
                           <span className={plan.popular ? 'text-slate-200' : 'text-slate-600'}>
                             {feature}
                           </span>
@@ -145,7 +149,7 @@ export default function Pricing() {
                       to="/apply"
                       className={`w-full inline-flex items-center justify-center gap-2 rounded-xl px-5 py-4 text-xs font-bold uppercase tracking-[0.22em] transition-colors ${plan.popular ? 'bg-brand-gold text-brand-navy hover:bg-brand-gold-light' : 'bg-brand-navy text-white hover:bg-brand-navy-light'}`}
                     >
-                      Start Application <ArrowRight className="w-4 h-4" />
+                      Start Application <ArrowRight aria-hidden="true" className="w-4 h-4" />
                     </Link>
                     <Link
                       to="/"
@@ -181,8 +185,8 @@ export default function Pricing() {
             },
           ].map((item) => (
             <div key={item.title} className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
-              <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-full bg-brand-gold/15 text-brand-gold">
-                <item.icon className="w-5 h-5" />
+              <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-full bg-brand-navy text-brand-gold">
+                <item.icon aria-hidden="true" className="w-5 h-5" />
               </div>
               <h3 className="text-xl font-serif font-bold text-brand-navy mb-3">{item.title}</h3>
               <p className="text-sm leading-relaxed text-slate-600">{item.body}</p>

@@ -207,7 +207,7 @@ function SectionShell({
     >
       <div className="mb-6 flex items-start gap-4">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-brand-gold/25 bg-brand-gold/10 text-brand-gold">
-          <Icon className="h-5 w-5" />
+          <Icon aria-hidden="true" className="h-5 w-5" />
         </div>
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-brand-gold">
@@ -233,7 +233,7 @@ function SectionShell({
 function TrustPill({ text }: { text: string }) {
   return (
     <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/8 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/90">
-      <CheckCircle2 className="h-3.5 w-3.5 text-brand-gold" />
+      <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-brand-gold" />
       {text}
     </div>
   );
@@ -513,7 +513,7 @@ export default function Apply() {
               <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
                 <div className="p-8 sm:p-10 lg:p-14">
                   <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-gold">
-                    <CheckCircle2 className="h-4 w-4" />
+                    <CheckCircle2 aria-hidden="true" className="h-4 w-4" />
                     Application received
                   </div>
                   <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-white">
@@ -679,7 +679,7 @@ export default function Apply() {
 
                 <div className="mt-10 rounded-[1.75rem] border border-brand-gold/20 bg-brand-gold/8 p-5 sm:p-6">
                   <div className="flex items-start gap-3">
-                    <ShieldCheck className="mt-0.5 h-5 w-5 text-brand-gold" />
+                    <ShieldCheck aria-hidden="true" className="mt-0.5 h-5 w-5 text-brand-gold" />
                     <div>
                       <p className="text-sm font-semibold text-white">
                         Fast, premium onboarding
@@ -756,7 +756,7 @@ export default function Apply() {
                 {pageError && (
                   <div role="alert" aria-live="assertive" className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4">
                     <div className="flex items-start gap-3">
-                      <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-300" />
+                      <AlertCircle aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-red-300" />
                       <p className="text-sm leading-7 text-red-50">
                         {pageError}
                       </p>
@@ -778,10 +778,11 @@ export default function Apply() {
                           <FormLabel htmlFor="application-name">Full name</FormLabel>
                           <input
                             id="application-name"
+                            autoComplete="name"
                             aria-describedby={errors.name ? "application-name-error" : undefined}
                             aria-invalid={Boolean(errors.name)}
                             {...register("name")}
-                            className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
+                            className="w-full rounded-2xl border border-white/40 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey focus:border-brand-gold"
                             placeholder="As shown on your licence"
                           />
                           <FieldError id="application-name-error" message={errors.name?.message} />
@@ -791,10 +792,12 @@ export default function Apply() {
                           <FormLabel htmlFor="application-phone">Mobile number</FormLabel>
                           <input
                             id="application-phone"
+                            type="tel"
+                            autoComplete="tel"
                             aria-describedby={errors.phone ? "application-phone-error" : undefined}
                             aria-invalid={Boolean(errors.phone)}
                             {...register("phone")}
-                            className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
+                            className="w-full rounded-2xl border border-white/40 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey focus:border-brand-gold"
                             placeholder="0412 345 678"
                           />
                           <FieldError id="application-phone-error" message={errors.phone?.message} />
@@ -804,10 +807,12 @@ export default function Apply() {
                           <FormLabel htmlFor="application-email">Email address</FormLabel>
                           <input
                             id="application-email"
+                            type="email"
+                            autoComplete="email"
                             aria-describedby={errors.email ? "application-email-error" : undefined}
                             aria-invalid={Boolean(errors.email)}
                             {...register("email")}
-                            className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
+                            className="w-full rounded-2xl border border-white/40 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey focus:border-brand-gold"
                             placeholder="driver@example.com"
                           />
                           <FieldError id="application-email-error" message={errors.email?.message} />
@@ -821,7 +826,7 @@ export default function Apply() {
                             aria-describedby={errors.intended_start_date ? "application-start-date-error" : undefined}
                             aria-invalid={Boolean(errors.intended_start_date)}
                             {...register("intended_start_date")}
-                            className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
+                            className="w-full rounded-2xl border border-white/40 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
                           />
                           <FieldError
                             id="application-start-date-error"
@@ -833,11 +838,12 @@ export default function Apply() {
                           <FormLabel htmlFor="application-address">Residential address</FormLabel>
                           <textarea
                             id="application-address"
+                            autoComplete="street-address"
                             aria-describedby={errors.address ? "application-address-error" : undefined}
                             aria-invalid={Boolean(errors.address)}
                             {...register("address")}
                             rows={3}
-                            className="w-full resize-none rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
+                            className="w-full resize-none rounded-2xl border border-white/40 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey focus:border-brand-gold"
                             placeholder="Street, suburb, state, postcode"
                           />
                           <FieldError id="application-address-error" message={errors.address?.message} />
@@ -862,7 +868,7 @@ export default function Apply() {
                             aria-describedby={errors.license_number ? "application-licence-number-error" : undefined}
                             aria-invalid={Boolean(errors.license_number)}
                             {...register("license_number")}
-                            className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
+                            className="w-full rounded-2xl border border-white/40 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey focus:border-brand-gold"
                             placeholder="NSW licence number"
                           />
                           <FieldError
@@ -879,7 +885,7 @@ export default function Apply() {
                             aria-describedby={errors.license_expiry ? "application-licence-expiry-error" : undefined}
                             aria-invalid={Boolean(errors.license_expiry)}
                             {...register("license_expiry")}
-                            className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
+                            className="w-full rounded-2xl border border-white/40 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
                           />
                           <FieldError
                             id="application-licence-expiry-error"
@@ -901,7 +907,7 @@ export default function Apply() {
                                 "passport_or_uber_profile_screenshot",
                               )
                             }
-                            className="w-full rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-5 py-4 text-xs text-brand-grey file:mr-4 file:rounded-full file:border-0 file:bg-brand-gold file:px-4 file:py-2 file:text-[10px] file:font-bold file:uppercase file:tracking-[0.24em] file:text-brand-navy hover:border-brand-gold/40"
+                            className="w-full rounded-2xl border border-dashed border-white/40 bg-white/[0.03] px-5 py-4 text-xs text-brand-grey file:mr-4 file:rounded-full file:border-0 file:bg-brand-gold file:px-4 file:py-2 file:text-[10px] file:font-bold file:uppercase file:tracking-[0.24em] file:text-brand-navy hover:border-brand-gold/40"
                           />
                           <p className="text-[11px] leading-6 text-brand-grey">
                             JPG, PNG, or PDF. Maximum file size is{" "}
@@ -928,8 +934,8 @@ export default function Apply() {
                             Upload a clear JPG or PNG. Maximum file size is{" "}
                             {MAX_UPLOAD_SIZE_MB} MB.
                           </p>
-                          <label className="mt-5 flex cursor-pointer flex-col items-center gap-3 rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-5 py-8 text-center transition-colors hover:border-brand-gold/40">
-                            <Upload className="h-5 w-5 text-brand-gold" />
+                          <label className="mt-5 flex cursor-pointer flex-col items-center gap-3 rounded-2xl border border-dashed border-white/40 bg-white/[0.03] px-5 py-8 text-center transition-colors hover:border-brand-gold/40 focus-within:border-brand-gold focus-within:ring-2 focus-within:ring-brand-gold focus-within:ring-offset-2 focus-within:ring-offset-brand-navy">
+                            <Upload aria-hidden="true" className="h-5 w-5 text-brand-gold" />
                             <span className="text-xs font-bold uppercase tracking-[0.28em] text-white">
                               Upload front photo
                             </span>
@@ -941,10 +947,11 @@ export default function Apply() {
                             <input
                               id="application-licence-front"
                               type="file"
+                              aria-label="Driver licence front photo"
                               aria-describedby={errors.license_photo ? "application-licence-front-error" : undefined}
                               aria-invalid={Boolean(errors.license_photo)}
                               accept={APPLICATION_IMAGE_CONTENT_TYPES.join(",")}
-                              className="hidden"
+                              className="sr-only"
                               onChange={(event) =>
                                 handleFileUpload(event, "license_photo")
                               }
@@ -966,8 +973,8 @@ export default function Apply() {
                             Upload the back of your licence as a clear JPG or
                             PNG.
                           </p>
-                          <label className="mt-5 flex cursor-pointer flex-col items-center gap-3 rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-5 py-8 text-center transition-colors hover:border-brand-gold/40">
-                            <Upload className="h-5 w-5 text-brand-gold" />
+                          <label className="mt-5 flex cursor-pointer flex-col items-center gap-3 rounded-2xl border border-dashed border-white/40 bg-white/[0.03] px-5 py-8 text-center transition-colors hover:border-brand-gold/40 focus-within:border-brand-gold focus-within:ring-2 focus-within:ring-brand-gold focus-within:ring-offset-2 focus-within:ring-offset-brand-navy">
+                            <Upload aria-hidden="true" className="h-5 w-5 text-brand-gold" />
                             <span className="text-xs font-bold uppercase tracking-[0.28em] text-white">
                               Upload back photo
                             </span>
@@ -979,10 +986,11 @@ export default function Apply() {
                             <input
                               id="application-licence-back"
                               type="file"
+                              aria-label="Driver licence back photo"
                               aria-describedby={errors.license_back_photo ? "application-licence-back-error" : undefined}
                               aria-invalid={Boolean(errors.license_back_photo)}
                               accept={APPLICATION_IMAGE_CONTENT_TYPES.join(",")}
-                              className="hidden"
+                              className="sr-only"
                               onChange={(event) =>
                                 handleFileUpload(event, "license_back_photo")
                               }
@@ -1005,7 +1013,7 @@ export default function Apply() {
                             aria-describedby={errors.uber_status ? "application-uber-status-error" : undefined}
                             aria-invalid={Boolean(errors.uber_status)}
                             {...register("uber_status")}
-                            className="w-full appearance-none rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
+                            className="w-full appearance-none rounded-2xl border border-white/40 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
                           >
                             <option value="Active">Active Driver</option>
                             <option value="Applying">Applying</option>
@@ -1023,7 +1031,7 @@ export default function Apply() {
                             aria-describedby={errors.experience ? "application-experience-error" : undefined}
                             aria-invalid={Boolean(errors.experience)}
                             {...register("experience")}
-                            className="w-full appearance-none rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
+                            className="w-full appearance-none rounded-2xl border border-white/40 bg-brand-navy px-5 py-4 text-white outline-none transition-colors focus:border-brand-gold"
                           >
                             <option value="New Driver">New Driver</option>
                             <option value="Less than 1 year">
@@ -1055,7 +1063,10 @@ export default function Apply() {
                         <div className="rounded-3xl border border-white/10 bg-brand-navy/60 p-5">
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-brand-gold">
+                              <p
+                                id="application-agreement-label"
+                                className="text-[10px] font-bold uppercase tracking-[0.3em] text-brand-gold"
+                              >
                                 Final legal rental agreement
                               </p>
                               <p className="mt-2 text-[10px] uppercase tracking-[0.28em] text-brand-grey">
@@ -1066,14 +1077,19 @@ export default function Apply() {
                               Shared source of truth
                             </p>
                           </div>
-                          <div className="mt-4 max-h-[360px] overflow-y-auto rounded-2xl border border-white/5 bg-white/[0.02] p-5 text-sm leading-7 text-brand-grey">
+                          <div
+                            role="region"
+                            tabIndex={0}
+                            aria-labelledby="application-agreement-label"
+                            className="mt-4 max-h-[360px] overflow-y-auto rounded-2xl border border-white/40 bg-white/[0.02] p-5 text-sm leading-7 text-brand-grey"
+                          >
                             {agreementTemplateQuery.isLoading ? (
-                              <div className="flex items-center gap-3 text-brand-grey">
-                                <Loader2 className="h-4 w-4 animate-spin text-brand-gold" />
+                              <div role="status" aria-live="polite" className="flex items-center gap-3 text-brand-grey">
+                                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-brand-gold" />
                                 Loading agreement text...
                               </div>
                             ) : agreementTemplateQuery.isError ? (
-                              <p className="text-red-300">
+                              <p role="alert" className="text-red-300">
                                 We could not load the legal agreement text. Please refresh the page and try again.
                               </p>
                             ) : (
@@ -1103,10 +1119,11 @@ export default function Apply() {
                             <FormLabel htmlFor="application-signature">Typed signature</FormLabel>
                             <input
                               id="application-signature"
+                              autoComplete="name"
                               aria-describedby={errors.agreement_signature ? "application-signature-error" : undefined}
                               aria-invalid={Boolean(errors.agreement_signature)}
                               {...register("agreement_signature")}
-                              className="w-full rounded-2xl border border-white/10 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey/60 focus:border-brand-gold"
+                              className="w-full rounded-2xl border border-white/40 bg-brand-navy px-5 py-4 text-white outline-none transition-colors placeholder:text-brand-grey focus:border-brand-gold"
                               placeholder="Type your full legal name"
                             />
                             <FieldError
@@ -1139,7 +1156,7 @@ export default function Apply() {
                         }}
                         className="inline-flex items-center justify-center gap-3 rounded-full border border-white/10 px-7 py-4 text-xs font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-white/5"
                       >
-                        <ArrowLeft className="h-4 w-4" />
+                        <ArrowLeft aria-hidden="true" className="h-4 w-4" />
                         Back
                       </button>
                     ) : (
@@ -1154,17 +1171,17 @@ export default function Apply() {
                       {step < 3 ? (
                         <>
                           Continue
-                          <ArrowRight className="h-4 w-4" />
+                          <ArrowRight aria-hidden="true" className="h-4 w-4" />
                         </>
                       ) : isSubmitting ? (
                         <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
                           Submitting
                         </>
                       ) : (
                         <>
                           Submit application
-                          <ArrowRight className="h-4 w-4" />
+                          <ArrowRight aria-hidden="true" className="h-4 w-4" />
                         </>
                       )}
                     </button>

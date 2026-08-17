@@ -79,6 +79,7 @@ export interface DataTableProps<T> {
   emptyState: DataTableEmptyState;
   filters?: Array<DataTableFilter<T>>;
   getRowId: (row: T) => string;
+  getRowLabel?: (row: T) => string;
   minWidth?: string;
   pagination?: DataTablePagination;
   rows: T[];
@@ -127,6 +128,7 @@ export default function DataTable<T>({
   emptyState,
   filters = [],
   getRowId,
+  getRowLabel,
   minWidth = '760px',
   pagination,
   rows,
@@ -213,6 +215,30 @@ export default function DataTable<T>({
     ? pagination?.totalItems ?? sortedRows.length
     : clientPagination.totalItems;
 
+  const getRowSelectionLabel = (row: T) => {
+    if (getRowLabel) {
+      return `Select ${getRowLabel(row)}`;
+    }
+
+    for (const column of columns) {
+      if (column.id === 'actions' || !column.accessor) {
+        continue;
+      }
+
+      const value = column.accessor(row);
+
+      if (typeof value === 'string' && value.trim()) {
+        return `Select ${value.trim()}`;
+      }
+
+      if (typeof value === 'number') {
+        return `Select ${value}`;
+      }
+    }
+
+    return `Select row ${getRowId(row)}`;
+  };
+
   const handleSort = (column: DataTableColumn<T>) => {
     if (
       !applyClientTransforms ||
@@ -288,9 +314,9 @@ export default function DataTable<T>({
                       current === filterConfig.id ? null : filterConfig.id
                     )
                   }
-                  className="inline-flex h-11 items-center gap-2 rounded-lg border border-[#1e3a5f] bg-[#061425] px-4 text-xs font-bold uppercase tracking-widest text-white transition-all hover:border-[#dfb125]/60"
+                  className="inline-flex h-11 items-center gap-2 rounded-lg border border-[#5a7ba6] bg-[#061425] px-4 text-xs font-bold uppercase tracking-widest text-white transition-all hover:border-[#dfb125]/60"
                 >
-                  <Filter className="h-4 w-4 text-[#dfb125]" />
+                  <Filter aria-hidden="true" className="h-4 w-4 text-[#dfb125]" />
                   {filterConfig.label}
                   {selectedValues.length > 0 && (
                     <span className="rounded-full bg-[#dfb125] px-2 py-0.5 text-[10px] text-[#061425]">
@@ -317,7 +343,7 @@ export default function DataTable<T>({
                           className="text-slate-400 transition-colors hover:text-white"
                           aria-label={`Clear ${filterConfig.label} filter`}
                         >
-                          <X className="h-4 w-4" />
+                          <X aria-hidden="true" className="h-4 w-4" />
                         </button>
                       )}
                     </div>
@@ -331,7 +357,7 @@ export default function DataTable<T>({
                             type="checkbox"
                             checked={selectedValues.includes(option.value)}
                             onChange={() => toggleFilterValue(filterConfig.id, option.value)}
-                            className="h-4 w-4 rounded border-[#1e3a5f] bg-[#061425] accent-[#dfb125]"
+                            className="h-4 w-4 rounded border-[#5a7ba6] bg-[#061425] accent-[#dfb125]"
                           />
                           {option.label}
                         </label>
@@ -363,14 +389,14 @@ export default function DataTable<T>({
                 onClick={() => action.onClick(selectedRows)}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#dfb125] px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#061425] transition-all hover:bg-[#f0c94a]"
               >
-                {action.icon && <action.icon className="h-4 w-4" />}
+                {action.icon && <action.icon aria-hidden="true" className="h-4 w-4" />}
                 {action.label}
               </button>
             ))}
             <button
               type="button"
               onClick={() => setSelectedRowIds(new Set())}
-              className="min-h-11 rounded-lg border border-[#1e3a5f] px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white transition-all hover:bg-white/5"
+              className="min-h-11 rounded-lg border border-[#5a7ba6] px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white transition-all hover:bg-white/5"
             >
               Clear
             </button>
@@ -406,8 +432,8 @@ export default function DataTable<T>({
                           return next;
                         })
                       }
-                      className="h-5 w-5 rounded border-[#1e3a5f] bg-[#061425] accent-[#dfb125]"
-                      aria-label={`Select row ${rowId}`}
+                      className="h-5 w-5 rounded border-[#5a7ba6] bg-[#061425] accent-[#dfb125]"
+                      aria-label={getRowSelectionLabel(row)}
                     />
                     Select
                   </label>
@@ -452,7 +478,7 @@ export default function DataTable<T>({
                     onChange={() =>
                       setSelectedRowIds((current) => toggleSelectedRows(current, visibleRowIds))
                     }
-                    className="h-4 w-4 rounded border-[#1e3a5f] bg-[#061425] accent-[#dfb125] disabled:opacity-40"
+                    className="h-4 w-4 rounded border-[#5a7ba6] bg-[#061425] accent-[#dfb125] disabled:opacity-40"
                     aria-label="Select visible rows"
                   />
                 </th>
@@ -495,11 +521,11 @@ export default function DataTable<T>({
                         >
                           {column.header}
                           {isSorted && sortState?.direction === 'asc' ? (
-                            <ArrowUp className="h-3.5 w-3.5 text-[#dfb125]" />
+                            <ArrowUp aria-hidden="true" className="h-3.5 w-3.5 text-[#dfb125]" />
                           ) : isSorted && sortState?.direction === 'desc' ? (
-                            <ArrowDown className="h-3.5 w-3.5 text-[#dfb125]" />
+                            <ArrowDown aria-hidden="true" className="h-3.5 w-3.5 text-[#dfb125]" />
                           ) : (
-                            <ChevronsUpDown className="h-3.5 w-3.5" />
+                            <ChevronsUpDown aria-hidden="true" className="h-3.5 w-3.5" />
                           )}
                         </button>
                       ) : (
@@ -533,8 +559,8 @@ export default function DataTable<T>({
                             return next;
                           })
                         }
-                        className="h-4 w-4 rounded border-[#1e3a5f] bg-[#061425] accent-[#dfb125]"
-                        aria-label={`Select row ${rowId}`}
+                        className="h-4 w-4 rounded border-[#5a7ba6] bg-[#061425] accent-[#dfb125]"
+                        aria-label={getRowSelectionLabel(row)}
                       />
                     </td>
                     {columns.map((column) => (
@@ -572,7 +598,7 @@ export default function DataTable<T>({
               <select
                 value={pageSize}
                 onChange={handlePageSizeChange}
-                className="min-h-11 rounded-lg border border-[#1e3a5f] bg-[#0b1f36] px-3 py-2 text-white outline-none focus:border-[#dfb125]"
+                className="min-h-11 rounded-lg border border-[#5a7ba6] bg-[#0b1f36] px-3 py-2 text-white outline-none focus:border-[#dfb125]"
               >
                 {pageSizeOptions.map((option) => (
                   <option key={option} value={option}>
@@ -591,9 +617,9 @@ export default function DataTable<T>({
               type="button"
               onClick={() => handlePageChange(page - 1)}
               disabled={page <= 1 || pagination?.isFetching}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#1e3a5f] px-3 text-[10px] font-bold uppercase tracking-widest text-white transition-all hover:bg-white/5 disabled:opacity-40"
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#5a7ba6] px-3 text-[10px] font-bold uppercase tracking-widest text-white transition-all hover:bg-white/5 disabled:opacity-40"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft aria-hidden="true" className="h-4 w-4" />
               Previous
             </button>
             {getPageNumbers(page, totalPages).map((pageNumber, index, pageNumbers) => (
@@ -610,7 +636,7 @@ export default function DataTable<T>({
                   className={`min-h-11 min-w-11 rounded-lg border px-3 text-xs font-bold transition-all ${
                     pageNumber === page
                       ? 'border-[#dfb125] bg-[#dfb125] text-[#061425]'
-                      : 'border-[#1e3a5f] text-white hover:bg-white/5'
+                      : 'border-[#5a7ba6] text-white hover:bg-white/5'
                   } disabled:opacity-40`}
                 >
                   {pageNumber}
@@ -621,10 +647,10 @@ export default function DataTable<T>({
               type="button"
               onClick={() => handlePageChange(page + 1)}
               disabled={page >= totalPages || pagination?.isFetching}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#1e3a5f] px-3 text-[10px] font-bold uppercase tracking-widest text-white transition-all hover:bg-white/5 disabled:opacity-40"
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#5a7ba6] px-3 text-[10px] font-bold uppercase tracking-widest text-white transition-all hover:bg-white/5 disabled:opacity-40"
             >
               Next
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight aria-hidden="true" className="h-4 w-4" />
             </button>
           </nav>
         </div>

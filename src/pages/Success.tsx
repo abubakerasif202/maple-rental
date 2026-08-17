@@ -131,12 +131,13 @@ export default function Success() {
       type="button"
       onClick={handleRetryStatusCheck}
       disabled={isFetching}
+      aria-busy={isFetching}
       className="mb-4 w-full flex justify-center items-center py-4 px-4 border border-white/10 text-white font-bold text-sm uppercase tracking-widest hover:bg-white/5 transition-colors disabled:opacity-60"
     >
       {isFetching ? (
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        <Loader2 aria-hidden="true" className="mr-2 h-5 w-5 animate-spin" />
       ) : (
-        <RefreshCw className="mr-2 h-5 w-5" />
+        <RefreshCw aria-hidden="true" className="mr-2 h-5 w-5" />
       )}
       {isError ? 'Retry Status Check' : 'Check Status Again'}
     </button>
@@ -151,20 +152,31 @@ export default function Success() {
         robots="noindex,nofollow"
       />
 
+      <p
+        className="sr-only"
+        role={presentation.tone === 'failure' ? 'alert' : 'status'}
+        aria-live={presentation.tone === 'failure' ? 'assertive' : 'polite'}
+        aria-atomic="true"
+      >
+        {isLoading
+          ? 'Checking your payment status'
+          : `${presentation.title}. ${presentation.body}`}
+      </p>
+
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-brand-charcoal border border-white/5 py-12 px-6 shadow-2xl rounded-2xl text-center">
           {isLoading && (
             <div className="flex justify-center py-12">
-              <Loader2 className="h-12 w-12 text-brand-gold animate-spin" />
+              <Loader2 aria-hidden="true" className="h-12 w-12 text-brand-gold animate-spin" />
             </div>
           )}
 
           {!isLoading && isFullySuccessful && (
             <>
-              <CheckCircle className="mx-auto h-20 w-20 text-brand-gold mb-8" />
-              <h2 className="text-3xl font-serif font-bold text-white mb-4 tracking-tight">
+              <CheckCircle aria-hidden="true" className="mx-auto h-20 w-20 text-brand-gold mb-8" />
+              <h1 className="text-3xl font-serif font-bold text-white mb-4 tracking-tight">
                 {presentation.title}
-              </h2>
+              </h1>
               <p className="text-brand-grey font-light leading-relaxed mb-10">
                 {presentation.body}
               </p>
@@ -172,7 +184,7 @@ export default function Success() {
                 to="/"
                 className="w-full flex justify-center items-center py-4 px-4 bg-brand-gold text-brand-charcoal font-bold text-sm uppercase tracking-widest hover:bg-white transition-colors shadow-[0_0_20px_rgba(198,169,79,0.1)]"
               >
-                <Home className="mr-2 h-5 w-5" /> Return Home
+                <Home aria-hidden="true" className="mr-2 h-5 w-5" /> Return Home
               </Link>
             </>
           )}
@@ -181,12 +193,12 @@ export default function Success() {
             <>
               {presentation.showSpinner && (
                 <div className="flex justify-center py-6">
-                  <Loader2 className="h-12 w-12 text-brand-gold animate-spin" />
+                  <Loader2 aria-hidden="true" className="h-12 w-12 text-brand-gold animate-spin" />
                 </div>
               )}
-              <h2 className="text-3xl font-serif font-bold text-white mb-4 tracking-tight">
+              <h1 className="text-3xl font-serif font-bold text-white mb-4 tracking-tight">
                 {presentation.title}
-              </h2>
+              </h1>
               <p className="text-brand-grey font-light leading-relaxed mb-10">
                 {presentation.body}
               </p>
@@ -195,7 +207,7 @@ export default function Success() {
                 to="/"
                 className="w-full flex justify-center items-center py-4 px-4 bg-brand-gold text-brand-charcoal font-bold text-sm uppercase tracking-widest hover:bg-white transition-colors shadow-[0_0_20px_rgba(198,169,79,0.1)]"
               >
-                <Home className="mr-2 h-5 w-5" /> Return Home
+                <Home aria-hidden="true" className="mr-2 h-5 w-5" /> Return Home
               </Link>
             </>
           )}
@@ -203,13 +215,13 @@ export default function Success() {
           {!isLoading && requiresActivationReview && (
             <>
               <div className="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-amber-500/10 mb-8 border border-amber-500/30">
-                <svg className="h-10 w-10 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg aria-hidden="true" className="h-10 w-10 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v4m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
                 </svg>
               </div>
-              <h2 className="text-3xl font-serif font-bold text-white mb-4 tracking-tight">
+              <h1 className="text-3xl font-serif font-bold text-white mb-4 tracking-tight">
                 {presentation.title}
-              </h2>
+              </h1>
               <p className="text-brand-grey font-light leading-relaxed mb-10">
                 {presentation.body}
               </p>
@@ -218,7 +230,7 @@ export default function Success() {
                 to="/"
                 className="w-full flex justify-center items-center py-4 px-4 bg-brand-gold text-brand-charcoal font-bold text-sm uppercase tracking-widest hover:bg-white transition-colors shadow-[0_0_20px_rgba(198,169,79,0.1)]"
               >
-                <Home className="mr-2 h-5 w-5" /> Return Home
+                <Home aria-hidden="true" className="mr-2 h-5 w-5" /> Return Home
               </Link>
             </>
           )}
@@ -226,13 +238,13 @@ export default function Success() {
           {!isLoading && !isFullySuccessful && !isAwaitingFinalization && !isProcessingSetup && !requiresActivationReview && (
             <>
               <div className="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-red-900/20 mb-8 border border-red-500/30">
-                <svg className="h-10 w-10 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg aria-hidden="true" className="h-10 w-10 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </div>
-              <h2 className="text-3xl font-serif font-bold text-white mb-4 tracking-tight">
+              <h1 className="text-3xl font-serif font-bold text-white mb-4 tracking-tight">
                 {presentation.title}
-              </h2>
+              </h1>
               <p className="text-brand-grey font-light leading-relaxed mb-10">
                 {presentation.body}
               </p>

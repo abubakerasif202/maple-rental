@@ -20,7 +20,7 @@ export default function Footer() {
             </h2>
           </div>
           <Link to="/apply" className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-gold px-7 py-4 text-xs font-extrabold uppercase tracking-[0.2em] text-brand-charcoal transition hover:-translate-y-0.5 hover:bg-brand-gold-light">
-            Apply for a rental <ArrowUpRight className="h-4 w-4" />
+            Apply for a rental <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
           </Link>
         </div>
 
@@ -42,9 +42,9 @@ export default function Footer() {
               with admin-reviewed applications and secure Stripe payments.
             </p>
             <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-300">
-              <ShieldCheck className="h-4 w-4 text-brand-gold" /> Secure approval-first process
+              <ShieldCheck aria-hidden="true" className="h-4 w-4 text-brand-gold" /> Secure approval-first process
             </div>
-            <p className="mt-5 max-w-sm text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600">
+            <p className="mt-5 max-w-sm text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
               Service areas: Merrylands, Parramatta, Lidcombe, and Greater Sydney
             </p>
           </div>
@@ -54,7 +54,7 @@ export default function Footer() {
             <ul className="space-y-5">
               {quickLinks.map((link) => (
                 <li key={link.path}>
-                  <Link to={link.path} className="text-sm hover:text-brand-gold transition-colors font-light">
+                  <Link to={link.path} className="inline-flex min-h-6 items-center py-1.5 text-sm hover:text-brand-gold transition-colors font-light">
                     {link.label}
                   </Link>
                 </li>
@@ -66,22 +66,22 @@ export default function Footer() {
             <h3 className="text-xs font-bold text-white uppercase tracking-widest mb-8">Contact Us</h3>
             <ul className="space-y-5">
               <li className="flex items-center gap-4">
-                <Phone className="h-4 w-4 text-brand-gold" />
-                <a href="tel:0420550556" className="text-sm hover:text-brand-gold transition-colors font-light tracking-wider">0420 550 556</a>
+                <Phone aria-hidden="true" className="h-4 w-4 text-brand-gold" />
+                <a href="tel:0420550556" className="inline-flex min-h-6 items-center py-1.5 text-sm hover:text-brand-gold transition-colors font-light tracking-wider">0420 550 556</a>
               </li>
               <li className="flex items-center gap-4">
-                <Mail className="h-4 w-4 text-brand-gold" />
-                <a href="mailto:admin@maplerentals.com.au" className="text-sm hover:text-brand-gold transition-colors font-light">admin@maplerentals.com.au</a>
+                <Mail aria-hidden="true" className="h-4 w-4 text-brand-gold" />
+                <a href="mailto:admin@maplerentals.com.au" className="inline-flex min-h-6 items-center py-1.5 text-sm hover:text-brand-gold transition-colors font-light">admin@maplerentals.com.au</a>
               </li>
               <li className="flex items-start gap-4">
-                <MapPin className="h-4 w-4 text-brand-gold mt-0.5" />
+                <MapPin aria-hidden="true" className="h-4 w-4 text-brand-gold mt-0.5" />
                 <span className="text-sm font-light leading-relaxed">
                   13/27-33 Addlestone Rd
                   <br />
                   Merrylands NSW 2160
                 </span>
               </li>
-              <li className="text-xs text-gray-600 mt-8 space-y-2 font-light">
+              <li className="text-xs text-slate-400 mt-8 space-y-2 font-light">
                 <p>Sarfaraz Rajabi</p>
                 <p>Licence No: 317786C</p>
                 <p>ABN No: 16623061941</p>
@@ -91,7 +91,7 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="mt-16 flex flex-col gap-3 border-t border-white/10 pt-7 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-16 flex flex-col gap-3 border-t border-white/10 pt-7 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400 sm:flex-row sm:items-center sm:justify-between">
           <p>&copy; {new Date().getFullYear()} Maple Rentals. All rights reserved.</p>
           <p>Driver rentals · Merrylands · Greater Sydney</p>
         </div>

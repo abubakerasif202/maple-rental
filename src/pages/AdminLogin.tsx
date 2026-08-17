@@ -42,32 +42,43 @@ export default function AdminLogin() {
 
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
           {error && (
-            <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-md">
-              <p className="text-red-500 text-xs text-center font-bold uppercase tracking-widest">{error}</p>
+            <div role="alert" className="bg-red-500/10 border border-red-500/50 p-4 rounded-md">
+              <p className="text-red-300 text-xs text-center font-bold uppercase tracking-widest">{error}</p>
             </div>
           )}
 
           <div className="space-y-4">
-            <div>
-              <label htmlFor="admin-email" className="sr-only">Admin Email</label>
+            <div className="space-y-2">
+              <label
+                htmlFor="admin-email"
+                className="block text-[10px] font-bold uppercase tracking-[0.3em] text-brand-grey"
+              >
+                Admin Email
+              </label>
               <input
                 id="admin-email"
                 type="email"
                 required
-                className="appearance-none rounded-md relative block w-full px-4 py-3 border border-white/10 bg-brand-navy text-white placeholder-brand-grey/50 focus:outline-none focus:border-brand-gold focus:z-10 sm:text-sm font-light transition-colors"
-                placeholder="Email Address"
+                autoComplete="username"
+                className="appearance-none rounded-md relative block w-full px-4 py-3 border border-white/40 bg-brand-navy text-white placeholder-brand-grey focus:outline-none focus:border-brand-gold focus:z-10 sm:text-sm font-light transition-colors"
+                placeholder="name@maplerentals.com.au"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
               />
             </div>
-            <div>
-              <label htmlFor="admin-password" className="sr-only">Password</label>
+            <div className="space-y-2">
+              <label
+                htmlFor="admin-password"
+                className="block text-[10px] font-bold uppercase tracking-[0.3em] text-brand-grey"
+              >
+                Password
+              </label>
               <input
                 id="admin-password"
                 type="password"
                 required
-                className="appearance-none rounded-md relative block w-full px-4 py-3 border border-white/10 bg-brand-navy text-white placeholder-brand-grey/50 focus:outline-none focus:border-brand-gold focus:z-10 sm:text-sm font-light transition-colors"
-                placeholder="Password"
+                autoComplete="current-password"
+                className="appearance-none rounded-md relative block w-full px-4 py-3 border border-white/40 bg-brand-navy text-white placeholder-brand-grey focus:outline-none focus:border-brand-gold focus:z-10 sm:text-sm font-light transition-colors"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />

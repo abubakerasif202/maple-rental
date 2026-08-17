@@ -459,7 +459,7 @@ export default function RentalsTab({
                   value={confirmText}
                   onChange={(event) => setConfirmText(event.target.value)}
                   placeholder="CANCEL SUBSCRIPTION"
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none"
+                  className="w-full rounded-xl border border-white/40 bg-white/5 px-4 py-3 text-sm text-white outline-none"
                 />
               </label>
 
@@ -470,7 +470,7 @@ export default function RentalsTab({
                 <textarea
                   value={cancelReason}
                   onChange={(event) => setCancelReason(event.target.value)}
-                  className="min-h-24 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none"
+                  className="min-h-24 w-full rounded-xl border border-white/40 bg-white/5 px-4 py-3 text-sm text-white outline-none"
                 />
               </label>
 
@@ -499,7 +499,7 @@ export default function RentalsTab({
                   type="button"
                   onClick={closeCancelModal}
                   disabled={isCancellingSubscription}
-                  className="rounded-xl border border-white/10 px-4 py-3 text-xs font-bold uppercase tracking-widest text-white transition-all hover:bg-white/10"
+                  className="rounded-xl border border-white/40 px-4 py-3 text-xs font-bold uppercase tracking-widest text-white transition-all hover:bg-white/10"
                 >
                   Close
                 </button>

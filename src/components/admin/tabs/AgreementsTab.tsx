@@ -306,7 +306,7 @@ export default function AgreementsTab({
               <select
                 value={selectedTemplate?.id ?? ''}
                 onChange={(event) => setSelectedTemplateId(Number(event.target.value))}
-                className="h-11 rounded-xl border border-white/10 bg-brand-navy px-4 text-xs font-bold uppercase tracking-widest text-white outline-none focus:border-brand-gold"
+                className="h-11 rounded-xl border border-white/40 bg-brand-navy px-4 text-xs font-bold uppercase tracking-widest text-white outline-none focus:border-brand-gold"
               >
                 {templateVersions.map((template) => (
                   <option key={template.id} value={template.id}>

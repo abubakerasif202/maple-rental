@@ -41,6 +41,21 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!isOpen) {
+      return;
+    }
+
+    const backgroundRegions = Array.from(
+      document.querySelectorAll<HTMLElement>('main, footer')
+    );
+    backgroundRegions.forEach((region) => region.setAttribute('inert', ''));
+
+    return () => {
+      backgroundRegions.forEach((region) => region.removeAttribute('inert'));
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
       if (mobileMenuWasOpenRef.current) {
         mobileToggleRef.current?.focus();
       }
@@ -133,7 +148,7 @@ export default function Navbar() {
               to="/apply"
               className="inline-flex items-center gap-2 rounded-full bg-brand-gold px-5 py-3 text-[10px] font-extrabold uppercase tracking-[0.18em] text-brand-charcoal shadow-[0_10px_30px_rgba(223,177,37,0.18)] transition hover:-translate-y-0.5 hover:bg-brand-gold-light"
             >
-              Apply now <ArrowUpRight className="h-3.5 w-3.5" />
+              Apply now <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5" />
             </Link>
           </div>
 
@@ -147,7 +162,7 @@ export default function Navbar() {
               aria-label={isOpen ? 'Close navigation menu' : 'Open navigation menu'}
               className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 text-white transition-colors hover:border-brand-gold/50 hover:text-brand-gold"
             >
-              {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              {isOpen ? <X aria-hidden="true" className="h-6 w-6" /> : <Menu aria-hidden="true" className="h-6 w-6" />}
             </button>
           </div>
         </div>
@@ -176,7 +191,7 @@ export default function Navbar() {
                     : 'border-white/8 bg-white/[0.03] text-white'
                 }`}
               >
-                {link.name}<ArrowUpRight className="h-4 w-4" />
+                {link.name}<ArrowUpRight aria-hidden="true" className="h-4 w-4" />
               </Link>
             ))}
             </div>
@@ -185,13 +200,13 @@ export default function Navbar() {
                 to="/apply"
                 className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-gold px-6 py-4 text-xs font-extrabold uppercase tracking-[0.2em] text-brand-charcoal"
               >
-                Start application <ArrowUpRight className="h-4 w-4" />
+                Start application <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
               </Link>
               <a
                 href="tel:0420550556"
                 className="flex w-full items-center justify-center gap-2 rounded-full border border-white/15 px-6 py-4 text-xs font-bold uppercase tracking-[0.18em] text-white"
               >
-                <Phone className="h-4 w-4 text-brand-gold" /> 0420 550 556
+                <Phone aria-hidden="true" className="h-4 w-4 text-brand-gold" /> 0420 550 556
               </a>
             </div>
           </div>

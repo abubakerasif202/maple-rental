@@ -842,7 +842,7 @@ export default function TollStatDecTab({ initialSearch = '' }: TollStatDecTabPro
                   Recipient email
                 </span>
                 <input
-                  className="w-full rounded-lg border border-white/10 bg-brand-navy px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-gold"
+                  className="w-full rounded-lg border border-white/40 bg-brand-navy px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-gold"
                   inputMode="email"
                   onChange={(event) => setRecipientEmail(event.target.value)}
                   placeholder="tolls@example.com"
@@ -873,7 +873,7 @@ export default function TollStatDecTab({ initialSearch = '' }: TollStatDecTabPro
                 Original Notice
               </h3>
               <a
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-white transition-all hover:bg-white/10"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/40 bg-white/5 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-white transition-all hover:bg-white/10"
                 href={TOLL_NOTICE_TEMPLATE_URL}
                 rel="noreferrer"
                 target="_blank"

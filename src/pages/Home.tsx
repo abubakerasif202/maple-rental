@@ -180,7 +180,7 @@ export default function Home() {
                 to="/apply"
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-gold px-8 py-4 text-sm font-bold uppercase tracking-[0.22em] text-brand-navy transition-colors hover:bg-brand-gold-light"
               >
-                Start Driver Application <ArrowRight className="h-4 w-4" />
+                Start Driver Application <ArrowRight aria-hidden="true" className="h-4 w-4" />
               </Link>
               <Link
                 to="/pricing"
@@ -196,7 +196,7 @@ export default function Home() {
                   key={item}
                   className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-200"
                 >
-                  <CheckCircle2 className="h-3.5 w-3.5 text-brand-gold" />
+                  <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-brand-gold" />
                   {item}
                 </div>
               ))}
@@ -228,7 +228,7 @@ export default function Home() {
                   <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-brand-gold">
                     Payment Confidence
                   </p>
-                  <ShieldCheck className="h-5 w-5 text-brand-gold" />
+                  <ShieldCheck aria-hidden="true" className="h-5 w-5 text-brand-gold" />
                 </div>
                 <h2 className="text-2xl font-semibold text-white">
                   Structured before checkout, secure at checkout, managed after checkout.
@@ -278,6 +278,7 @@ export default function Home() {
             variants={stagger}
             className="grid gap-6 md:grid-cols-3"
           >
+            <h2 className="sr-only">Application and payment safeguards</h2>
             {trustPoints.map((item) => (
               <motion.article
                 key={item.title}
@@ -285,9 +286,9 @@ export default function Home() {
                 className="rounded-[1.75rem] border border-white/10 bg-white/[0.03] p-7"
               >
                 <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-gold/10 text-brand-gold">
-                  <item.icon className="h-5 w-5" />
+                  <item.icon aria-hidden="true" className="h-5 w-5" />
                 </div>
-                <h2 className="text-2xl font-serif font-bold text-white">{item.title}</h2>
+                <h3 className="text-2xl font-serif font-bold text-white">{item.title}</h3>
                 <p className="mt-3 text-sm leading-7 text-stone-300">{item.body}</p>
               </motion.article>
             ))}
@@ -375,7 +376,7 @@ export default function Home() {
                 className="rounded-[1.75rem] border border-white/10 bg-white/[0.03] p-7"
               >
                 <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-gold/10 text-brand-gold">
-                  <item.icon className="h-5 w-5" />
+                  <item.icon aria-hidden="true" className="h-5 w-5" />
                 </div>
                 <h3 className="text-2xl font-serif font-bold text-white">{item.title}</h3>
                 <p className="mt-3 text-sm leading-7 text-stone-300">{item.body}</p>
@@ -455,7 +456,7 @@ export default function Home() {
                   to="/apply"
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-gold px-8 py-4 text-sm font-bold uppercase tracking-[0.22em] text-brand-navy transition-colors hover:bg-brand-gold-light"
                 >
-                  Apply Now <ArrowRight className="h-4 w-4" />
+                  Apply Now <ArrowRight aria-hidden="true" className="h-4 w-4" />
                 </Link>
                 <Link
                   to="/pricing"

@@ -51,6 +51,30 @@ describe('DataTable accessibility', () => {
     expect(header.getAttribute('aria-sort')).toBe('ascending');
   });
 
+  it('labels row selection with readable row data instead of a raw id', () => {
+    renderSortableTable();
+
+    expect(screen.getAllByRole('checkbox', { name: 'Select Beta' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('checkbox', { name: 'Select Alpha' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('checkbox', { name: 'Select row 2' })).toBeNull();
+  });
+
+  it('prefers an explicit row label when one is supplied', () => {
+    render(
+      <DataTable
+        columns={[{ id: 'name', header: 'Name', accessor: (row) => row.name }]}
+        emptyState={{ title: 'No rows', description: 'Nothing to display' }}
+        getRowId={(row) => row.id}
+        getRowLabel={(row) => `application ${row.name}`}
+        rows={rows}
+      />,
+    );
+
+    expect(
+      screen.getAllByRole('checkbox', { name: 'Select application Beta' }).length,
+    ).toBeGreaterThan(0);
+  });
+
   it('identifies and announces the current page', () => {
     renderTable();
 

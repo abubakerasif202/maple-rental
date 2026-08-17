@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { motion } from 'motion/react';
 import { User, Mail, Phone, Send, CheckCircle2 } from 'lucide-react';
@@ -14,6 +14,13 @@ import {
 export default function InquiryForm() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const successHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (isSuccess) {
+      successHeadingRef.current?.focus();
+    }
+  }, [isSuccess]);
 
   const {
     register,
@@ -50,8 +57,14 @@ export default function InquiryForm() {
         animate={{ opacity: 1, scale: 1 }}
         className="bg-brand-navy-light p-8 md:p-12 border border-brand-gold/30 text-center shadow-2xl"
       >
-        <CheckCircle2 className="w-16 h-16 text-brand-gold mx-auto mb-6" />
-        <h3 className="text-2xl font-serif font-bold text-white mb-4">Inquiry Received</h3>
+        <CheckCircle2 aria-hidden="true" className="w-16 h-16 text-brand-gold mx-auto mb-6" />
+        <h3
+          ref={successHeadingRef}
+          tabIndex={-1}
+          className="text-2xl font-serif font-bold text-white mb-4 focus-visible:outline-none"
+        >
+          Inquiry Received
+        </h3>
         <p className="text-brand-grey mb-8 font-light">Thank you for your interest. Our fleet manager will contact you shortly to discuss vehicle availability.</p>
         <button
           onClick={() => setIsSuccess(false)}
@@ -86,14 +99,15 @@ export default function InquiryForm() {
           <div className="space-y-2">
             <label htmlFor="inquiry-name" className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Full Name</label>
             <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
+              <User aria-hidden="true" className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
               <input
                 id="inquiry-name"
+                autoComplete="name"
                 aria-describedby={errors.name ? 'inquiry-name-error' : undefined}
                 aria-invalid={Boolean(errors.name)}
                 {...register('name')}
                 placeholder="John Doe"
-                className={`w-full bg-brand-navy border ${errors.name ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
+                className={`w-full bg-brand-navy border ${errors.name ? 'border-red-400' : 'border-white/40'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-brand-grey`}
               />
             </div>
             {errors.name && <p id="inquiry-name-error" role="alert" className="text-red-300 text-[10px] uppercase tracking-widest">{errors.name.message}</p>}
@@ -101,14 +115,16 @@ export default function InquiryForm() {
           <div className="space-y-2">
             <label htmlFor="inquiry-email" className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Email Address</label>
             <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
+              <Mail aria-hidden="true" className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
               <input
                 id="inquiry-email"
+                type="email"
+                autoComplete="email"
                 aria-describedby={errors.email ? 'inquiry-email-error' : undefined}
                 aria-invalid={Boolean(errors.email)}
                 {...register('email')}
                 placeholder="john@example.com"
-                className={`w-full bg-brand-navy border ${errors.email ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
+                className={`w-full bg-brand-navy border ${errors.email ? 'border-red-400' : 'border-white/40'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-brand-grey`}
               />
             </div>
             {errors.email && <p id="inquiry-email-error" role="alert" className="text-red-300 text-[10px] uppercase tracking-widest">{errors.email.message}</p>}
@@ -119,14 +135,16 @@ export default function InquiryForm() {
           <div className="space-y-2">
             <label htmlFor="inquiry-phone" className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Phone Number</label>
             <div className="relative">
-              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
+              <Phone aria-hidden="true" className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gold/50" />
               <input
                 id="inquiry-phone"
+                type="tel"
+                autoComplete="tel"
                 aria-describedby={errors.phone ? 'inquiry-phone-error' : undefined}
                 aria-invalid={Boolean(errors.phone)}
                 {...register('phone')}
                 placeholder="0400 000 000"
-                className={`w-full bg-brand-navy border ${errors.phone ? 'border-red-500' : 'border-white/10'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20`}
+                className={`w-full bg-brand-navy border ${errors.phone ? 'border-red-400' : 'border-white/40'} p-4 pl-12 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-brand-grey`}
               />
             </div>
             {errors.phone && <p id="inquiry-phone-error" role="alert" className="text-red-300 text-[10px] uppercase tracking-widest">{errors.phone.message}</p>}
@@ -140,7 +158,7 @@ export default function InquiryForm() {
                 aria-describedby={errors.startDate ? 'inquiry-start-date-error' : undefined}
                 aria-invalid={Boolean(errors.startDate)}
                 {...register('startDate')}
-                className={`w-full bg-brand-navy border ${errors.startDate ? 'border-red-500' : 'border-white/10'} p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors`}
+                className={`w-full bg-brand-navy border ${errors.startDate ? 'border-red-400' : 'border-white/40'} p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors`}
               />
               {errors.startDate && <p id="inquiry-start-date-error" role="alert" className="text-red-300 text-[10px] uppercase tracking-widest">{errors.startDate.message}</p>}
             </div>
@@ -152,7 +170,7 @@ export default function InquiryForm() {
                 aria-describedby={errors.endDate ? 'inquiry-end-date-error' : undefined}
                 aria-invalid={Boolean(errors.endDate)}
                 {...register('endDate')}
-                className={`w-full bg-brand-navy border ${errors.endDate ? 'border-red-500' : 'border-white/10'} p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors`}
+                className={`w-full bg-brand-navy border ${errors.endDate ? 'border-red-400' : 'border-white/40'} p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors`}
               />
               {errors.endDate && <p id="inquiry-end-date-error" role="alert" className="text-red-300 text-[10px] uppercase tracking-widest">{errors.endDate.message}</p>}
             </div>
@@ -166,20 +184,25 @@ export default function InquiryForm() {
             {...register('message')}
             rows={3}
             placeholder="Tell us about your requirements..."
-            className="w-full bg-brand-navy border border-white/10 p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-white/20 resize-none"
+            className="w-full bg-brand-navy border border-white/40 p-4 text-sm text-white focus:border-brand-gold outline-none transition-colors placeholder:text-brand-grey resize-none"
           ></textarea>
         </div>
 
         <button
           type="submit"
           disabled={isSubmitting}
+          aria-busy={isSubmitting}
           className="w-full bg-brand-gold text-brand-navy py-5 font-bold uppercase tracking-widest text-sm hover:bg-brand-gold-light transition-all shadow-lg flex items-center justify-center gap-3 disabled:opacity-50"
         >
           {isSubmitting ? (
-            <div className="w-5 h-5 border-2 border-brand-navy border-t-transparent rounded-full animate-spin"></div>
+            <div
+              aria-hidden="true"
+              className="w-5 h-5 border-2 border-brand-navy border-t-transparent rounded-full animate-spin"
+            ></div>
           ) : (
-            <>Submit Inquiry <Send className="w-4 h-4" /></>
+            <Send aria-hidden="true" className="w-4 h-4 order-last" />
           )}
+          <span>{isSubmitting ? 'Submitting Inquiry' : 'Submit Inquiry'}</span>
         </button>
       </form>
     </motion.div>

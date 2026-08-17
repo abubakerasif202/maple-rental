@@ -155,7 +155,7 @@ export default function MaintenanceTab() {
               id="maintenance-reset-confirmation"
               value={confirmText}
               onChange={(event) => setConfirmText(event.target.value)}
-              className="min-h-11 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white outline-none focus:border-brand-gold"
+              className="min-h-11 w-full rounded-lg border border-white/40 bg-white/5 px-4 py-3 font-mono text-sm text-white outline-none focus:border-brand-gold"
               placeholder={CONFIRMATION_PHRASE}
             />
           </div>

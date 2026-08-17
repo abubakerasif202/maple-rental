@@ -35,6 +35,7 @@ export default function MetricCard({
   value,
 }: MetricCardProps) {
   const chartId = useId().replace(/[^a-zA-Z0-9]/g, '');
+  const hasRealSparkline = Boolean(sparklineData && sparklineData.length > 0);
   const data = useMemo(
     () =>
       sparklineData && sparklineData.length > 0
@@ -42,6 +43,9 @@ export default function MetricCard({
         : buildFallbackSparkline(numericValue),
     [numericValue, sparklineData]
   );
+  const sparklineLabel = hasRealSparkline
+    ? `${label} trend across ${data.length} periods, from ${data[0].value} to ${data[data.length - 1].value}.`
+    : undefined;
 
   return (
     <div className="rounded-lg border border-[#1e3a5f] bg-[#0b1f36] p-6">
@@ -55,10 +59,15 @@ export default function MetricCard({
           </h3>
         </div>
         <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#dfb125]/25 bg-[#dfb125]/10">
-          <Icon className="h-5 w-5 text-[#dfb125]" />
+          <Icon aria-hidden="true" className="h-5 w-5 text-[#dfb125]" />
         </div>
       </div>
-      <div className="h-16">
+      <div
+        className="h-16"
+        role={hasRealSparkline ? 'img' : undefined}
+        aria-label={sparklineLabel}
+        aria-hidden={hasRealSparkline ? undefined : true}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <defs>

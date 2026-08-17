@@ -503,7 +503,7 @@ export default function InvoicesTab({
                     [field]: event.target.value,
                   }))
                 }
-                className="w-full rounded-xl border border-white/10 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
+                className="w-full rounded-xl border border-white/40 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
               />
             </label>
           ))}
@@ -519,7 +519,7 @@ export default function InvoicesTab({
                   status: event.target.value as ManualInvoiceStatus,
                 }))
               }
-              className="w-full rounded-xl border border-white/10 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
+              className="w-full rounded-xl border border-white/40 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
             >
               {['draft', 'issued', 'paid', 'overdue', 'cancelled'].map((status) => (
                 <option key={status} value={status}>{status}</option>
@@ -535,7 +535,7 @@ export default function InvoicesTab({
                 value={item.description}
                 onChange={(event) => updateManualInvoiceItem(index, 'description', event.target.value)}
                 placeholder="Description"
-                className="rounded-xl border border-white/10 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
+                className="rounded-xl border border-white/40 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
               />
               <input
                 type="number"
@@ -543,7 +543,7 @@ export default function InvoicesTab({
                 step="0.01"
                 value={item.quantity}
                 onChange={(event) => updateManualInvoiceItem(index, 'quantity', event.target.value)}
-                className="rounded-xl border border-white/10 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
+                className="rounded-xl border border-white/40 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
               />
               <input
                 type="number"
@@ -551,7 +551,7 @@ export default function InvoicesTab({
                 step="0.01"
                 value={item.unit_price}
                 onChange={(event) => updateManualInvoiceItem(index, 'unit_price', event.target.value)}
-                className="rounded-xl border border-white/10 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
+                className="rounded-xl border border-white/40 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
               />
               <input
                 type="number"
@@ -559,7 +559,7 @@ export default function InvoicesTab({
                 step="0.01"
                 value={item.gst}
                 onChange={(event) => updateManualInvoiceItem(index, 'gst', event.target.value)}
-                className="rounded-xl border border-white/10 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
+                className="rounded-xl border border-white/40 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
               />
               <input
                 type="number"
@@ -567,7 +567,7 @@ export default function InvoicesTab({
                 step="0.01"
                 value={item.amount || 0}
                 onChange={(event) => updateManualInvoiceItem(index, 'amount', event.target.value)}
-                className="rounded-xl border border-white/10 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
+                className="rounded-xl border border-white/40 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
               />
               <button
                 type="button"
@@ -585,7 +585,7 @@ export default function InvoicesTab({
           <button
             type="button"
             onClick={() => setManualInvoiceItems((current) => [...current, createBlankManualInvoiceItem()])}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-3 text-xs font-bold uppercase tracking-widest text-white hover:bg-white/5"
+            className="inline-flex items-center gap-2 rounded-xl border border-white/40 px-4 py-3 text-xs font-bold uppercase tracking-widest text-white hover:bg-white/5"
           >
             <Plus className="h-4 w-4 text-brand-gold" />
             Add line item
@@ -599,7 +599,7 @@ export default function InvoicesTab({
           }
           rows={3}
           placeholder="Notes / terms"
-          className="w-full resize-none rounded-xl border border-white/10 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
+          className="w-full resize-none rounded-xl border border-white/40 bg-brand-navy px-4 py-3 text-sm text-white outline-none focus:border-brand-gold"
         />
 
         {manualInvoiceError && <p className="text-sm text-red-300">{manualInvoiceError}</p>}

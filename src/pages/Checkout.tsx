@@ -152,8 +152,9 @@ export default function Checkout() {
     return (
       <>
         {pageSeo}
-        <div className="min-h-screen bg-brand-navy flex items-center justify-center">
-          <Loader2 className="w-12 h-12 text-brand-gold animate-spin" />
+        <div role="status" aria-live="polite" className="min-h-screen bg-brand-navy flex items-center justify-center">
+          <Loader2 aria-hidden="true" className="w-12 h-12 text-brand-gold animate-spin" />
+          <span className="sr-only">Loading your approved payment details</span>
         </div>
       </>
     );
@@ -164,7 +165,7 @@ export default function Checkout() {
       <>
         {pageSeo}
         <div className="min-h-screen bg-brand-navy flex items-center justify-center text-white px-6">
-          <div className="text-center space-y-4 max-w-xl">
+          <div role="alert" className="text-center space-y-4 max-w-xl">
             <p>Unable to load the payment details for this link.</p>
             <p className="text-sm text-brand-grey font-light">
               Request a fresh checkout link from Maple Rentals if this one has expired or was
@@ -192,11 +193,11 @@ export default function Checkout() {
             to="/apply"
             className="inline-flex items-center gap-2 text-brand-grey hover:text-brand-gold transition-colors mb-12 uppercase tracking-widest text-[10px] font-bold"
           >
-            <ArrowLeft className="w-4 h-4" /> Back to application
+            <ArrowLeft aria-hidden="true" className="w-4 h-4" /> Back to application
           </Link>
 
           {pageError && (
-            <div className="mb-8 rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm text-red-50">
+            <div role="alert" className="mb-8 rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm text-red-50">
               {pageError}
             </div>
           )}
@@ -216,7 +217,7 @@ export default function Checkout() {
                 <div className="bg-white/5 border border-white/10 p-8 rounded-3xl space-y-8">
                   <div className="flex items-start gap-4">
                     <div className="bg-brand-gold/10 p-3 rounded-2xl">
-                      <CreditCard className="w-5 h-5 text-brand-gold" />
+                      <CreditCard aria-hidden="true" className="w-5 h-5 text-brand-gold" />
                     </div>
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-brand-gold mb-2">
@@ -246,11 +247,12 @@ export default function Checkout() {
                     type="button"
                     onClick={handleStartCheckout}
                     disabled={isRedirecting}
+                    aria-busy={isRedirecting}
                     className="w-full bg-brand-gold text-brand-navy py-5 font-bold uppercase tracking-widest text-sm hover:bg-brand-gold-light transition-all shadow-lg flex items-center justify-center gap-3 disabled:opacity-50"
                   >
                     {isRedirecting ? (
                       <>
-                        <Loader2 className="w-5 h-5 animate-spin" /> Redirecting to Stripe
+                        <Loader2 aria-hidden="true" className="w-5 h-5 animate-spin" /> Redirecting to Stripe
                       </>
                     ) : (
                       <>Continue to Stripe</>
@@ -259,10 +261,10 @@ export default function Checkout() {
 
                   <div className="flex items-center justify-center gap-8 py-4 border-t border-white/5">
                     <div className="flex items-center gap-2 text-brand-grey text-[10px] font-bold uppercase tracking-widest">
-                      <ShieldCheck className="w-4 h-4 text-brand-gold" /> SSL Secure
+                      <ShieldCheck aria-hidden="true" className="w-4 h-4 text-brand-gold" /> SSL Secure
                     </div>
                     <div className="flex items-center gap-2 text-brand-grey text-[10px] font-bold uppercase tracking-widest">
-                      <CreditCard className="w-4 h-4 text-brand-gold" /> Hosted by Stripe
+                      <CreditCard aria-hidden="true" className="w-4 h-4 text-brand-gold" /> Hosted by Stripe
                     </div>
                   </div>
                 </div>
@@ -294,9 +296,9 @@ export default function Checkout() {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-brand-navy to-transparent opacity-60" />
                     <div className="absolute bottom-6 left-6">
-                      <h3 className="text-xl font-bold text-white tracking-tight">
+                      <p className="text-xl font-bold text-white tracking-tight">
                         Deep blue 2026 Toyota Camry
-                      </h3>
+                      </p>
                       <p className="text-brand-gold text-[10px] font-bold uppercase tracking-widest">
                         Visual reference only
                       </p>
@@ -307,9 +309,9 @@ export default function Checkout() {
                       <p className="text-[10px] font-bold uppercase tracking-widest text-brand-gold">
                         Vehicle / Number Plate
                       </p>
-                      <h3 className="mt-3 text-xl font-bold text-white tracking-tight">
+                      <h2 className="mt-3 text-xl font-bold text-white tracking-tight">
                         {approved_vehicle}
-                      </h3>
+                      </h2>
                       <p className="mt-3 text-sm leading-7 text-brand-grey">
                         This is the manual vehicle reference recorded by Maple Rentals for your
                         agreement. The car image is a generic 2026 Toyota Camry colour visual, not a
@@ -317,9 +319,9 @@ export default function Checkout() {
                       </p>
                     </div>
 
-                    <h4 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest border-b border-white/5 pb-4">
+                    <h3 className="text-[10px] font-bold text-brand-grey uppercase tracking-widest border-b border-white/5 pb-4">
                       Stripe and manual bond breakdown
-                    </h4>
+                    </h3>
 
                     <div className="space-y-4 text-sm">
                       <div className="flex justify-between">
@@ -353,7 +355,7 @@ export default function Checkout() {
 
                   <div className="bg-brand-navy p-6 flex items-start gap-4">
                     <div className="bg-brand-gold/10 p-2 rounded-lg">
-                      <Info className="w-4 h-4 text-brand-gold" />
+                      <Info aria-hidden="true" className="w-4 h-4 text-brand-gold" />
                     </div>
                     <p className="text-[10px] text-brand-grey leading-relaxed">
                       Stripe handles the weekly rental subscription securely. Maple Rentals
