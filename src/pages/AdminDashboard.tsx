@@ -56,6 +56,7 @@ import Sidebar from '../components/admin/Sidebar';
 import AccessibleDialog from '../components/admin/AccessibleDialog';
 import { getTodayInAustralia } from '../../shared/applicationSubmission';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { formatAustraliaDate } from '../lib/australiaDate';
 
 const OverviewTab = lazy(() => import('../components/admin/tabs/OverviewTab'));
 const ApplicationsTab = lazy(() => import('../components/admin/tabs/ApplicationsTab'));
@@ -918,18 +919,7 @@ export default function AdminDashboard() {
       style: 'currency',
     }).format(Number(value ?? 0));
   const lastUpdated = summary?.summary_generated_at || null;
-  const formatDate = (value?: string | null) => {
-    if (!value) {
-      return 'N/A';
-    }
-
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-      return value;
-    }
-
-    return parsed.toLocaleDateString();
-  };
+  const formatDate = (value?: string | null) => formatAustraliaDate(value);
   const customerRecords = customerDataset?.items || [];
   const invoiceRecords = invoiceDataset?.items || [];
   const customerHistoryAvailable = customerDataset ? customerDataset.available !== false : true;

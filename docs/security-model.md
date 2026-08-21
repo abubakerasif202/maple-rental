@@ -21,8 +21,11 @@ does not make missing RLS or grants acceptable.
 | Admin | Privileged Express endpoints after Supabase token verification, trusted admin-role authorization, configured Maple admin boundary, and trusted-origin checks for cookie writes |
 | Service role | Server/controlled-job operations only; never browser code or public logs |
 
-Admin role must come from a trusted, server-managed claim (for example immutable
-Supabase `app_metadata`), not user-editable metadata or a client-supplied value.
+Admin role comes from trusted Supabase `app_metadata.maple_role`, not
+user-editable metadata or a client-supplied value. `hybrid` rollout mode accepts
+the exact configured email only while the existing production admin is being
+provisioned; an explicit `revoked` claim overrides that fallback. After operator
+verification, `ADMIN_AUTHORIZATION_MODE=entitlement` removes email fallback.
 Every privileged endpoint rechecks the verified token and role server-side. Maple's
 current single-admin email boundary may be an additional restriction, not a
 replacement for the trusted role claim. Hidden controls and frontend route guards
@@ -114,25 +117,23 @@ fixed by documentation:
 
 ### Medium
 
-- **Storage object policies are not repository-managed.** The applications bucket
-  is made private by `scripts/setup-bucket.ts:14-30`, but no migration defines
-  `storage.objects` policies for it. The agreement bucket migration creates only a
-  private bucket (`supabase/migrations/20260721092000_add_lease_agreement_pdf_artifacts.sql:51-53`).
-  Add deny-by-default object policies, ownership/admin checks, and isolated policy
-  tests before adding customer-direct Storage access.
+- **Storage remains server-mediated.** The applications and agreement buckets are
+  migration-managed as private. No browser role receives an object policy; the
+  service-role API performs uploads and creates short-lived signed URLs only after
+  admin authorization. Add ownership policies and isolated policy tests before any
+  future customer-direct Storage access.
 
-- **Admin authorization has no trusted role claim.** `api/middleware/auth.ts:437-452`
-  verifies a Supabase user and authorizes by configured email; the same comparison
-  gates refreshed sessions at `api/middleware/auth.ts:455-487`. Add a server-managed
-  role claim and denial tests while retaining the single-admin boundary.
-- **General admin audit events lack the required schema and immutability.**
-  `api/adminAudit.ts:3-23` writes action/actor/target/metadata only.
-  `supabase/migrations/20260711215014_production_hardening_audit.sql:72-97` has no
-  before/after, correlation ID, outcome, or mutation-blocking trigger. Add an
-  append-only v2 event contract and transactional mutation helpers.
-- **Application document access is not audited.**
-  `api/routes/applications.ts:593-635` authorizes the admin and issues a signed URL
-  but does not record access. Add redacted outcome auditing tied to the request ID.
+- **Admin entitlement activation is production-coordinated.** The backend checks
+  live trusted `app_metadata.maple_role` for bearer and encrypted-session flows,
+  ignores `user_metadata`, and supports immediate explicit revocation. Production
+  remains in `hybrid` compatibility mode until the operator provisions and tests
+  the existing admin claim, then switches to `entitlement` mode.
+- **General admin audit events need richer transactional context.**
+  `20260821120000_make_admin_audit_events_immutable.sql` makes the table
+  server-authored and blocks update, delete, and truncate. Access events include a
+  request ID in redacted metadata. The generic contract still lacks normalized
+  before/after values and some business mutations do not commit their audit event
+  in the same database transaction; migrate those flows through transactional RPCs.
 
 ### Low
 
@@ -140,7 +141,7 @@ fixed by documentation:
   `api/routes/applications.ts:411-464` checks declared MIME, size, and magic bytes,
   but there is no malware scan/quarantine stage. Add one when an operational
   scanner is available; keep unscanned objects private and admin-only.
-- **Critical-flow accessibility coverage is component-level, not browser-level.**
-  JSX lint and focused tests exist, but no end-to-end accessibility runner is in
-  `package.json`. Add automated critical public/admin journey coverage without
-  replacing manual keyboard and assistive-technology checks.
+- **Automated accessibility is not full WCAG proof.** Playwright now covers public
+  routes, five viewports, labels, keyboard reachability, overflow, and axe WCAG
+  A/AA rules. Authenticated admin journeys and manual keyboard, screen-reader,
+  zoom, reflow, and colour-independent-state checks remain release activities.

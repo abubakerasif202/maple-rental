@@ -198,4 +198,52 @@ describe('admin auth cookie handling', () => {
       createCookieOptions(request)
     );
   });
+
+  it('authorizes an encrypted session from trusted app_metadata after refresh', async () => {
+    const mockRefreshSession = vi.fn().mockResolvedValue({
+      data: {
+        session: {
+          access_token: 'refreshed-access-token',
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          refresh_token: 'refreshed-refresh-token',
+        },
+        user: {
+          app_metadata: { maple_role: 'admin' },
+          email: 'entitled@example.com',
+        },
+      },
+      error: null,
+    });
+    mockCreateAuthClient.mockReturnValue({
+      auth: { refreshSession: mockRefreshSession },
+    });
+    const { authenticateAdmin, createSupabaseAdminSessionToken } = await import('./auth.js');
+    const response = buildResponse();
+    const next = vi.fn();
+    const request = {
+      cookies: {
+        admin_token: createSupabaseAdminSessionToken({
+          accessToken: 'old-access-token',
+          accessTokenExpiresAt: Date.now() - 1,
+          email: 'entitled@example.com',
+          refreshToken: 'old-refresh-token',
+        }),
+      },
+      get: (header: string) => header.toLowerCase() === 'origin'
+        ? 'https://www.maplerentals.com.au'
+        : undefined,
+      headers: {},
+      method: 'POST',
+      secure: true,
+    } as unknown as express.Request;
+
+    await authenticateAdmin(request, response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(response.cookie).toHaveBeenCalledWith(
+      'admin_token',
+      expect.any(String),
+      expect.objectContaining({ httpOnly: true, secure: true })
+    );
+  });
 });

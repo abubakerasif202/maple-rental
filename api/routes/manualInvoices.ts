@@ -8,6 +8,7 @@ import {
 } from '../manualInvoices.js';
 import { authenticateAdmin } from '../middleware/auth.js';
 import { renderManualInvoicePdf } from '../templates/manualInvoicePdf.js';
+import { recordAdminAuditEvent } from '../adminAudit.js';
 
 const router = express.Router();
 
@@ -85,6 +86,13 @@ router.get('/:id/pdf', authenticateAdmin, async (req, res) => {
     }
 
     const pdf = await renderManualInvoicePdf(invoice);
+    await recordAdminAuditEvent({
+      action: 'manual_invoice_pdf_accessed',
+      actor: req.admin?.email || null,
+      metadata: { requestId: res.locals.requestId || null },
+      targetId: invoice.id,
+      targetType: 'manual_invoice',
+    });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',

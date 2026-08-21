@@ -7,6 +7,14 @@ const isProduction = process.env.NODE_ENV === 'production' && !isVitest;
 
 const devAdminEmail = 'admin@maplerentals.com.au';
 export const MIN_ADMIN_SESSION_SECRET_LENGTH = 32;
+export const ADMIN_ROLE_METADATA_KEY = 'maple_role';
+
+type AdminAuthorizationMode = 'entitlement' | 'hybrid';
+type AdminIdentity = {
+  app_metadata?: Record<string, unknown> | null;
+  email?: string | null;
+  user_metadata?: Record<string, unknown> | null;
+};
 
 const LOCAL_ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const ACCESS_TOKEN_REFRESH_WINDOW_MS = 60 * 1000;
@@ -109,6 +117,49 @@ const shouldUseCrossSiteCookie = (req?: express.Request) => {
 
   const hostOrigin = toOrigin(getRequestOrigin(req));
   return requestOrigin !== hostOrigin && requestOrigin.startsWith('https://');
+};
+
+export const getAdminAuthorizationMode = (): AdminAuthorizationMode | null => {
+  const configured = (process.env.ADMIN_AUTHORIZATION_MODE || 'hybrid')
+    .trim()
+    .toLowerCase();
+
+  return configured === 'hybrid' || configured === 'entitlement'
+    ? configured
+    : null;
+};
+
+export const authorizeAdminIdentity = (
+  user: AdminIdentity,
+  effectiveAdminEmail = getEffectiveAdminEmail()
+) => {
+  const mode = getAdminAuthorizationMode();
+  if (!mode) {
+    return { allowed: false as const, configurationError: true as const };
+  }
+
+  const role = String(user.app_metadata?.[ADMIN_ROLE_METADATA_KEY] || '')
+    .trim()
+    .toLowerCase();
+
+  // A privileged operator can explicitly revoke the legacy admin during the
+  // compatibility window. User metadata is intentionally never consulted.
+  if (role === 'revoked') {
+    return { allowed: false as const, revoked: true as const };
+  }
+
+  if (role === 'admin') {
+    return { allowed: true as const, source: 'app_metadata' as const };
+  }
+
+  const emailMatches =
+    Boolean(effectiveAdminEmail) &&
+    user.email?.trim().toLowerCase() === effectiveAdminEmail;
+  if (mode === 'hybrid' && emailMatches) {
+    return { allowed: true as const, source: 'legacy_email' as const };
+  }
+
+  return { allowed: false as const, revoked: false as const };
 };
 
 const readAdminSessionSecret = () => (process.env.JWT_SECRET || '').trim();
@@ -445,7 +496,8 @@ const authenticateSupabaseAdminToken = async (
     return null;
   }
 
-  if (data.user.email?.toLowerCase() !== effectiveAdminEmail) {
+  const authorization = authorizeAdminIdentity(data.user, effectiveAdminEmail);
+  if (!authorization.allowed) {
     return { accessDenied: true as const, user: null };
   }
 
@@ -468,7 +520,8 @@ const refreshSupabaseAdminSession = async (
     return null;
   }
 
-  if (data.user.email?.toLowerCase() !== effectiveAdminEmail) {
+  const authorization = authorizeAdminIdentity(data.user, effectiveAdminEmail);
+  if (!authorization.allowed) {
     clearAdminSessionCookie(req, res);
     return { accessDenied: true as const, user: null };
   }
@@ -538,14 +591,14 @@ export const authenticateAdmin = async (
             effectiveAdminEmail
           ));
 
-      if (!sessionResult?.user) {
-        return res.status(401).json({ error: 'Invalid token' });
-      }
-
-      if (sessionResult.accessDenied) {
+      if (sessionResult?.accessDenied) {
         return res
           .status(403)
           .json({ error: 'Access denied: Unauthorized email' });
+      }
+
+      if (!sessionResult?.user) {
+        return res.status(401).json({ error: 'Invalid token' });
       }
 
       req.admin = sessionResult.user;
@@ -557,14 +610,14 @@ export const authenticateAdmin = async (
       token,
       effectiveAdminEmail
     );
-    if (!tokenResult?.user) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-
-    if (tokenResult.accessDenied) {
+    if (tokenResult?.accessDenied) {
       return res
         .status(403)
         .json({ error: 'Access denied: Unauthorized email' });
+    }
+
+    if (!tokenResult?.user) {
+      return res.status(401).json({ error: 'Invalid token' });
     }
 
     req.admin = tokenResult.user;

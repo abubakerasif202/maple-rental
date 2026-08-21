@@ -12,6 +12,7 @@ import MetricCard from '../MetricCard';
 import * as api from '../../../lib/api';
 import { encodeCsvRows } from '../../../lib/csv';
 import { getTodayInAustralia } from '../../../../shared/applicationSubmission';
+import { getAustraliaDateSortValue } from '../../../lib/australiaDate';
 
 interface InvoicesTabProps {
   invoiceSearch: string;
@@ -319,7 +320,7 @@ export default function InvoicesTab({
         header: 'Invoice Date',
         id: 'date',
         minWidth: '150px',
-        sortValue: (invoice) => new Date(invoice.invoice_date),
+        sortValue: (invoice) => getAustraliaDateSortValue(invoice.invoice_date),
         cell: (invoice) => (
           <span className="text-xs text-slate-400">
             {formatDate(invoice.invoice_date)}

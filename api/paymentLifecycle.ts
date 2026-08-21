@@ -117,6 +117,33 @@ export const getRentalActivationErrorLog = (error: unknown) => ({
 const conflict = (code: string, message: string) =>
   new PaymentLifecycleError(message, { code, status: 409 });
 
+const VERIFIED_RELATIONSHIP_ERROR_MESSAGES: Record<string, string> = {
+  application_cancelled: 'Cancelled applications do not become operational customers.',
+  application_missing: 'Application not found for the verified Stripe relationship.',
+  checkout_session_identity_conflict:
+    'This application is already linked to a different Stripe Checkout session. Manual review is required.',
+  customer_identity_ambiguous:
+    'The operational customer identity is ambiguous. Manual review is required.',
+  customer_identity_conflict:
+    'This application is already linked to a different Stripe customer. Manual review is required.',
+  payment_link_version_mismatch:
+    'The Stripe relationship no longer matches the current payment link version.',
+  subscription_identity_conflict:
+    'This application is already linked to a different Stripe subscription. Manual review is required.',
+};
+
+const toVerifiedRelationshipPersistenceError = (error: unknown) => {
+  const message = databaseErrorField(error, 'message');
+  const match = /^maple_error:([a-z0-9_]+)$/i.exec(message);
+  const code = match?.[1];
+
+  if (code && VERIFIED_RELATIONSHIP_ERROR_MESSAGES[code]) {
+    return conflict(code, VERIFIED_RELATIONSHIP_ERROR_MESSAGES[code]);
+  }
+
+  return new Error('Failed to atomically persist the verified Stripe relationship.');
+};
+
 export type VerifiedStripeRelationship = {
   applicationId: string;
   checkoutSessionId: string | null;
@@ -138,18 +165,6 @@ export type PendingRentalActivation = {
 
 const stripeObjectId = (value: string | { id?: string } | null | undefined) =>
   typeof value === 'string' ? value : value?.id || null;
-
-/**
- * What a customer resolution actually changed about operational identity.
- *
- * `unchanged` covers replay: the operational customer already carries both the
- * application link and the Stripe customer id, so no identity mutation
- * occurred and no audit event may be written for it.
- */
-type OperationalCustomerOperation = 'create' | 'link' | 'unchanged';
-
-/** Audit source for anything driven by verified Stripe lifecycle identity. */
-const VERIFIED_STRIPE_AUDIT_SOURCE = 'verified-stripe-lifecycle';
 
 /**
  * Canonical, alias-mapped application projection. Column names differ between
@@ -213,151 +228,6 @@ const fetchApplicationForLifecycle = async (applicationId: string) => {
 };
 
 /**
- * Resolve the operational customer for a verified paid application.
- *
- * Identity precedence is durable-first and never falls back to name matching:
- *   1. an existing customer already linked to this application
- *   2. an existing customer already carrying this Stripe customer id
- *   3. insert a new operational customer
- *
- * Any cross-linkage between a different application and this Stripe customer
- * is ambiguous and is escalated for manual review instead of being merged.
- */
-const resolveOperationalCustomer = async (
-  application: ApplicationLifecycleRow,
-  stripeCustomerId: string
-) => {
-  const applicationId = String(application.id);
-
-  const byApplication = await db
-    .from('customers')
-    .select('id, application_id, stripe_customer_id')
-    .eq('application_id', applicationId)
-    .maybeSingle();
-  if (byApplication.error) {
-    throw new Error(
-      `Failed to resolve operational customer by application: ${byApplication.error.message || 'Unknown error'}`
-    );
-  }
-
-  const byStripeCustomer = await db
-    .from('customers')
-    .select('id, application_id, stripe_customer_id')
-    .eq('stripe_customer_id', stripeCustomerId)
-    .maybeSingle();
-  if (byStripeCustomer.error) {
-    throw new Error(
-      `Failed to resolve operational customer by Stripe identity: ${byStripeCustomer.error.message || 'Unknown error'}`
-    );
-  }
-
-  const existingByApplication = byApplication.data;
-  const existingByStripe = byStripeCustomer.data;
-
-  if (
-    existingByApplication &&
-    existingByStripe &&
-    Number(existingByApplication.id) !== Number(existingByStripe.id)
-  ) {
-    throw conflict(
-      'customer_identity_ambiguous',
-      'This application and Stripe customer resolve to two different operational customers. Manual review is required.'
-    );
-  }
-
-  if (
-    existingByApplication?.stripe_customer_id &&
-    existingByApplication.stripe_customer_id !== stripeCustomerId
-  ) {
-    throw conflict(
-      'customer_identity_ambiguous',
-      'The operational customer for this application is already linked to a different Stripe customer. Manual review is required.'
-    );
-  }
-
-  if (
-    existingByStripe?.application_id &&
-    String(existingByStripe.application_id) !== applicationId
-  ) {
-    throw conflict(
-      'customer_identity_ambiguous',
-      'This Stripe customer is already linked to another application. Manual review is required.'
-    );
-  }
-
-  const target = existingByApplication || existingByStripe || null;
-
-  // Contact details are refreshed from the application, which is the record the
-  // applicant actually signed. Bond and billing fields are deliberately absent:
-  // bond is agreement data and is never derived from Stripe.
-  const contactPayload = {
-    application_id: applicationId,
-    email: application.email || null,
-    full_name: String(application.name || '').trim() || 'Maple Rentals customer',
-    phone: application.phone || null,
-    street: application.address || null,
-    stripe_customer_id: stripeCustomerId,
-    updated_at: new Date().toISOString(),
-  };
-
-  if (target?.id) {
-    // Replay detection: the durable identity link is exactly these two columns.
-    // If both already point at this application and this Stripe customer, the
-    // update below only refreshes contact details and is not a new link.
-    const alreadyLinked =
-      String(target.application_id || '') === applicationId &&
-      String(target.stripe_customer_id || '') === stripeCustomerId;
-
-    const update = await db.from('customers').update(contactPayload).eq('id', target.id);
-    if (update.error) {
-      throw new Error(
-        `Failed to update operational customer: ${update.error.message || 'Unknown error'}`
-      );
-    }
-    return {
-      customerId: Number(target.id),
-      operation: (alreadyLinked ? 'unchanged' : 'link') as OperationalCustomerOperation,
-    };
-  }
-
-  const inserted = await db
-    .from('customers')
-    .insert({
-      ...contactPayload,
-      external_id: `stripe:${stripeCustomerId}`,
-      source: 'stripe-verified',
-    })
-    .select('id')
-    .single();
-
-  if (!inserted.error) {
-    return {
-      customerId: Number(inserted.data.id),
-      operation: 'create' as OperationalCustomerOperation,
-    };
-  }
-
-  // A concurrent webhook may have won the partial unique index. Re-read rather
-  // than inserting a duplicate operational customer. The winning writer records
-  // the create audit event, so this loser reports no mutation of its own.
-  const raced = await db
-    .from('customers')
-    .select('id')
-    .eq('stripe_customer_id', stripeCustomerId)
-    .maybeSingle();
-  if (raced.data?.id) {
-    return {
-      customerId: Number(raced.data.id),
-      operation: 'unchanged' as OperationalCustomerOperation,
-    };
-  }
-
-  throw new Error(
-    `Failed to create operational customer: ${inserted.error.message || 'Unknown error'}`
-  );
-};
-
-/**
  * Persist a Stripe relationship that has already been verified against trusted
  * Stripe metadata, and create or link the operational customer.
  *
@@ -404,68 +274,42 @@ export const persistVerifiedStripeRelationship = async (
     );
   }
 
-  const applicationUpdate = await db
-    .from('applications')
-    .update({
-      ...(input.checkoutSessionId
-        ? { stripe_checkout_session_id: input.checkoutSessionId }
-        : {}),
-      stripe_customer_id: input.customerId,
-      stripe_subscription_id: input.subscriptionId,
-    })
-    .eq('id', applicationId);
-
-  if (applicationUpdate.error) {
-    throw new Error(
-      `Failed to persist verified Stripe identity: ${applicationUpdate.error.message || 'Unknown error'}`
+  if (application.stripe_customer_id && application.stripe_customer_id !== input.customerId) {
+    throw conflict(
+      'customer_identity_conflict',
+      'This application is already linked to a different Stripe customer. Manual review is required.'
     );
   }
 
-  // An operational customer represents a real paying Maple customer. Verified
-  // Stripe identity alone is NOT sufficient to create one: a subscription can
-  // exist against an application that never reached verified payment (for
-  // example an Approved application whose subscription was later canceled).
-  // Recording identity above is safe bookkeeping; asserting an operational
-  // customer is not. The payment-only fulfilment path sets 'Paid' before it
-  // calls this function, so this gate never blocks a genuine paid checkout.
-  if (!PAID_APPLICATION_STATUSES.has(String(application.status))) {
-    return { customerId: null };
+  if (
+    input.checkoutSessionId &&
+    application.stripe_checkout_session_id &&
+    application.stripe_checkout_session_id !== input.checkoutSessionId
+  ) {
+    throw conflict(
+      'checkout_session_identity_conflict',
+      'This application is already linked to a different Stripe Checkout session. Manual review is required.'
+    );
   }
 
-  const { customerId, operation } = await resolveOperationalCustomer(
-    application,
-    input.customerId
-  );
+  // PostgreSQL owns the write boundary: application identity, operational
+  // customer create/link, and audit insertion either all commit or all roll
+  // back. The function revalidates the lifecycle row under FOR UPDATE, so the
+  // checks above are useful early errors rather than the concurrency control.
+  const result = await db.rpc('persist_verified_stripe_relationship', {
+    p_application_id: applicationId,
+    p_checkout_session_id: input.checkoutSessionId,
+    p_payment_link_version: currentVersion,
+    p_stripe_customer_id: input.customerId,
+    p_stripe_subscription_id: input.subscriptionId,
+  });
 
-  // Creating or linking an operational customer is a real business mutation and
-  // must leave an append-only trail. A replay resolves to `unchanged`, so it
-  // never produces a misleading duplicate mutation record.
-  //
-  // The metadata is deliberately redacted: identifiers and the operation only.
-  // No Stripe or Supabase credentials, no payment method data, and no applicant
-  // contact details are recorded here.
-  if (operation !== 'unchanged') {
-    await recordAdminAuditEvent({
-      action:
-        operation === 'create'
-          ? 'operational_customer_created'
-          : 'operational_customer_linked',
-      actor: null,
-      metadata: {
-        applicationId,
-        customerId,
-        operation,
-        paymentLinkVersion: currentVersion,
-        source: VERIFIED_STRIPE_AUDIT_SOURCE,
-        stripeCustomerId: input.customerId,
-        stripeSubscriptionId: input.subscriptionId,
-      },
-      targetId: applicationId,
-      targetType: 'application',
-    });
+  if (result.error) {
+    throw toVerifiedRelationshipPersistenceError(result.error);
   }
 
-  return { customerId };
+  const payload = result.data as { customerId?: number | null } | null;
+  return { customerId: payload?.customerId ?? null };
 };
 
 /**
@@ -732,7 +576,19 @@ export const activateRentalForApplication = async (
       );
     }
 
-    const { customerId } = await resolveOperationalCustomer(application, storedCustomerId);
+    const { customerId } = await persistVerifiedStripeRelationship({
+      applicationId,
+      checkoutSessionId: application.stripe_checkout_session_id || null,
+      customerId: storedCustomerId,
+      paymentLinkVersion: Number(application.payment_link_version || 0),
+      subscriptionId: storedSubscriptionId,
+    });
+    if (customerId == null) {
+      throw conflict(
+        'operational_customer_missing',
+        'A paid application must have an operational customer before rental activation.'
+      );
+    }
 
     const rentalPayload: Record<string, unknown> = {
       [rentalApplicationIdColumn]: applicationId,

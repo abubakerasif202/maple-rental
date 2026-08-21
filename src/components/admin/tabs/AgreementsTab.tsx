@@ -66,10 +66,9 @@ export default function AgreementsTab({
   const downloadPdf = async (agreement: api.SavedLeaseAgreement) => {
     setPdfAgreementId(agreement.id);
     try {
-      const current = await api.fetchSavedAgreementPdfStatus(agreement.id);
-      const artifact = current.artifact_status === 'ready'
-        ? current
-        : await api.generateSavedAgreementPdf(agreement.id);
+      // Signed URLs are returned only by the explicit, server-audited access
+      // endpoint. Background status polling must never mint download access.
+      const artifact = await api.generateSavedAgreementPdf(agreement.id);
       await queryClient.invalidateQueries({ queryKey: ['agreement-pdf', agreement.id] });
       if (artifact.signed_url) window.open(artifact.signed_url, '_blank', 'noopener,noreferrer');
     } finally {

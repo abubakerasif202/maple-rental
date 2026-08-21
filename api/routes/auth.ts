@@ -13,6 +13,7 @@ import {
   clearAdminSessionCookie,
   getEffectiveAdminEmail,
   getSupabaseSessionExpiry,
+  authorizeAdminIdentity,
 } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -53,13 +54,13 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     const email = username.trim().toLowerCase();
     const pass = password;
 
-    if (email !== effectiveAdminEmail) {
-      return res.status(403).json({
-        error: 'Unauthorized: Access restricted to primary admin',
-      });
-    }
-
     if (canUseLocalAdminSession && pass === devAdminPassword) {
+      if (email !== effectiveAdminEmail) {
+        return res.status(403).json({
+          error: 'Unauthorized: Administrator entitlement required',
+        });
+      }
+
       res.cookie(
         'admin_token',
         createLocalAdminSessionToken(email),
@@ -76,6 +77,12 @@ router.post('/login', loginRateLimiter, async (req, res) => {
 
     if (error || !data.session) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    if (!data.user || !authorizeAdminIdentity(data.user, effectiveAdminEmail).allowed) {
+      return res.status(403).json({
+        error: 'Unauthorized: Administrator entitlement required',
+      });
     }
 
     if (!data.session.refresh_token) {

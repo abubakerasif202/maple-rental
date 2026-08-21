@@ -12,12 +12,35 @@ const SPA_ROUTE_PATTERNS = [
   /^\/checkout\/[^/]+\/?$/,
   /^\/apply\/?$/,
   /^\/success\/?$/,
+  /^\/admin\/?$/,
   /^\/admin\/login\/?$/,
   /^\/admin\/dashboard\/?$/,
+  /^\/admin\/applications\/?$/,
+  /^\/admin\/rentals\/?$/,
+  /^\/admin\/customers\/?$/,
+  /^\/admin\/invoices\/?$/,
+  /^\/admin\/financials\/?$/,
   /^\/admin\/agreements\/?$/,
   /^\/admin\/toll-notices\/?$/,
-  /^\/[a-zA-Z0-9][a-zA-Z0-9/_-]*\/?$/,
+  /^\/admin\/maintenance\/?$/,
+  /^\/admin\/fleet-imports\/?$/,
 ];
+
+const SAFE_SPA_FALLBACK_PATTERN =
+  /^\/[a-zA-Z0-9][a-zA-Z0-9/_-]*\/?$/;
+
+export const isKnownSpaRoute = (path: string) =>
+  SPA_ROUTE_PATTERNS.some((pattern) => pattern.test(path));
+
+const ROUTE_HTML_FILES: Readonly<Record<string, string>> = {
+  '/apply': 'apply/index.html',
+  '/apply/': 'apply/index.html',
+  '/pricing': 'pricing/index.html',
+  '/pricing/': 'pricing/index.html',
+};
+
+export const getSpaHtmlFile = (path: string) =>
+  ROUTE_HTML_FILES[path] || 'index.html';
 
 const acceptsHtmlNavigation = (req: RequestLike) => {
   if (req.method === 'HEAD') {
@@ -45,5 +68,5 @@ export const shouldServeSpaEntry = (req: RequestLike) => {
     return false;
   }
 
-  return SPA_ROUTE_PATTERNS.some((pattern) => pattern.test(req.path));
+  return isKnownSpaRoute(req.path) || SAFE_SPA_FALLBACK_PATTERN.test(req.path);
 };

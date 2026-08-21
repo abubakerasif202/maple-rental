@@ -7,7 +7,7 @@
     "dev": "tsx watch api/index.ts",
     "start": "node server-dist/api/index.js",
     "build": "npm run build:client && npm run build:server",
-    "build:client": "node scripts/run-vite.js build",
+    "build:client": "node scripts/run-vite.js build && node scripts/generate-route-html.mjs",
     "build:server": "tsc -p tsconfig.server.json",
     "check:bundle-budget": "node scripts/check-client-bundle-budget.mjs",
     "preview": "node scripts/run-vite.js preview",
@@ -31,6 +31,8 @@
     "lint:code": "eslint . --max-warnings=0",
     "lint": "npm run typecheck && npm run lint:code",
     "test": "cross-env NODE_ENV=test vitest run --passWithNoTests",
+    "test:e2e": "playwright test",
+    "test:e2e:serve": "tsx scripts/serve-e2e.ts",
     "validate": "npm run lint && npm run test"
   },
   "dependencies": {
@@ -68,6 +70,8 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.62.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@types/cookie-parser": "^1.4.10",

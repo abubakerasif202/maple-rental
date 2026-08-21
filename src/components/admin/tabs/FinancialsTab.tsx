@@ -5,6 +5,7 @@ import { WeeklyFinancials } from '../../../lib/api';
 import DateRangePicker, { type DateRangeValue } from '../DateRangePicker';
 import EmptyState from '../EmptyState';
 import MetricCard from '../MetricCard';
+import { formatAustraliaDate } from '../../../lib/australiaDate';
 
 interface FinancialsTabProps {
   dateRange: DateRangeValue;
@@ -168,7 +169,7 @@ export default function FinancialsTab({
                     <div className="min-w-0">
                       <p className="break-all text-xs font-bold text-brand-gold">{payout.id}</p>
                       <p className="mt-1 text-xs text-brand-grey">
-                        {new Date(payout.arrival_date).toLocaleDateString()}
+                        {formatAustraliaDate(payout.arrival_date)}
                       </p>
                     </div>
                     <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-brand-grey">
@@ -218,7 +219,7 @@ export default function FinancialsTab({
                       {payout.id}
                     </td>
                     <td className="px-8 py-6 text-xs text-brand-grey">
-                      {new Date(payout.arrival_date).toLocaleDateString()}
+                      {formatAustraliaDate(payout.arrival_date)}
                     </td>
                     <td className="px-8 py-6 text-sm text-white font-bold">
                       {formatCurrency(payout.amount)}

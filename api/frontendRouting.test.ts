@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { RequestLike } from './frontendRouting.js';
 
-import { shouldServeSpaEntry } from './frontendRouting.js';
+import { getSpaHtmlFile, isKnownSpaRoute, shouldServeSpaEntry } from './frontendRouting.js';
 
 const createRequest = ({
   accept = 'text/html,application/xhtml+xml',
@@ -42,6 +42,16 @@ describe('shouldServeSpaEntry', () => {
       expect(shouldServeSpaEntry(createRequest({ path }))).toBe(true);
     });
     expect(shouldServeSpaEntry(createRequest({ path: '/missing-page' }))).toBe(true);
+    expect(isKnownSpaRoute('/missing-page')).toBe(false);
+    expect(isKnownSpaRoute('/pricing')).toBe(true);
+  });
+
+  it('selects route-specific delivered metadata HTML for public conversion routes', () => {
+    expect(getSpaHtmlFile('/')).toBe('index.html');
+    expect(getSpaHtmlFile('/pricing')).toBe('pricing/index.html');
+    expect(getSpaHtmlFile('/pricing/')).toBe('pricing/index.html');
+    expect(getSpaHtmlFile('/apply')).toBe('apply/index.html');
+    expect(getSpaHtmlFile('/admin')).toBe('index.html');
   });
 
   it('allows root path regardless of accept header', () => {

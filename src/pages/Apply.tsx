@@ -1079,6 +1079,7 @@ export default function Apply() {
                           </div>
                           <div
                             role="region"
+                            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- scrollable region focus technique (WCAG SCR29): tabIndex lets keyboard users scroll this region with arrow keys
                             tabIndex={0}
                             aria-labelledby="application-agreement-label"
                             className="mt-4 max-h-[360px] overflow-y-auto rounded-2xl border border-white/40 bg-white/[0.02] p-5 text-sm leading-7 text-brand-grey"

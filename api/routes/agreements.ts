@@ -11,6 +11,7 @@ import {
 } from '../importedDataFilters.js';
 import { recordAdminAuditEvent } from '../adminAudit.js';
 import { AgreementPdfProcessingError, createAgreementPdfSignedUrl, generateAgreementPdfArtifact, getAgreementPdfArtifact } from '../agreementPdfArtifacts.js';
+import { buildAgreementPdfStatusResponse } from '../agreementPdfStatus.js';
 
 const router = express.Router();
 
@@ -336,16 +337,7 @@ router.get('/:id/pdf', authenticateAdmin, async (req, res) => {
   try {
     const { id } = z.object({ id: z.coerce.number().int().positive() }).parse(req.params);
     const artifact = await getAgreementPdfArtifact(id);
-    if (!artifact) return res.json({ artifact_status: 'pending' });
-    const response: Record<string, unknown> = {
-      artifact_status: artifact.generation_status,
-      failure_code: artifact.failure_code,
-      generated_at: artifact.generated_at,
-    };
-    if (artifact.generation_status === 'ready' && artifact.storage_path) {
-      response.signed_url = await createAgreementPdfSignedUrl(String(artifact.storage_path));
-    }
-    return res.json(response);
+    return res.json(buildAgreementPdfStatusResponse(artifact));
   } catch (error) {
     if (error instanceof z.ZodError) return res.status(400).json({ error: 'Validation failed', details: error.issues });
     return res.status(503).json({ error: 'Agreement PDF status is unavailable.' });

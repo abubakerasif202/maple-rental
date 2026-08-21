@@ -25,7 +25,7 @@ import {
   getSessionModePostgresRequirementIssue,
 } from './db/postgres.js';
 import { getAdminSessionSecretConfigurationIssue } from './middleware/auth.js';
-import { shouldServeSpaEntry } from './frontendRouting.js';
+import { getSpaHtmlFile, isKnownSpaRoute, shouldServeSpaEntry } from './frontendRouting.js';
 import { apiNotFoundHandler, errorHandler } from './middleware/errors.js';
 import { requestContext, requestLogger } from './middleware/requestLogger.js';
 
@@ -49,6 +49,7 @@ import webhookRoutes from './routes/webhooks.js';
 import { buildContentSecurityPolicyDirectives } from './securityPolicy.js';
 import { indexNowConfig } from './services/indexNow.js';
 import { getPaymentProcessingMode } from './paymentProcessing.js';
+import { buildHealthSchemaIssueDetails } from './healthResponse.js';
 import { verifyProductionSchemaContract } from './schemaContract.js';
 
 const isVitest = process.env.VITEST === 'true';
@@ -60,7 +61,6 @@ const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '100kb';
 const DB_CHECK_TIMEOUT_MS = 8000;
 const DB_HEALTH_CACHE_TTL_MS = isVitest ? 0 : 5000;
 const frontendDistDir = path.resolve(process.cwd(), 'dist');
-const frontendIndexPath = path.join(frontendDistDir, 'index.html');
 const cspReportingEnabled = isProduction && process.env.CSP_REPORTING === 'true';
 const cspReportUri =
   (process.env.CSP_REPORT_URI && process.env.CSP_REPORT_URI.trim()) ||
@@ -522,7 +522,7 @@ const registerCoreRoutes = (app: express.Express) => {
         environment: process.env.NODE_ENV || 'development',
         database,
         directDatabase,
-        directDatabaseSchemaIssues,
+        ...buildHealthSchemaIssueDetails(directDatabaseSchemaIssues, isProduction),
         paymentActivationMode: getPaymentProcessingMode(),
       });
       return;
@@ -533,7 +533,7 @@ const registerCoreRoutes = (app: express.Express) => {
       environment: process.env.NODE_ENV || 'development',
       database,
       directDatabase,
-      directDatabaseSchemaIssues,
+      ...buildHealthSchemaIssueDetails(directDatabaseSchemaIssues, isProduction),
       paymentActivationMode: getPaymentProcessingMode(),
     });
   });
@@ -610,7 +610,10 @@ const registerProductionFrontend = (app: express.Express) => {
     }
 
     res.setHeader('Cache-Control', 'no-store');
-    res.sendFile(frontendIndexPath, (error) => {
+    if (!isKnownSpaRoute(req.path)) {
+      res.status(404);
+    }
+    res.sendFile(path.join(frontendDistDir, getSpaHtmlFile(req.path)), (error) => {
       if (error) {
         next(error);
       }

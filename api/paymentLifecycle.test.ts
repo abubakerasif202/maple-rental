@@ -28,20 +28,30 @@ const harness = vi.hoisted(() => {
     table: string;
     payload: HRow;
   }> = [];
+  const relationshipAuditEvents: HRow[] = [];
 
   const state: {
+    beforeApplicationUpdate: (() => void) | null;
+    beforeCustomerInsertFailure: (() => void) | null;
+    customerInsertError: HRow | null;
     nextId: number;
     rentalInsertError: HRow | null;
     rentalIdentitySequenceLastValue: number;
+    relationshipAuditError: HRow | null;
   } = {
+    beforeApplicationUpdate: null,
+    beforeCustomerInsertFailure: null,
+    customerInsertError: null,
     nextId: 1,
     rentalInsertError: null,
     rentalIdentitySequenceLastValue: 692,
+    relationshipAuditError: null,
   };
 
   const matchesFilters = (row: HRow, filters: Array<[string, string, any]>) =>
   filters.every(([type, column, value]) => {
     if (type === 'eq') return String(row[column] ?? '') === String(value);
+    if (type === 'isNull') return row[column] === null || row[column] === undefined;
     if (type === 'in') return (value as any[]).some((entry) => String(entry) === String(row[column] ?? ''));
     if (type === 'notNull') return row[column] !== null && row[column] !== undefined;
     return true;
@@ -56,6 +66,11 @@ const harness = vi.hoisted(() => {
 
   const applyWrite = () => {
     if (mode === 'insert') {
+      if (table === 'customers' && state.customerInsertError) {
+        state.beforeCustomerInsertFailure?.();
+        state.beforeCustomerInsertFailure = null;
+        return { error: state.customerInsertError, rows: [] };
+      }
       if (table === 'rentals' && state.rentalInsertError) {
         return { error: state.rentalInsertError, rows: [] };
       }
@@ -94,6 +109,11 @@ const harness = vi.hoisted(() => {
     }
 
     if (mode === 'update') {
+      if (table === 'applications' && state.beforeApplicationUpdate) {
+        const mutate = state.beforeApplicationUpdate;
+        state.beforeApplicationUpdate = null;
+        mutate();
+      }
       const updated = resolveRows();
       updated.forEach((row) => Object.assign(row, payload));
       writeLog.push({ operation: 'update', payload, table });
@@ -110,6 +130,14 @@ const harness = vi.hoisted(() => {
     },
     in(column: string, value: any[]) {
       filters.push(['in', column, value]);
+      return builder;
+    },
+    is(column: string, value: any) {
+      if (value === null) {
+        filters.push(['isNull', column, value]);
+      } else {
+        filters.push(['eq', column, value]);
+      }
       return builder;
     },
     not(column: string, _operator: string, _value: any) {
@@ -155,18 +183,161 @@ const harness = vi.hoisted(() => {
   return builder;
   };
 
+  const persistRelationshipRpc = async (params: HRow) => {
+    const tableSnapshot = structuredClone(tables);
+    const writeLogLength = writeLog.length;
+    const auditLength = relationshipAuditEvents.length;
+    const rollback = (message: string) => {
+      Object.keys(tables).forEach((table) => {
+        tables[table] = tableSnapshot[table] || [];
+      });
+      writeLog.length = writeLogLength;
+      relationshipAuditEvents.length = auditLength;
+      return { data: null, error: { message } };
+    };
+
+    state.beforeApplicationUpdate?.();
+    state.beforeApplicationUpdate = null;
+
+    const application = tables.applications.find(
+      (row) => String(row.id) === String(params.p_application_id)
+    );
+    if (!application) return rollback('maple_error:application_missing');
+    if (application.status === 'Cancelled') return rollback('maple_error:application_cancelled');
+    if (Number(application.payment_link_version || 0) !== Number(params.p_payment_link_version)) {
+      return rollback('maple_error:payment_link_version_mismatch');
+    }
+    if (application.stripe_customer_id && application.stripe_customer_id !== params.p_stripe_customer_id) {
+      return rollback('maple_error:customer_identity_conflict');
+    }
+    if (application.stripe_subscription_id && application.stripe_subscription_id !== params.p_stripe_subscription_id) {
+      return rollback('maple_error:subscription_identity_conflict');
+    }
+    if (params.p_checkout_session_id && application.stripe_checkout_session_id && application.stripe_checkout_session_id !== params.p_checkout_session_id) {
+      return rollback('maple_error:checkout_session_identity_conflict');
+    }
+
+    Object.assign(application, {
+      ...(params.p_checkout_session_id
+        ? { stripe_checkout_session_id: params.p_checkout_session_id }
+        : {}),
+      stripe_customer_id: params.p_stripe_customer_id,
+      stripe_subscription_id: params.p_stripe_subscription_id,
+    });
+    writeLog.push({ operation: 'update', payload: params, table: 'applications' });
+
+    if (application.status !== 'Paid') {
+      return { data: { customerId: null, operation: 'unchanged' }, error: null };
+    }
+
+    const byApplication = tables.customers.find(
+      (row) => String(row.application_id || '') === String(application.id)
+    );
+    const byStripe = tables.customers.find(
+      (row) => String(row.stripe_customer_id || '') === String(params.p_stripe_customer_id)
+    );
+    if (byApplication && byStripe && Number(byApplication.id) !== Number(byStripe.id)) {
+      return rollback('maple_error:customer_identity_ambiguous');
+    }
+    if (byApplication?.stripe_customer_id && byApplication.stripe_customer_id !== params.p_stripe_customer_id) {
+      return rollback('maple_error:customer_identity_ambiguous');
+    }
+    if (byStripe?.application_id && String(byStripe.application_id) !== String(application.id)) {
+      return rollback('maple_error:customer_identity_ambiguous');
+    }
+
+    let customer = byApplication || byStripe;
+    let operation = 'unchanged';
+    if (customer) {
+      operation = String(customer.application_id || '') === String(application.id) &&
+        String(customer.stripe_customer_id || '') === String(params.p_stripe_customer_id)
+        ? 'unchanged'
+        : 'link';
+      Object.assign(customer, {
+        application_id: application.id,
+        email: application.email || null,
+        full_name: String(application.name || '').trim() || 'Maple Rentals customer',
+        phone: application.phone || null,
+        street: application.address || null,
+        stripe_customer_id: params.p_stripe_customer_id,
+      });
+      writeLog.push({ operation: 'update', payload: customer, table: 'customers' });
+    } else if (state.customerInsertError) {
+      state.beforeCustomerInsertFailure?.();
+      state.beforeCustomerInsertFailure = null;
+      customer = tables.customers.find(
+        (row) => String(row.stripe_customer_id || '') === String(params.p_stripe_customer_id)
+      );
+      if (!customer || String(customer.application_id || '') !== String(application.id)) {
+        const concurrentCustomer = customer ? structuredClone(customer) : null;
+        const rolledBack = rollback('maple_error:customer_identity_ambiguous');
+        if (concurrentCustomer) tables.customers.push(concurrentCustomer);
+        return rolledBack;
+      }
+    } else {
+      customer = {
+        application_id: application.id,
+        email: application.email || null,
+        external_id: `stripe:${params.p_stripe_customer_id}`,
+        full_name: String(application.name || '').trim() || 'Maple Rentals customer',
+        id: state.nextId++,
+        phone: application.phone || null,
+        source: 'stripe-verified',
+        street: application.address || null,
+        stripe_customer_id: params.p_stripe_customer_id,
+      };
+      tables.customers.push(customer);
+      writeLog.push({ operation: 'insert', payload: customer, table: 'customers' });
+      operation = 'create';
+    }
+
+    if (operation !== 'unchanged') {
+      if (state.relationshipAuditError) {
+        return rollback(String(state.relationshipAuditError.message || 'audit insert failed'));
+      }
+      relationshipAuditEvents.push({
+        action: operation === 'create'
+          ? 'operational_customer_created'
+          : 'operational_customer_linked',
+        actor: null,
+        metadata: {
+          applicationId: application.id,
+          customerId: customer.id,
+          operation,
+          paymentLinkVersion: Number(params.p_payment_link_version),
+          source: 'verified-stripe-payment',
+        },
+        targetId: application.id,
+        targetType: 'application',
+      });
+    }
+
+    return { data: { customerId: customer.id, operation }, error: null };
+  };
+
   const reset = () => {
     Object.keys(tables).forEach((table) => {
       tables[table] = [];
     });
     writeLog.length = 0;
     state.nextId = 1;
+    state.beforeApplicationUpdate = null;
+    state.beforeCustomerInsertFailure = null;
+    state.customerInsertError = null;
     state.rentalInsertError = null;
     state.rentalIdentitySequenceLastValue = 692;
+    state.relationshipAuditError = null;
+    relationshipAuditEvents.length = 0;
   };
 
   return {
-    mockDb: { from: (table: string) => createBuilder(table) },
+    mockDb: {
+      from: (table: string) => createBuilder(table),
+      rpc: (name: string, params: HRow) => name === 'persist_verified_stripe_relationship'
+        ? persistRelationshipRpc(params)
+        : Promise.resolve({ data: null, error: null }),
+    },
+    relationshipAuditEvents,
     reset,
     state,
     tables,
@@ -174,7 +345,7 @@ const harness = vi.hoisted(() => {
   };
 });
 
-const { state, tables, writeLog } = harness;
+const { relationshipAuditEvents, state, tables, writeLog } = harness;
 
 const mockSubscriptionsRetrieve = vi.hoisted(() => vi.fn());
 const mockRecordAdminAuditEvent = vi.hoisted(() => vi.fn());
@@ -365,6 +536,86 @@ describe('persistVerifiedStripeRelationship', () => {
     ).rejects.toMatchObject({ code: 'subscription_identity_conflict' });
   });
 
+  it('refuses to relink an application that already holds another Stripe customer', async () => {
+    seedPaidApplication({ stripe_customer_id: 'cus_other' });
+
+    await expect(
+      persistVerifiedStripeRelationship(verifiedRelationship())
+    ).rejects.toMatchObject({ code: 'customer_identity_conflict' });
+
+    expect(writeLog).toHaveLength(0);
+  });
+
+  it('refuses to overwrite a different stored Checkout session', async () => {
+    seedPaidApplication({ stripe_checkout_session_id: 'cs_other' });
+
+    await expect(
+      persistVerifiedStripeRelationship(verifiedRelationship())
+    ).rejects.toMatchObject({ code: 'checkout_session_identity_conflict' });
+
+    expect(writeLog).toHaveLength(0);
+  });
+
+  it.each([
+    ['cancellation', { status: 'Cancelled' }, 'application_cancelled'],
+    ['payment-link regeneration', { payment_link_version: 3 }, 'payment_link_version_mismatch'],
+    ['a competing subscription', { stripe_subscription_id: 'sub_competing' }, 'subscription_identity_conflict'],
+    ['a competing Stripe customer', { stripe_customer_id: 'cus_competing' }, 'customer_identity_conflict'],
+    ['a competing Checkout session', { stripe_checkout_session_id: 'cs_competing' }, 'checkout_session_identity_conflict'],
+  ])('does not overwrite %s that lands between validation and persistence', async (_case, change, expectedCode) => {
+    const application = seedPaidApplication();
+    state.beforeApplicationUpdate = () => Object.assign(application, change);
+
+    await expect(
+      persistVerifiedStripeRelationship(verifiedRelationship())
+    ).rejects.toMatchObject({ code: expectedCode });
+
+    expect(tables.customers).toHaveLength(0);
+    expect(application).toMatchObject(change);
+    expect(application.stripe_subscription_id).not.toBe(SUBSCRIPTION_ID);
+  });
+
+  it('rejects a conflicting customer that wins the insert race', async () => {
+    seedPaidApplication();
+    state.customerInsertError = { code: '23505', message: 'duplicate customer identity' };
+    state.beforeCustomerInsertFailure = () => {
+      tables.customers.push({
+        application_id: OTHER_APPLICATION_ID,
+        id: 88,
+        stripe_customer_id: CUSTOMER_ID,
+      });
+    };
+
+    await expect(
+      persistVerifiedStripeRelationship(verifiedRelationship())
+    ).rejects.toMatchObject({ code: 'customer_identity_ambiguous' });
+
+    expect(tables.customers).toHaveLength(1);
+    expect(tables.customers[0].application_id).toBe(OTHER_APPLICATION_ID);
+    expect(tables.applications[0]).toMatchObject({
+      stripe_checkout_session_id: null,
+      stripe_customer_id: null,
+      stripe_subscription_id: null,
+    });
+  });
+
+  it('rolls back application and customer identity when the audit insert fails', async () => {
+    seedPaidApplication();
+    state.relationshipAuditError = { message: 'audit insert failed' };
+
+    await expect(
+      persistVerifiedStripeRelationship(verifiedRelationship())
+    ).rejects.toThrow('Failed to atomically persist');
+
+    expect(tables.applications[0]).toMatchObject({
+      stripe_checkout_session_id: null,
+      stripe_customer_id: null,
+      stripe_subscription_id: null,
+    });
+    expect(tables.customers).toHaveLength(0);
+    expect(relationshipAuditEvents).toHaveLength(0);
+  });
+
   it('escalates a Stripe customer already owned by another application', async () => {
     seedPaidApplication();
     tables.customers.push({
@@ -442,7 +693,9 @@ describe('operational customer audit trail', () => {
     'name',
     'paymentMethod',
     'phone',
+    'stripeCustomerId',
     'stripeSecretKey',
+    'stripeSubscriptionId',
     'supabaseKey',
     'supabaseServiceRoleKey',
   ];
@@ -460,8 +713,8 @@ describe('operational customer audit trail', () => {
     expect(tables.customers).toHaveLength(1);
 
     // ...and the operational customer mutation is audited exactly once.
-    expect(mockRecordAdminAuditEvent).toHaveBeenCalledTimes(1);
-    expect(mockRecordAdminAuditEvent).toHaveBeenCalledWith({
+    expect(relationshipAuditEvents).toHaveLength(1);
+    expect(relationshipAuditEvents[0]).toEqual({
       action: 'operational_customer_created',
       actor: null,
       metadata: {
@@ -469,9 +722,7 @@ describe('operational customer audit trail', () => {
         customerId: result.customerId,
         operation: 'create',
         paymentLinkVersion: 2,
-        source: 'verified-stripe-lifecycle',
-        stripeCustomerId: CUSTOMER_ID,
-        stripeSubscriptionId: SUBSCRIPTION_ID,
+        source: 'verified-stripe-payment',
       },
       targetId: APPLICATION_ID,
       targetType: 'application',
@@ -490,8 +741,8 @@ describe('operational customer audit trail', () => {
     await persistVerifiedStripeRelationship(verifiedRelationship());
 
     expect(tables.customers).toHaveLength(1);
-    expect(mockRecordAdminAuditEvent).toHaveBeenCalledTimes(1);
-    expect(mockRecordAdminAuditEvent.mock.calls[0][0]).toMatchObject({
+    expect(relationshipAuditEvents).toHaveLength(1);
+    expect(relationshipAuditEvents[0]).toMatchObject({
       action: 'operational_customer_linked',
       metadata: { customerId: 99, operation: 'link' },
     });
@@ -502,7 +753,7 @@ describe('operational customer audit trail', () => {
 
     await persistVerifiedStripeRelationship(verifiedRelationship());
 
-    const { metadata } = mockRecordAdminAuditEvent.mock.calls[0][0];
+    const { metadata } = relationshipAuditEvents[0];
     FORBIDDEN_METADATA_KEYS.forEach((key) => {
       expect(metadata).not.toHaveProperty(key);
     });
@@ -522,7 +773,7 @@ describe('operational customer audit trail', () => {
 
     expect(writeLog).toHaveLength(0);
     expect(tables.customers).toHaveLength(0);
-    expect(mockRecordAdminAuditEvent).not.toHaveBeenCalled();
+    expect(relationshipAuditEvents).toHaveLength(0);
   });
 
   it.each(['canceled', 'past_due', 'unpaid', 'incomplete', 'incomplete_expired', 'paused'])(
@@ -541,7 +792,7 @@ describe('operational customer audit trail', () => {
 
       expect(writeLog).toHaveLength(0);
       expect(tables.customers).toHaveLength(0);
-      expect(mockRecordAdminAuditEvent).not.toHaveBeenCalled();
+      expect(relationshipAuditEvents).toHaveLength(0);
     }
   );
 
@@ -552,7 +803,7 @@ describe('operational customer audit trail', () => {
 
     expect(writeLog).toHaveLength(0);
     expect(tables.customers).toHaveLength(0);
-    expect(mockRecordAdminAuditEvent).not.toHaveBeenCalled();
+    expect(relationshipAuditEvents).toHaveLength(0);
   });
 
   it('does not audit a duplicate mutation on webhook or reconciliation replay', async () => {
@@ -563,8 +814,8 @@ describe('operational customer audit trail', () => {
     await persistVerifiedStripeRelationship(verifiedRelationship());
 
     expect(tables.customers).toHaveLength(1);
-    expect(mockRecordAdminAuditEvent).toHaveBeenCalledTimes(1);
-    expect(mockRecordAdminAuditEvent.mock.calls[0][0]).toMatchObject({
+    expect(relationshipAuditEvents).toHaveLength(1);
+    expect(relationshipAuditEvents[0]).toMatchObject({
       action: 'operational_customer_created',
     });
   });
@@ -582,7 +833,7 @@ describe('operational customer audit trail', () => {
 
     expect(result).toEqual({ customerId: 42 });
     expect(tables.customers).toHaveLength(1);
-    expect(mockRecordAdminAuditEvent).not.toHaveBeenCalled();
+    expect(relationshipAuditEvents).toHaveLength(0);
   });
 
   it('never audits an operational customer for a not-yet-Paid application', async () => {
@@ -590,7 +841,7 @@ describe('operational customer audit trail', () => {
 
     await persistVerifiedStripeRelationship(verifiedRelationship());
 
-    expect(mockRecordAdminAuditEvent).not.toHaveBeenCalled();
+    expect(relationshipAuditEvents).toHaveLength(0);
   });
 
   it('creates no rental and touches no fleet state while auditing the link', async () => {

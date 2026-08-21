@@ -1,5 +1,9 @@
 import './load-env.js';
 import { db } from '../api/db/index.js';
+import {
+    APPLICATION_DOCUMENT_CONTENT_TYPES,
+    MAX_APPLICATION_UPLOAD_BYTES,
+} from '../shared/applicationSubmission.js';
 
 async function setupBucket() {
     const BUCKET_NAME = 'applications';
@@ -15,7 +19,8 @@ async function setupBucket() {
     if (!bucketExists) {
         const { error: createError } = await db.storage.createBucket(BUCKET_NAME, {
             public: false,
-            fileSizeLimit: 10485760, // 10MB
+            fileSizeLimit: MAX_APPLICATION_UPLOAD_BYTES,
+            allowedMimeTypes: [...APPLICATION_DOCUMENT_CONTENT_TYPES],
         });
 
         if (createError) {
@@ -26,7 +31,8 @@ async function setupBucket() {
     } else {
         const { error: updateError } = await db.storage.updateBucket(BUCKET_NAME, {
             public: false,
-            fileSizeLimit: 10485760,
+            fileSizeLimit: MAX_APPLICATION_UPLOAD_BYTES,
+            allowedMimeTypes: [...APPLICATION_DOCUMENT_CONTENT_TYPES],
         });
 
         if (updateError) {

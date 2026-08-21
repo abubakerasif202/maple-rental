@@ -632,6 +632,17 @@ router.get("/:id/documents/:document", authenticateAdmin, async (req, res) => {
       return res.status(404).json({ error: "Document not found" });
     }
 
+    await recordAdminAuditEvent({
+      action: "application_document_accessed",
+      actor: req.admin?.email || null,
+      metadata: {
+        documentKind: document,
+        requestId: res.locals.requestId || null,
+      },
+      targetId: id,
+      targetType: "application",
+    });
+
     res.json({ url: signedUrl });
   } catch (error) {
     if (error instanceof z.ZodError) {

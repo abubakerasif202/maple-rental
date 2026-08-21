@@ -72,6 +72,7 @@ export default defineConfig(() => {
       exclude: [
         ...configDefaults.exclude,
         '.claude/**',
+        'e2e/**',
         'server-dist/**',
         'dist/**',
         'tmp/**',

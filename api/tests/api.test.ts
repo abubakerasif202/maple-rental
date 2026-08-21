@@ -1736,6 +1736,17 @@ vi.mock("../db/postgres.js", () => {
         };
       }
 
+      if (
+        sql.startsWith(
+          "SELECT public.persist_verified_stripe_relationship($1, $2, $3, $4, $5)",
+        )
+      ) {
+        return {
+          rowCount: 1,
+          rows: [{ persist_verified_stripe_relationship: { customerId: 1 } }],
+        };
+      }
+
       const updateMatch = sql.match(
         /^UPDATE "([^"]+)" SET (.+) WHERE id = \$\d+$/,
       );
@@ -3570,6 +3581,28 @@ describe("Applications API", () => {
     expect(res.status).toBe(404);
     expect(res.body.error).toBe("Document not found");
     expect(mockStorageFrom).not.toHaveBeenCalled();
+  });
+
+  it("GET /api/applications/:id/documents/:document audits signed private access without recording the URL", async () => {
+    mockState.applications[0].license_photo =
+      `applications/${PENDING_APPLICATION_ID}/license-photo.png`;
+
+    const res = await request(app)
+      .get(`/api/applications/${PENDING_APPLICATION_ID}/documents/license_photo`)
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.url).toContain("https://signed.example/");
+    const event = mockState.admin_audit_events.find(
+      (entry) => entry.action === "application_document_accessed",
+    );
+    expect(event).toMatchObject({
+      actor: "admin@maplerentals.com.au",
+      target_id: PENDING_APPLICATION_ID,
+      target_type: "application",
+      metadata: { documentKind: "license_photo" },
+    });
+    expect(JSON.stringify(event)).not.toContain(res.body.url);
   });
 
   it("GET /api/rentals returns paginated rows and caps the page size", async () => {
@@ -5629,6 +5662,14 @@ describe("Operational history API", () => {
     );
     expect(res.text || res.body.toString("latin1")).toContain("MAPLE RENTALS");
     expect(res.text || res.body.toString("latin1")).toContain("062202");
+    const accessEvent = mockState.admin_audit_events.find(
+      (entry) => entry.action === "manual_invoice_pdf_accessed",
+    );
+    expect(accessEvent).toMatchObject({
+      target_id: "invoice-1",
+      target_type: "manual_invoice",
+    });
+    expect(JSON.stringify(accessEvent)).not.toContain("Approved Driver");
   });
 });
 
@@ -8059,7 +8100,7 @@ describe("Stripe API", () => {
     }
   });
 
-  it("POST /api/stripe/webhook records payment-only completion without direct DB access", async () => {
+  it("POST /api/stripe/webhook defers payment recording when no atomic DB transaction is available", async () => {
     mockHasDirectDatabaseConnection.mockReturnValue(false);
     mockStripe.webhooksConstructEvent.mockReturnValue({
       id: "evt_test_2",
@@ -8090,8 +8131,10 @@ describe("Stripe API", () => {
 
     expect(res.status).toBe(200);
     expect(mockState.cars[0].status).toBe("Available");
-    expect(mockState.applications[1].status).toBe("Paid");
-    expect(mockState.applications[1].pending_checkout_session_id).toBeNull();
+    expect(mockState.applications[1].status).toBe("Payment Review");
+    expect(mockState.applications[1].pending_checkout_session_id).toBe("cs_live_vehicle");
+    expect(mockState.applications[1].stripe_customer_id).toBeUndefined();
+    expect(mockState.applications[1].stripe_subscription_id).toBeUndefined();
     expect(mockState.rentals).toHaveLength(0);
   });
 

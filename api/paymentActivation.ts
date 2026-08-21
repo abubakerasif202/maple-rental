@@ -18,7 +18,7 @@ import {
 import { escapeHtml, getResend, sendResendEmail } from './email.js';
 import { hasTransactionalPaymentProcessing } from './paymentProcessing.js';
 import { normalizeUuid } from '../shared/uuid.js';
-import { persistCheckoutRelationshipFromSession } from './paymentLifecycle.js';
+import { persistVerifiedStripeRelationship } from './paymentLifecycle.js';
 
 const VEHICLE_CHECKOUT_FULFILLMENT_EVENT_TYPE =
   'vehicle_checkout.fulfillment.processed';
@@ -228,14 +228,20 @@ const hasVehicleCheckoutFulfillmentMarker = async (sessionId: string) => {
 
 const applyVehicleCheckoutPaymentOnlyWrites = async ({
   applicationId,
+  checkoutSessionId,
+  customerId,
   expectedPaymentLinkVersion,
   fulfillmentSessionId,
   paidAt,
+  subscriptionId,
 }: {
   applicationId: string;
+  checkoutSessionId: string;
+  customerId: string;
   expectedPaymentLinkVersion: number;
   fulfillmentSessionId: string;
   paidAt: string;
+  subscriptionId: string;
 }) => {
   const applicationPaymentPayload = await toApplicationPaymentWritePayload({
     paid_at: paidAt,
@@ -244,9 +250,20 @@ const applyVehicleCheckoutPaymentOnlyWrites = async ({
   });
 
   if (!hasDirectDatabaseConnection()) {
-    const result = await db.from('applications').update(applicationPaymentPayload).eq('id', applicationId);
-    assertSupabaseWrite(result, 'Failed to update application payment state');
-    return 'fulfilled' as const;
+    if (await hasVehicleCheckoutFulfillmentMarker(fulfillmentSessionId)) {
+      await persistVerifiedStripeRelationship({
+        applicationId,
+        checkoutSessionId,
+        customerId,
+        paymentLinkVersion: expectedPaymentLinkVersion,
+        subscriptionId,
+      });
+      return 'already_fulfilled' as const;
+    }
+
+    throw new Error(
+      'Transactional payment recording requires a session-capable PostgreSQL connection.'
+    );
   }
 
   return withPostgresTransaction(async (client) => {
@@ -264,6 +281,16 @@ const applyVehicleCheckoutPaymentOnlyWrites = async ({
       existingFulfillmentLedgerRow?.event_type ===
       VEHICLE_CHECKOUT_FULFILLMENT_EVENT_TYPE
     ) {
+      await client.query(
+        'SELECT public.persist_verified_stripe_relationship($1, $2, $3, $4, $5)',
+        [
+          applicationId,
+          expectedPaymentLinkVersion,
+          checkoutSessionId,
+          customerId,
+          subscriptionId,
+        ]
+      );
       return 'already_fulfilled' as const;
     }
 
@@ -310,6 +337,21 @@ const applyVehicleCheckoutPaymentOnlyWrites = async ({
       Number(existingFulfillmentLedgerRow?.id || 0) || null
     );
 
+    // This SQL function updates the application Stripe identity, creates or
+    // links the operational customer, and inserts its audit event. Calling it
+    // with the same PostgreSQL client keeps all payment and identity writes in
+    // this transaction; any later failure rolls everything back.
+    await client.query(
+      'SELECT public.persist_verified_stripe_relationship($1, $2, $3, $4, $5)',
+      [
+        applicationId,
+        expectedPaymentLinkVersion,
+        checkoutSessionId,
+        customerId,
+        subscriptionId,
+      ]
+    );
+
     return 'fulfilled' as const;
   });
 };
@@ -321,16 +363,13 @@ export const handleVehicleCheckoutCompletion = async (
   const sessionPaymentLinkVersion = Number(session.metadata?.payment_link_version || 0);
   const subscriptionId =
     typeof session.subscription === 'string' ? session.subscription : session.subscription?.id || null;
-  if (!applicationId || !subscriptionId) {
+  const customerId =
+    typeof session.customer === 'string' ? session.customer : session.customer?.id || null;
+  if (!applicationId || !subscriptionId || !customerId) {
     return 'skipped' as const;
   }
 
   return withVehicleCheckoutProcessingLock(applicationId, async () => {
-    if (await hasVehicleCheckoutFulfillmentMarker(session.id)) {
-      console.info('Ignoring replayed checkout completion because fulfillment is already recorded.');
-      return 'already_fulfilled' as const;
-    }
-
     const selectColumns = await getApplicationSelectColumns();
     const applicationResult = await db
       .from('applications')
@@ -454,39 +493,18 @@ export const handleVehicleCheckoutCompletion = async (
     try {
       paymentOutcome = await applyVehicleCheckoutPaymentOnlyWrites({
         applicationId,
+        checkoutSessionId: session.id,
+        customerId,
         expectedPaymentLinkVersion: sessionPaymentLinkVersion,
         fulfillmentSessionId: session.id,
         paidAt: recordedPaidAt,
+        subscriptionId,
       });
     } catch (error) {
       return moveApplicationToPaymentReview(
         error instanceof Error
           ? error.message
           : 'Payment was received but could not be recorded automatically.'
-      );
-    }
-
-    // The operational identity bridge runs only after the payment-only write
-    // has succeeded, and is deliberately non-fatal. It records who paid and
-    // which Stripe subscription they hold so admins can see the paid
-    // subscription and later activate a rental explicitly. It still creates no
-    // rental, assigns no vehicle, and mutates no fleet state.
-    //
-    // A failure here must never downgrade a payment Maple has already
-    // recorded, so it is logged for reconciliation instead of rethrown.
-    try {
-      await persistCheckoutRelationshipFromSession(session);
-    } catch (error) {
-      console.error(
-        JSON.stringify({
-          message: 'payment_lifecycle.identity_link_deferred',
-          errorName: error instanceof Error ? error.name : 'UnknownError',
-          reason:
-            error instanceof Error && 'code' in error
-              ? String((error as { code?: string }).code)
-              : 'unknown',
-          resolution: 'Run npm run reconcile:stripe-lifecycle to link this payment.',
-        })
       );
     }
 

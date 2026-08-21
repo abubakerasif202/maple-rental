@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { getTodayInAustralia } from '../../shared/applicationSubmission';
+import { formatAustraliaDate, getAustraliaDateSortValue } from './australiaDate';
 
 describe('getTodayInAustralia', () => {
   afterEach(() => {
@@ -14,5 +16,24 @@ describe('getTodayInAustralia', () => {
     vi.setSystemTime(new Date(instant));
 
     expect(getTodayInAustralia()).toBe(expected);
+  });
+});
+
+describe('Australian business date formatting', () => {
+  it.each([
+    ['2026-04-05', '05/04/2026'],
+    ['2026-10-04', '04/10/2026'],
+  ])('preserves the stored date-only value across Sydney DST boundaries', (value, expected) => {
+    expect(formatAustraliaDate(value)).toBe(expected);
+  });
+
+  it('renders exact timestamps at the Australia/Sydney presentation boundary', () => {
+    expect(formatAustraliaDate('2026-08-20T15:30:00.000Z')).toBe('21/08/2026');
+  });
+
+  it('sorts ISO date-only values chronologically without local-time parsing', () => {
+    expect(getAustraliaDateSortValue('2026-08-21')).toBeGreaterThan(
+      getAustraliaDateSortValue('2026-08-20'),
+    );
   });
 });

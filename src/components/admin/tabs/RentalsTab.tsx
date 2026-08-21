@@ -13,6 +13,7 @@ import DataTable, { type DataTableColumn } from '../DataTable';
 import type { CancelSubscriptionResponse } from '../../../lib/api';
 import { encodeCsvRows } from '../../../lib/csv';
 import AccessibleDialog from '../AccessibleDialog';
+import { formatAustraliaDate, getAustraliaDateSortValue } from '../../../lib/australiaDate';
 
 interface RentalsTabProps {
   isFetchingRentals: boolean;
@@ -124,7 +125,7 @@ export default function RentalsTab({
     const csvRows = rows.map((rental) => [
       rental.applicant_name || '',
       rental.car_name || '',
-      new Date(rental.start_date).toLocaleDateString(),
+      formatAustraliaDate(rental.start_date, ''),
       rental.weekly_price,
       rental.status,
       rental.stripe_subscription_id || '',
@@ -178,10 +179,10 @@ export default function RentalsTab({
         header: 'Start Date',
         id: 'start_date',
         minWidth: '130px',
-        sortValue: (rental) => new Date(rental.start_date),
+        sortValue: (rental) => getAustraliaDateSortValue(rental.start_date),
         cell: (rental) => (
           <span className="text-xs text-slate-400">
-            {new Date(rental.start_date).toLocaleDateString()}
+            {formatAustraliaDate(rental.start_date)}
           </span>
         ),
       },

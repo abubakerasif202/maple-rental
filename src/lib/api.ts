@@ -552,7 +552,6 @@ export interface AgreementPdfStatus {
   artifact_status: 'pending' | 'generating' | 'ready' | 'failed';
   failure_code?: string | null;
   generated_at?: string | null;
-  signed_url?: string;
 }
 
 export const fetchSavedAgreementPdfStatus = async (id: number): Promise<AgreementPdfStatus> => {
