@@ -102,7 +102,7 @@ router.post("/cancellation-operations/:operationId/reconcile", authenticateAdmin
     let subscription: StripeCancellationSubscription | null = null;
 
     if (operation.operation_type === "application") {
-      const application = await db.from("applications").select("id, status, payment_link_version, pending_checkout_session_id").eq("id", operation.application_id).single();
+      const application = await db.from("applications").select("id, status, payment_link_version, pending_checkout_session_id, stripe_subscription_id").eq("id", operation.application_id).single();
       if (application.error || !application.data) return res.status(404).json({ error: "Application not found" });
       if (Number(application.data.payment_link_version || 0) !== Number(operation.expected_payment_link_version || 0)) {
         return res.status(409).json({ error: "Application payment version changed; reconciliation requires manual review." });
@@ -110,7 +110,18 @@ router.post("/cancellation-operations/:operationId/reconcile", authenticateAdmin
       if (operation.stripe_checkout_session_id && application.data.pending_checkout_session_id && operation.stripe_checkout_session_id !== application.data.pending_checkout_session_id) {
         return res.status(409).json({ error: "Application Checkout relationship changed; reconciliation requires manual review." });
       }
-      let verifiedSubscriptionId = operation.stripe_subscription_id || null;
+      const canonicalSubscriptionId = String(application.data.stripe_subscription_id || "").trim() || null;
+      let verifiedSubscriptionId = String(operation.stripe_subscription_id || "").trim() || null;
+      if (canonicalSubscriptionId && !verifiedSubscriptionId) {
+        return res.status(409).json({ error: "Cancellation operation is missing the canonical application subscription evidence." });
+      }
+      if (
+        canonicalSubscriptionId &&
+        verifiedSubscriptionId &&
+        canonicalSubscriptionId !== verifiedSubscriptionId
+      ) {
+        return res.status(409).json({ error: "Application subscription relationship changed; reconciliation requires manual review." });
+      }
       if (operation.stripe_checkout_session_id) {
         const session = await stripe.checkout.sessions.retrieve(operation.stripe_checkout_session_id);
         if (
@@ -125,6 +136,9 @@ router.post("/cancellation-operations/:operationId/reconcile", authenticateAdmin
         }
         verifiedSubscriptionId = verifiedSubscriptionId || sessionSubscriptionId || null;
       }
+      if (canonicalSubscriptionId && verifiedSubscriptionId !== canonicalSubscriptionId) {
+        return res.status(409).json({ error: "Stripe subscription relationship does not match the canonical application subscription." });
+      }
       if (verifiedSubscriptionId) {
         subscription = asStripeSubscription(
           await stripe.subscriptions.retrieve(verifiedSubscriptionId),
@@ -132,6 +146,8 @@ router.post("/cancellation-operations/:operationId/reconcile", authenticateAdmin
         if (subscription.status !== "canceled") {
           return res.status(409).json({ error: "Stripe has not confirmed the requested cancellation state." });
         }
+      } else if (canonicalSubscriptionId) {
+        return res.status(409).json({ error: "Canonical Stripe subscription cancellation has not been verified." });
       }
       if (application.data.status === "Cancelled") {
         // A prior attempt completed the business update; only the durable operation needs finalizing.

@@ -10,7 +10,13 @@ export const cancellationIdempotencyKey = (parts: {
   mode: CancellationMode;
   paymentVersion?: number;
   relationshipId?: string | null;
-}) => `maple-cancel-${crypto.createHash('sha256').update(JSON.stringify(parts)).digest('hex')}`;
+}) => `maple-cancel-${crypto.createHash('sha256').update(JSON.stringify({
+  ...parts,
+  // Once a canonical Stripe relationship exists it is the stable identity for
+  // the cancellation. The application version advances after local
+  // finalization, but retries must continue to resolve to the same operation.
+  paymentVersion: parts.relationshipId ? undefined : parts.paymentVersion,
+})).digest('hex')}`;
 
 export const requestCancellationOperation = async (input: {
   applicationId?: string | null;

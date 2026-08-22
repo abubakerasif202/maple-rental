@@ -504,17 +504,21 @@ const cancelLinkedStripeSubscription = async ({
     }
 
     if (subscription.status === 'canceled') {
-      return;
+      return 'canceled' as const;
     }
 
-    await getStripe().subscriptions.cancel(
+    const cancelledSubscription = await getStripe().subscriptions.cancel(
       subscriptionId,
       {},
       idempotencyKey ? { idempotencyKey: `${idempotencyKey}:${crypto.createHash('sha256').update(subscriptionId).digest('hex').slice(0, 16)}` } : undefined,
     );
+    if (cancelledSubscription.status !== 'canceled') {
+      throw new Error('Stripe did not confirm subscription cancellation.');
+    }
+    return 'canceled' as const;
   } catch (error) {
     if (isStripeResourceMissingError(error)) {
-      return;
+      return 'missing' as const;
     }
     throw error;
   }
@@ -567,17 +571,20 @@ const fetchApplicationLinkedSubscriptionIds = async (applicationId: string) => {
 
 export const cancelApplicationStripeResources = async ({
   applicationId,
+  canonicalSubscriptionId,
   idempotencyKey,
   paymentLinkVersion,
   pendingCheckoutSessionId,
 }: {
   applicationId: string;
+  canonicalSubscriptionId?: string | null;
   idempotencyKey?: string;
   paymentLinkVersion?: number | null;
   pendingCheckoutSessionId?: string | null;
 }) => {
   const subscriptionIds = new Set<string>();
   const inspectedCheckoutSessionIds = new Set<string>();
+  const openCheckoutSessionIds = new Set<string>();
 
   if (pendingCheckoutSessionId) {
     try {
@@ -601,7 +608,7 @@ export const cancelApplicationStripeResources = async ({
       }
 
       if (session.status === 'open') {
-        await getStripe().checkout.sessions.expire(pendingCheckoutSessionId);
+        openCheckoutSessionIds.add(pendingCheckoutSessionId);
       }
     } catch (error) {
       if (!isStripeResourceMissingError(error)) {
@@ -641,21 +648,52 @@ export const cancelApplicationStripeResources = async ({
     }
 
     if (session.status === 'open') {
-      await getStripe().checkout.sessions.expire(checkoutSessionId);
+      openCheckoutSessionIds.add(checkoutSessionId);
     }
   }
   for (const subscriptionId of await fetchApplicationLinkedSubscriptionIds(applicationId)) {
     subscriptionIds.add(subscriptionId);
   }
 
-  for (const subscriptionId of subscriptionIds) {
-    await cancelLinkedStripeSubscription({
-      applicationId,
-      idempotencyKey,
-      paymentLinkVersion: undefined,
-      subscriptionId,
-    });
+  const canonicalId = String(canonicalSubscriptionId || '').trim();
+  if (canonicalId) {
+    subscriptionIds.add(canonicalId);
   }
+
+  if (subscriptionIds.size > 1) {
+    throw Object.assign(
+      new Error(
+        'Verified Stripe identities disagree for this application. Cancellation requires manual reconciliation.'
+      ),
+      { status: 409 }
+    );
+  }
+
+  for (const checkoutSessionId of openCheckoutSessionIds) {
+    await getStripe().checkout.sessions.expire(checkoutSessionId);
+  }
+
+  const resolvedSubscriptionId = [...subscriptionIds][0] || null;
+  if (!resolvedSubscriptionId) {
+    return {
+      cancellationConfirmed: true,
+      stripeSubscriptionId: null,
+      stripeSubscriptionState: 'not_linked' as const,
+    };
+  }
+
+  const stripeSubscriptionState = await cancelLinkedStripeSubscription({
+    applicationId,
+    idempotencyKey,
+    paymentLinkVersion: canonicalId ? paymentLinkVersion : undefined,
+    subscriptionId: resolvedSubscriptionId,
+  });
+
+  return {
+    cancellationConfirmed: true,
+    stripeSubscriptionId: resolvedSubscriptionId,
+    stripeSubscriptionState,
+  };
 };
 
 const persistPendingCheckoutSessionId = async (

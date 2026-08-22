@@ -343,6 +343,7 @@ type ApplicationPaymentApprovalRecord = {
   payment_link_version?: number | null;
   pending_checkout_session_id?: string | null;
   status: string;
+  stripe_subscription_id?: string | null;
 };
 
 const isRecoverableVehicleCheckoutSession = (
@@ -1215,6 +1216,7 @@ router.post("/:id/cancel", authenticateAdmin, async (req, res) => {
         operationType: "application",
         paymentVersion: currentVersion,
         requestedBy: req.admin?.email || null,
+        stripeSubscriptionId: applicationRecord.stripe_subscription_id || null,
       });
       if (operation.status === "completed") {
         return { success: true, application_status: "Cancelled" as const } as const;
@@ -1234,14 +1236,27 @@ router.post("/:id/cancel", authenticateAdmin, async (req, res) => {
       }
 
       try {
-        await cancelApplicationStripeResources({
+        const stripeCancellation = await cancelApplicationStripeResources({
           applicationId: id,
+          canonicalSubscriptionId: applicationRecord.stripe_subscription_id || null,
           idempotencyKey: operation.idempotency_key,
           paymentLinkVersion: applicationRecord.status === "Cancelled" ? undefined : currentVersion,
           pendingCheckoutSessionId: applicationRecord.pending_checkout_session_id || null,
         });
-        const stripePersisted = await tryUpdateCancellationOperation(operation.id, "stripe_completed", { stripe_completed_at: nowIso });
-        if (!stripePersisted) return { pending: true, operation_id: operation.id } as const;
+        if (!stripeCancellation.cancellationConfirmed) {
+          throw new Error("Stripe cancellation state was not confirmed.");
+        }
+        const stripePersisted = await tryUpdateCancellationOperation(operation.id, "stripe_completed", {
+          stripe_completed_at: nowIso,
+          stripe_subscription_id: stripeCancellation.stripeSubscriptionId,
+        });
+        if (!stripePersisted) {
+          await tryUpdateCancellationOperation(operation.id, "reconciliation_pending", {
+            last_error_code: "STRIPE_COMPLETION_PERSISTENCE_FAILED",
+            stripe_subscription_id: stripeCancellation.stripeSubscriptionId,
+          });
+          return { pending: true, operation_id: operation.id } as const;
+        }
         await recordAdminAuditEvent({
           action: "stripe_cancellation_completed", actor: req.admin?.email || null,
           metadata: { operationId: operation.id }, targetId: id, targetType: "application",

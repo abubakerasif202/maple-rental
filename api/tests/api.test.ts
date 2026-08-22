@@ -260,6 +260,7 @@ const {
   mockBeforeApplicationsUpdate: vi.fn(() => undefined),
   mockMutationErrors: {
     applicationsUpdate: null as Record<string, any> | null,
+    cancellationOperationsUpdate: null as Record<string, any> | null,
   },
   mockResendEmailsSend: vi.fn(),
     mockStripe: {
@@ -1199,6 +1200,16 @@ vi.mock("../db/index.js", () => {
           data: null,
           error,
         };
+      }
+
+      if (
+        action === "update" &&
+        table === "stripe_cancellation_operations" &&
+        mockMutationErrors.cancellationOperationsUpdate
+      ) {
+        const error = structuredClone(mockMutationErrors.cancellationOperationsUpdate);
+        mockMutationErrors.cancellationOperationsUpdate = null;
+        return { data: null, error };
       }
 
       if (action === "update" && table === "applications") {
@@ -2479,6 +2490,7 @@ beforeEach(() => {
     headers: null,
   });
   mockMutationErrors.applicationsUpdate = null;
+  mockMutationErrors.cancellationOperationsUpdate = null;
 
   mockStripe.checkoutSessionsCreate.mockReset();
   mockStripe.checkoutSessionsExpire.mockReset();
@@ -5244,6 +5256,70 @@ describe("Operational history API", () => {
     expect(mockStripe.subscriptionsRetrieve).not.toHaveBeenCalled();
   });
 
+  it("POST /api/admin/rentals/cancellation-operations/:operationId/reconcile refuses completion without canonical subscription evidence", async () => {
+    const operationId = "99999999-9999-4999-8999-999999999996";
+    Object.assign(mockState.applications[0], {
+      status: "Paid",
+      payment_link_version: 3,
+      pending_checkout_session_id: null,
+      stripe_subscription_id: "sub_application_canonical",
+    });
+    mockState.stripe_cancellation_operations = [{
+      id: operationId,
+      operation_type: "application",
+      application_id: PENDING_APPLICATION_ID,
+      expected_payment_link_version: 3,
+      requested_mode: "immediate",
+      status: "stripe_completed",
+      stripe_subscription_id: null,
+    }];
+
+    const res = await request(app)
+      .post(`/api/admin/rentals/cancellation-operations/${operationId}/reconcile`)
+      .set("Authorization", "Bearer fake-token")
+      .send({});
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain("missing the canonical application subscription evidence");
+    expect(mockStripe.subscriptionsRetrieve).not.toHaveBeenCalled();
+    expect(mockState.applications[0].status).toBe("Paid");
+    expect(mockState.stripe_cancellation_operations[0].status).toBe("stripe_completed");
+  });
+
+  it("POST /api/admin/rentals/cancellation-operations/:operationId/reconcile safely finalizes an already-cancelled canonical subscription", async () => {
+    const operationId = "99999999-9999-4999-8999-999999999995";
+    Object.assign(mockState.applications[0], {
+      status: "Paid",
+      payment_link_version: 3,
+      pending_checkout_session_id: null,
+      stripe_subscription_id: "sub_application_canonical",
+    });
+    mockState.stripe_cancellation_operations = [{
+      id: operationId,
+      operation_type: "application",
+      application_id: PENDING_APPLICATION_ID,
+      expected_payment_link_version: 3,
+      requested_mode: "immediate",
+      status: "stripe_completed",
+      stripe_subscription_id: "sub_application_canonical",
+    }];
+    mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
+      id: "sub_application_canonical",
+      status: "canceled",
+    });
+
+    const res = await request(app)
+      .post(`/api/admin/rentals/cancellation-operations/${operationId}/reconcile`)
+      .set("Authorization", "Bearer fake-token")
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(mockStripe.subscriptionsRetrieve).toHaveBeenCalledWith("sub_application_canonical");
+    expect(mockState.applications[0].status).toBe("Cancelled");
+    expect(mockState.stripe_cancellation_operations[0].status).toBe("completed");
+    expect(mockState.rentals).toHaveLength(0);
+  });
+
   it("POST /api/admin/rentals/cancellation-operations/:operationId/reconcile rejects a changed rental subscription relationship after verifying Stripe", async () => {
     const operationId = "99999999-9999-4999-8999-999999999997";
     mockState.rentals = [{
@@ -6680,6 +6756,186 @@ describe("Stripe API", () => {
       expect(mockState.rentals).toHaveLength(0);
     });
 
+    it("POST /api/applications/:id/cancel cancels the canonical application subscription with no pending session, webhook ledger, or rental", async () => {
+      Object.assign(mockState.applications[0], {
+        status: "Paid",
+        payment_link_version: 3,
+        pending_checkout_session_id: null,
+        stripe_subscription_id: "sub_application_canonical",
+      });
+      mockState.rentals = [];
+      mockState.stripe_webhook_events = [];
+      mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
+        id: "sub_application_canonical",
+        status: "active",
+        metadata: {
+          application_id: PENDING_APPLICATION_ID,
+          checkout_kind: "vehicle",
+          payment_link_version: "3",
+        },
+      });
+      mockStripe.subscriptionsCancel.mockResolvedValueOnce({
+        id: "sub_application_canonical",
+        status: "canceled",
+      });
+
+      const res = await request(app)
+        .post(`/api/applications/${PENDING_APPLICATION_ID}/cancel`)
+        .set("Authorization", "Bearer fake-token")
+        .send({ cancel_reason: "Driver withdrew" });
+
+      expect(res.status).toBe(200);
+      expect(mockStripe.subscriptionsCancel).toHaveBeenCalledTimes(1);
+      expect(mockState.stripe_cancellation_operations[0]).toMatchObject({
+        status: "completed",
+        stripe_subscription_id: "sub_application_canonical",
+      });
+      expect(mockState.applications[0].status).toBe("Cancelled");
+      expect(mockState.rentals).toHaveLength(0);
+    });
+
+    it("POST /api/applications/:id/cancel fails closed when canonical and webhook Stripe identities disagree", async () => {
+      Object.assign(mockState.applications[0], {
+        status: "Paid",
+        payment_link_version: 3,
+        pending_checkout_session_id: null,
+        stripe_subscription_id: "sub_application_canonical",
+      });
+      mockState.stripe_webhook_events = [{
+        application_id: PENDING_APPLICATION_ID,
+        stripe_subscription_id: "sub_conflicting_ledger",
+      }];
+
+      const res = await request(app)
+        .post(`/api/applications/${PENDING_APPLICATION_ID}/cancel`)
+        .set("Authorization", "Bearer fake-token")
+        .send({ cancel_reason: "Driver withdrew" });
+
+      expect(res.status).toBe(202);
+      expect(mockStripe.subscriptionsCancel).not.toHaveBeenCalled();
+      expect(mockState.applications[0].status).toBe("Paid");
+      expect(mockState.stripe_cancellation_operations[0]).toMatchObject({
+        status: "reconciliation_pending",
+        stripe_subscription_id: "sub_application_canonical",
+      });
+    });
+
+    it("POST /api/applications/:id/cancel fails closed when the pending session conflicts with the canonical subscription", async () => {
+      Object.assign(mockState.applications[0], {
+        status: "Paid",
+        payment_link_version: 3,
+        pending_checkout_session_id: "cs_conflicting_subscription",
+        stripe_subscription_id: "sub_application_canonical",
+      });
+      mockStripe.checkoutSessionsRetrieve.mockResolvedValueOnce({
+        id: "cs_conflicting_subscription",
+        status: "complete",
+        subscription: "sub_session_conflict",
+        metadata: {
+          application_id: PENDING_APPLICATION_ID,
+          checkout_kind: "vehicle",
+          payment_link_version: "3",
+        },
+      });
+
+      const res = await request(app)
+        .post(`/api/applications/${PENDING_APPLICATION_ID}/cancel`)
+        .set("Authorization", "Bearer fake-token")
+        .send({ cancel_reason: "Driver withdrew" });
+
+      expect(res.status).toBe(202);
+      expect(mockStripe.subscriptionsCancel).not.toHaveBeenCalled();
+      expect(mockState.applications[0].status).toBe("Paid");
+    });
+
+    it("POST /api/applications/:id/cancel retries safely after Stripe succeeds but operation persistence fails", async () => {
+      Object.assign(mockState.applications[0], {
+        status: "Paid",
+        payment_link_version: 3,
+        pending_checkout_session_id: null,
+        stripe_subscription_id: "sub_partial_failure",
+      });
+      mockStripe.subscriptionsRetrieve
+        .mockResolvedValueOnce({
+          id: "sub_partial_failure",
+          status: "active",
+          metadata: {
+            application_id: PENDING_APPLICATION_ID,
+            checkout_kind: "vehicle",
+            payment_link_version: "3",
+          },
+        })
+        .mockResolvedValueOnce({
+          id: "sub_partial_failure",
+          status: "canceled",
+          metadata: {
+            application_id: PENDING_APPLICATION_ID,
+            checkout_kind: "vehicle",
+            payment_link_version: "3",
+          },
+        });
+      mockStripe.subscriptionsCancel.mockResolvedValueOnce({
+        id: "sub_partial_failure",
+        status: "canceled",
+      });
+      mockMutationErrors.cancellationOperationsUpdate = {
+        message: "temporary operation persistence failure",
+      };
+
+      const first = await request(app)
+        .post(`/api/applications/${PENDING_APPLICATION_ID}/cancel`)
+        .set("Authorization", "Bearer fake-token")
+        .send({ cancel_reason: "Driver withdrew" });
+      const second = await request(app)
+        .post(`/api/applications/${PENDING_APPLICATION_ID}/cancel`)
+        .set("Authorization", "Bearer fake-token")
+        .send({ cancel_reason: "Driver withdrew" });
+
+      expect(first.status).toBe(202);
+      expect(second.status).toBe(200);
+      expect(mockStripe.subscriptionsCancel).toHaveBeenCalledTimes(1);
+      expect(mockState.stripe_cancellation_operations).toHaveLength(1);
+      expect(mockState.stripe_cancellation_operations[0]).toMatchObject({
+        status: "completed",
+        stripe_subscription_id: "sub_partial_failure",
+      });
+      expect(mockState.applications[0].status).toBe("Cancelled");
+    });
+
+    it("POST /api/applications/:id/cancel is idempotent when the canonical Stripe subscription is already cancelled", async () => {
+      Object.assign(mockState.applications[0], {
+        status: "Paid",
+        payment_link_version: 3,
+        pending_checkout_session_id: null,
+        stripe_subscription_id: "sub_already_cancelled",
+      });
+      mockStripe.subscriptionsRetrieve.mockResolvedValue({
+        id: "sub_already_cancelled",
+        status: "canceled",
+        metadata: {
+          application_id: PENDING_APPLICATION_ID,
+          checkout_kind: "vehicle",
+          payment_link_version: "3",
+        },
+      });
+
+      const first = await request(app)
+        .post(`/api/applications/${PENDING_APPLICATION_ID}/cancel`)
+        .set("Authorization", "Bearer fake-token")
+        .send({ cancel_reason: "Driver withdrew" });
+      const second = await request(app)
+        .post(`/api/applications/${PENDING_APPLICATION_ID}/cancel`)
+        .set("Authorization", "Bearer fake-token")
+        .send({ cancel_reason: "Driver withdrew" });
+
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(mockStripe.subscriptionsCancel).not.toHaveBeenCalled();
+      expect(mockState.stripe_cancellation_operations).toHaveLength(1);
+      expect(mockState.applications[0].status).toBe("Cancelled");
+      expect(mockState.rentals).toHaveLength(0);
+    });
+
     it("POST /api/applications/:id/cancel recovers a pre-migration payment-only subscription from its checkout session", async () => {
       mockState.applications[0].status = "Paid";
       mockState.applications[0].payment_link_version = 3;
@@ -6810,6 +7066,83 @@ describe("Stripe API", () => {
       expect(res.status).toBe(200);
       expect(mockState.applications[0].status).toBe("Cancelled");
       expect(mockState.applications[0].pending_checkout_session_id).toBeNull();
+      expect(mockState.rentals).toHaveLength(0);
+    });
+
+    it("serializes application cancellation with a concurrent successful Checkout webhook", async () => {
+      Object.assign(mockState.applications[0], {
+        status: "Approved",
+        payment_link_version: 3,
+        pending_checkout_session_id: "cs_concurrent_cancel",
+        stripe_subscription_id: null,
+      });
+      mockState.rentals = [];
+      mockStripe.checkoutSessionsRetrieve.mockResolvedValueOnce({
+        id: "cs_concurrent_cancel",
+        status: "complete",
+        payment_status: "paid",
+        metadata: {
+          application_id: PENDING_APPLICATION_ID,
+          checkout_kind: "vehicle",
+          payment_link_version: "3",
+        },
+        customer: "cus_concurrent_cancel",
+        subscription: "sub_concurrent_cancel",
+      });
+      mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
+        id: "sub_concurrent_cancel",
+        status: "active",
+        metadata: {
+          application_id: PENDING_APPLICATION_ID,
+          checkout_kind: "vehicle",
+          payment_link_version: "3",
+        },
+      });
+      mockStripe.subscriptionsCancel.mockResolvedValueOnce({
+        id: "sub_concurrent_cancel",
+        status: "canceled",
+      });
+      mockStripe.webhooksConstructEvent.mockReturnValue({
+        id: "evt_concurrent_cancel",
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: "cs_concurrent_cancel",
+            payment_status: "paid",
+            metadata: {
+              application_id: PENDING_APPLICATION_ID,
+              checkout_kind: "vehicle",
+              payment_link_version: "3",
+            },
+            customer: "cus_concurrent_cancel",
+            subscription: "sub_concurrent_cancel",
+          },
+        },
+      });
+      let lockTail = Promise.resolve<unknown>(undefined);
+      mockWithPostgresAdvisoryLock.mockImplementation((_lockKey, callback) => {
+        const result = lockTail.then(callback);
+        lockTail = result.then(() => undefined, () => undefined);
+        return result;
+      });
+
+      const cancellationRequest = request(app)
+        .post(`/api/applications/${PENDING_APPLICATION_ID}/cancel`)
+        .set("Authorization", "Bearer fake-token")
+        .send({ cancel_reason: "Driver withdrew" });
+      const webhookRequest = request(app)
+        .post("/api/stripe/webhook")
+        .set("stripe-signature", "test-signature")
+        .send("test-webhook-body");
+      const [cancellationResponse, webhookResponse] = await Promise.all([
+        cancellationRequest,
+        webhookRequest,
+      ]);
+
+      expect(cancellationResponse.status).toBe(200);
+      expect(webhookResponse.status).toBe(200);
+      expect(mockStripe.subscriptionsCancel).toHaveBeenCalledTimes(1);
+      expect(mockState.applications[0].status).toBe("Cancelled");
       expect(mockState.rentals).toHaveLength(0);
     });
 
