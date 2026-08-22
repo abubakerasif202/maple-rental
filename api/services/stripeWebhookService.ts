@@ -1,4 +1,5 @@
 import type Stripe from 'stripe';
+import { getDeletedSubscriptionRentalStatus } from '../rentalCancellationPolicy.js';
 
 import { db } from '../db/index.js';
 import { getStripeClient } from '../stripeClient.js';
@@ -899,9 +900,9 @@ export const processStripeWebhookWorkItem = async (
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription;
         const subscriptionId = subscription.id;
-        const nextRentalStatus = shouldCompleteRentalAfterRequestedCancellation(subscription)
-          ? 'Completed'
-          : 'Cancelled';
+        const nextRentalStatus = getDeletedSubscriptionRentalStatus(
+          shouldCompleteRentalAfterRequestedCancellation(subscription)
+        );
         await updateRentalBySubscriptionIdentityOrSkip(
           subscriptionId,
           await getRentalStatusUpdatePayload(nextRentalStatus, todayIsoDate()),

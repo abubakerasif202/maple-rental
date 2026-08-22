@@ -2454,11 +2454,14 @@ beforeEach(() => {
         : null;
       const incomingTerminal = args.p_terminal === true;
       const applied =
-        !existingCreatedAt ||
-        existingCreatedAt < incomingCreatedAt ||
-        (existingCreatedAt === incomingCreatedAt &&
-          incomingTerminal &&
-          rental.stripe_status_event_terminal !== true);
+        rental.status !== "Completed" &&
+        rental.status !== "Cancelled" &&
+        rental.stripe_status_event_terminal !== true &&
+        (!existingCreatedAt ||
+          existingCreatedAt < incomingCreatedAt ||
+          (existingCreatedAt === incomingCreatedAt &&
+            incomingTerminal &&
+            rental.stripe_status_event_terminal !== true));
 
       if (applied) {
         rental.status = String(args.p_status || rental.status);
@@ -5079,7 +5082,7 @@ describe("Operational history API", () => {
         idempotencyKey: expect.stringMatching(/^maple-cancel-/),
       }),
     );
-    expect(mockState.rentals[0].status).toBe("Cancelled");
+    expect(mockState.rentals[0].status).toBe("Completed");
     expect(res.body.stripeStatus).toBe("canceled");
   });
 
@@ -9536,5 +9539,284 @@ describe("Stripe API", () => {
     expect(mockState.rentals.find((rental) => rental.id === 20)?.status).toBe(
       "Cancelled",
     );
+  });
+
+  const seedH3Rental = (overrides: Record<string, unknown> = {}) => {
+    mockState.rentals = [{
+      id: 20,
+      application_id: APPROVED_APPLICATION_ID,
+      car_id: 1,
+      status: "Active",
+      start_date: "2026-03-01",
+      stripe_subscription_id: "sub_h3",
+      weekly_price: 250,
+      ...overrides,
+    }];
+  };
+
+  const requestedDeletionEvent = (
+    id: string,
+    created: number,
+    subscriptionId = "sub_h3",
+  ) => ({
+    created,
+    id,
+    type: "customer.subscription.deleted",
+    data: {
+      object: {
+        id: subscriptionId,
+        cancellation_details: { reason: "cancellation_requested" },
+        metadata: { application_id: APPROVED_APPLICATION_ID },
+      },
+    },
+  });
+
+  const deliverWebhook = () => request(app)
+    .post("/api/stripe/webhook")
+    .set("stripe-signature", "test-signature")
+    .set("Content-Type", "application/json")
+    .send("{}");
+
+  it("H3 keeps immediate admin cancellation Completed after subscription deletion", async () => {
+    seedH3Rental();
+    mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({ id: "sub_h3", status: "active" });
+    mockStripe.subscriptionsCancel.mockResolvedValueOnce({ id: "sub_h3", status: "canceled" });
+
+    const cancellation = await request(app)
+      .post("/api/admin/rentals/20/cancel-subscription")
+      .set("Authorization", "Bearer fake-token")
+      .send({ confirm: "CANCEL SUBSCRIPTION", cancelAtPeriodEnd: false });
+    expect(cancellation.status).toBe(200);
+    expect(mockState.rentals[0].status).toBe("Completed");
+
+    mockStripe.webhooksConstructEvent.mockReturnValue(
+      requestedDeletionEvent("evt_h3_after_admin", 1_780_001_000),
+    );
+    expect((await deliverWebhook()).status).toBe(200);
+    expect(mockState.rentals[0].status).toBe("Completed");
+  });
+
+  it("H3 keeps deletion-before-synchronous-cancellation idempotently Completed", async () => {
+    seedH3Rental();
+    mockStripe.webhooksConstructEvent.mockReturnValue(
+      requestedDeletionEvent("evt_h3_before_admin", 1_780_001_010),
+    );
+    expect((await deliverWebhook()).status).toBe(200);
+    expect(mockState.rentals[0].status).toBe("Completed");
+
+    mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
+      id: "sub_h3",
+      status: "canceled",
+      cancellation_details: { reason: "cancellation_requested" },
+    });
+    const cancellation = await request(app)
+      .post("/api/admin/rentals/20/cancel-subscription")
+      .set("Authorization", "Bearer fake-token")
+      .send({ confirm: "CANCEL SUBSCRIPTION", cancelAtPeriodEnd: false });
+    expect(cancellation.status).toBe(200);
+    expect(mockState.rentals[0].status).toBe("Completed");
+  });
+
+  it("H3 preserves Stripe involuntary cancellation semantics when already canceled", async () => {
+    seedH3Rental();
+    mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
+      id: "sub_h3",
+      status: "canceled",
+      cancellation_details: { reason: "payment_failed" },
+    });
+
+    const cancellation = await request(app)
+      .post("/api/admin/rentals/20/cancel-subscription")
+      .set("Authorization", "Bearer fake-token")
+      .send({ confirm: "CANCEL SUBSCRIPTION", cancelAtPeriodEnd: false });
+
+    expect(cancellation.status).toBe(200);
+    expect(mockStripe.subscriptionsCancel).not.toHaveBeenCalled();
+    expect(mockState.rentals[0].status).toBe("Cancelled");
+  });
+
+  it("H3 direct cancellation sends a conflicting terminal state to manual review", async () => {
+    seedH3Rental({ status: "Cancelled" });
+    mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
+      id: "sub_h3",
+      status: "canceled",
+      cancellation_details: { reason: "cancellation_requested" },
+    });
+
+    const cancellation = await request(app)
+      .post("/api/admin/rentals/20/cancel-subscription")
+      .set("Authorization", "Bearer fake-token")
+      .send({ confirm: "CANCEL SUBSCRIPTION", cancelAtPeriodEnd: false });
+
+    expect(cancellation.status).toBe(409);
+    expect(cancellation.body.message).toContain("explicit manual review");
+    expect(mockState.rentals[0].status).toBe("Cancelled");
+    expect(mockState.stripe_cancellation_operations[0]).toMatchObject({
+      status: "reconciliation_pending",
+      last_error_code: "RENTAL_TERMINAL_STATUS_CONFLICT",
+    });
+  });
+
+  it("H3 ignores a duplicate subscription deletion webhook", async () => {
+    seedH3Rental();
+    mockStripe.webhooksConstructEvent.mockReturnValue(
+      requestedDeletionEvent("evt_h3_duplicate", 1_780_001_020),
+    );
+    expect((await deliverWebhook()).status).toBe(200);
+    const watermark = mockState.rentals[0].stripe_status_event_id;
+    expect((await deliverWebhook()).status).toBe(200);
+    expect(mockState.rentals[0]).toMatchObject({
+      status: "Completed",
+      stripe_status_event_id: watermark,
+    });
+  });
+
+  it("H3 ignores reverse-order cancellation lifecycle events", async () => {
+    seedH3Rental();
+    mockStripe.webhooksConstructEvent
+      .mockReturnValueOnce(requestedDeletionEvent("evt_h3_terminal_newer", 1_780_001_200))
+      .mockReturnValueOnce({
+        created: 1_780_001_100,
+        id: "evt_h3_active_older",
+        type: "customer.subscription.updated",
+        data: { object: { id: "sub_h3", status: "active", metadata: {} } },
+      });
+
+    expect((await deliverWebhook()).status).toBe(200);
+    expect((await deliverWebhook()).status).toBe(200);
+    expect(mockState.rentals[0]).toMatchObject({
+      status: "Completed",
+      stripe_status_event_id: "evt_h3_terminal_newer",
+    });
+  });
+
+  it("H3 preserves period-end scheduling and completes only on deletion", async () => {
+    seedH3Rental();
+    const periodEnd = Math.floor(new Date("2026-04-15T00:00:00Z").getTime() / 1000);
+    mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({ id: "sub_h3", status: "active" });
+    mockStripe.subscriptionsUpdate.mockResolvedValueOnce({
+      id: "sub_h3",
+      status: "active",
+      cancel_at_period_end: true,
+      current_period_end: periodEnd,
+    });
+    const cancellation = await request(app)
+      .post("/api/admin/rentals/20/cancel-subscription")
+      .set("Authorization", "Bearer fake-token")
+      .send({ confirm: "CANCEL SUBSCRIPTION", cancelAtPeriodEnd: true });
+    expect(cancellation.status).toBe(200);
+    expect(mockState.rentals[0]).toMatchObject({ status: "Active", end_date: "2026-04-15" });
+
+    mockStripe.webhooksConstructEvent.mockReturnValue(
+      requestedDeletionEvent("evt_h3_period_end", 1_780_001_300),
+    );
+    expect((await deliverWebhook()).status).toBe(200);
+    expect(mockState.rentals[0].status).toBe("Completed");
+  });
+
+  it("H3 prevents one terminal rental status changing into another", async () => {
+    seedH3Rental({ status: "Cancelled" });
+    mockStripe.webhooksConstructEvent.mockReturnValue(
+      requestedDeletionEvent("evt_h3_terminal_conflict", 1_780_001_400),
+    );
+    expect((await deliverWebhook()).status).toBe(200);
+    expect(mockState.rentals[0].status).toBe("Cancelled");
+    expect(mockState.rentals[0]).not.toHaveProperty("stripe_status_event_id");
+  });
+
+  it("H3 reconciliation after webhook delivery finalizes the canonical state", async () => {
+    const operationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    seedH3Rental();
+    mockState.stripe_cancellation_operations = [{
+      id: operationId,
+      operation_type: "rental",
+      rental_id: 20,
+      requested_mode: "immediate",
+      status: "reconciliation_pending",
+      stripe_subscription_id: "sub_h3",
+    }];
+    mockStripe.webhooksConstructEvent.mockReturnValue(
+      requestedDeletionEvent("evt_h3_before_reconcile", 1_780_001_500),
+    );
+    expect((await deliverWebhook()).status).toBe(200);
+
+    mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
+      id: "sub_h3",
+      status: "canceled",
+      cancellation_details: { reason: "cancellation_requested" },
+    });
+    const reconciliation = await request(app)
+      .post(`/api/admin/rentals/cancellation-operations/${operationId}/reconcile`)
+      .set("Authorization", "Bearer fake-token")
+      .send({});
+    expect(reconciliation.status).toBe(200);
+    expect(mockState.rentals[0].status).toBe("Completed");
+    expect(mockState.stripe_cancellation_operations[0].status).toBe("completed");
+  });
+
+  it("H3 reconciliation sends a conflicting legacy terminal state to manual review", async () => {
+    const operationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    seedH3Rental({ status: "Cancelled" });
+    mockState.stripe_cancellation_operations = [{
+      id: operationId,
+      operation_type: "rental",
+      rental_id: 20,
+      requested_mode: "immediate",
+      status: "reconciliation_pending",
+      stripe_subscription_id: "sub_h3",
+    }];
+    mockStripe.subscriptionsRetrieve.mockResolvedValueOnce({
+      id: "sub_h3",
+      status: "canceled",
+      cancellation_details: { reason: "cancellation_requested" },
+    });
+
+    const reconciliation = await request(app)
+      .post(`/api/admin/rentals/cancellation-operations/${operationId}/reconcile`)
+      .set("Authorization", "Bearer fake-token")
+      .send({});
+
+    expect(reconciliation.status).toBe(409);
+    expect(reconciliation.body.error).toContain("explicit manual review");
+    expect(mockState.rentals[0].status).toBe("Cancelled");
+    expect(mockState.stripe_cancellation_operations[0]).toMatchObject({
+      status: "reconciliation_pending",
+      last_error_code: "RENTAL_TERMINAL_STATUS_CONFLICT",
+    });
+  });
+
+  it("H3 leaves an already-terminal rental unchanged on deletion", async () => {
+    seedH3Rental({
+      status: "Completed",
+      stripe_status_event_created_at: "2026-05-01T00:00:00.000Z",
+      stripe_status_event_id: "evt_h3_original_terminal",
+      stripe_status_event_terminal: true,
+    });
+    mockStripe.webhooksConstructEvent.mockReturnValue(
+      requestedDeletionEvent("evt_h3_later_duplicate", 1_780_001_600),
+    );
+    expect((await deliverWebhook()).status).toBe(200);
+    expect(mockState.rentals[0]).toMatchObject({
+      status: "Completed",
+      stripe_status_event_id: "evt_h3_original_terminal",
+    });
+  });
+
+  it("H3 ignores an older Stripe event after terminal deletion", async () => {
+    seedH3Rental();
+    mockStripe.webhooksConstructEvent
+      .mockReturnValueOnce(requestedDeletionEvent("evt_h3_delete", 1_780_001_800))
+      .mockReturnValueOnce({
+        created: 1_780_001_700,
+        id: "evt_h3_overdue_older",
+        type: "customer.subscription.updated",
+        data: { object: { id: "sub_h3", status: "past_due", metadata: {} } },
+      });
+    expect((await deliverWebhook()).status).toBe(200);
+    expect((await deliverWebhook()).status).toBe(200);
+    expect(mockState.rentals[0]).toMatchObject({
+      status: "Completed",
+      stripe_status_event_id: "evt_h3_delete",
+    });
   });
 });

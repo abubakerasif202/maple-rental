@@ -103,6 +103,24 @@ describe('migration safety guards', () => {
     expect(migration).toContain('TO service_role');
   });
 
+  it('prevents Stripe events from rewriting terminal rental history', () => {
+    const migration = fs.readFileSync(
+      path.resolve(
+        process.cwd(),
+        'supabase/migrations/20260823090000_lock_terminal_stripe_rental_status.sql'
+      ),
+      'utf8'
+    );
+
+    expect(migration).toContain("rental.status NOT IN ('Completed', 'Cancelled')");
+    expect(migration).toContain('NOT rental.stripe_status_event_terminal');
+    expect(migration).toContain("p_terminal <> (p_status IN ('Completed', 'Cancelled'))");
+    expect(migration).toContain('rental.stripe_status_event_created_at < p_event_created_at');
+    expect(migration).toContain('legacy terminal conflicts require explicit correction');
+    expect(migration).toContain('FROM PUBLIC, anon, authenticated');
+    expect(migration).toContain('TO service_role');
+  });
+
   it('resolves repository-owned hosted database advisor findings', () => {
     const migration = fs.readFileSync(
       path.resolve(

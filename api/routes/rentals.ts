@@ -22,6 +22,11 @@ import {
   PaymentLifecycleError,
 } from "../paymentLifecycle.js";
 import { uuidSchema } from "../validation.js";
+import {
+  getDeletedSubscriptionRentalStatus,
+  getRequestedCancellationRentalStatus,
+  isTerminalRentalStatus,
+} from "../rentalCancellationPolicy.js";
 
 const router = express.Router();
 const DEFAULT_PAGE_SIZE = 25;
@@ -77,6 +82,9 @@ const normalizeExact = (value: unknown) => String(value ?? "").trim().toLowerCas
 type StripeCancellationSubscription = {
   cancel_at?: number | null;
   cancel_at_period_end?: boolean;
+  cancellation_details?: {
+    reason?: string | null;
+  } | null;
   current_period_end?: number | null;
   status: string;
 };
@@ -184,19 +192,39 @@ router.post("/cancellation-operations/:operationId/reconcile", authenticateAdmin
       if (!stripeCancelled && effectiveEndSeconds <= 0) return res.status(409).json({ error: "Stripe cancellation end date is unavailable." });
       const effectiveEnd = stripeCancelled ? new Date() : new Date(effectiveEndSeconds * 1000);
       const currentRentalStatus = String(rental.data.status || "Active");
-      const payload: Record<string, unknown> = {
-        status: stripeCancelled ? "Cancelled" : currentRentalStatus,
-      };
-      payload[compat.coreMode === "camel" ? "endDate" : "end_date"] = effectiveEnd.toISOString().slice(0, 10);
-      const update = await db
-        .from("rentals")
-        .update(payload)
-        .eq("id", operation.rental_id)
-        .eq("stripe_subscription_id", operation.stripe_subscription_id)
-        .eq("status", currentRentalStatus)
-        .select("id")
-        .maybeSingle();
-      if (update.error || !update.data?.id) throw update.error || new Error("Rental reconciliation did not update a row");
+      const requestedTerminalStatus = getDeletedSubscriptionRentalStatus(
+        subscription.cancellation_details?.reason === "cancellation_requested",
+      );
+      if (
+        stripeCancelled &&
+        isTerminalRentalStatus(currentRentalStatus) &&
+        currentRentalStatus !== requestedTerminalStatus
+      ) {
+        await updateCancellationOperation(operationId, "reconciliation_pending", {
+          last_error_code: "RENTAL_TERMINAL_STATUS_CONFLICT",
+        });
+        return res.status(409).json({
+          error: "Rental has a conflicting terminal status; correction requires explicit manual review.",
+        });
+      }
+      if (stripeCancelled && currentRentalStatus === requestedTerminalStatus) {
+        // Webhook delivery may win the race. The canonical state is already
+        // present, so reconciliation only needs to finalize the operation.
+      } else {
+        const payload: Record<string, unknown> = {
+          status: stripeCancelled ? requestedTerminalStatus : currentRentalStatus,
+        };
+        payload[compat.coreMode === "camel" ? "endDate" : "end_date"] = effectiveEnd.toISOString().slice(0, 10);
+        const update = await db
+          .from("rentals")
+          .update(payload)
+          .eq("id", operation.rental_id)
+          .eq("stripe_subscription_id", operation.stripe_subscription_id)
+          .eq("status", currentRentalStatus)
+          .select("id")
+          .maybeSingle();
+        if (update.error || !update.data?.id) throw update.error || new Error("Rental reconciliation did not update a row");
+      }
     }
 
     await updateCancellationOperation(operationId, "database_completed", {
@@ -960,14 +988,37 @@ router.post("/:rentalId/cancel-subscription", authenticateAdmin, async (req, res
       const effectiveEndSeconds = Number(subscription.cancel_at || subscription.current_period_end || 0);
       if (!isCancelled && effectiveEndSeconds <= 0) throw new Error("STRIPE_EFFECTIVE_END_MISSING");
       const effectiveEnd = isCancelled ? new Date() : new Date(effectiveEndSeconds * 1000);
-      const payload: Record<string, unknown> = { status: isCancelled ? "Cancelled" : String(rental.status || "Active") };
+      const currentRentalStatus = String(rental.status || "Active");
+      const requestedTerminalStatus = existingSubscription.status === "canceled"
+        ? getDeletedSubscriptionRentalStatus(
+            existingSubscription.cancellation_details?.reason === "cancellation_requested",
+          )
+        : getRequestedCancellationRentalStatus();
+      if (
+        isCancelled &&
+        isTerminalRentalStatus(currentRentalStatus) &&
+        currentRentalStatus !== requestedTerminalStatus
+      ) {
+        await updateCancellationOperation(operation.id, "reconciliation_pending", {
+          last_error_code: "RENTAL_TERMINAL_STATUS_CONFLICT",
+        });
+        return res.status(409).json({
+          success: false,
+          reconciliationPending: true,
+          operationId: operation.id,
+          message: "Rental has a conflicting terminal status; correction requires explicit manual review.",
+        });
+      }
+      const payload: Record<string, unknown> = {
+        status: isCancelled ? requestedTerminalStatus : currentRentalStatus,
+      };
       payload[compat.coreMode === "camel" ? "endDate" : "end_date"] = effectiveEnd.toISOString().slice(0, 10);
       const updateResult = await db
         .from("rentals")
         .update(payload)
         .eq("id", rentalId)
         .eq("stripe_subscription_id", stripeSubscriptionId)
-        .eq("status", String(rental.status || "Active"))
+        .eq("status", currentRentalStatus)
         .select("id")
         .maybeSingle();
       if (updateResult.error || !updateResult.data?.id) {

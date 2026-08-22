@@ -105,6 +105,17 @@ terminal state. In-flight duplicates remain retryable. Out-of-order subscription
 events may update only an already linked rental by exact subscription ID and must
 respect the database event watermark; metadata alone cannot select a rental.
 
+Rental terminal status has one reporting meaning across synchronous and webhook
+paths. `Completed` means a legitimate rental relationship ended intentionally,
+including immediate admin-requested cancellation and scheduled period-end
+cancellation once Stripe confirms deletion. `Cancelled` is reserved for an
+involuntary or otherwise invalidated relationship, such as subscription deletion
+for payment failure. A scheduled period-end cancellation remains in its current
+non-terminal state until deletion. Stripe lifecycle processing must never rewrite
+`Completed` to `Cancelled`, `Cancelled` to `Completed`, or either terminal state
+back to a non-terminal state. Legacy terminal mismatches require an explicit,
+audited correction; webhook ordering is not a compatibility correction path.
+
 ## Required regression coverage
 
 Changes in this area require tests for price authority, token normalization,
