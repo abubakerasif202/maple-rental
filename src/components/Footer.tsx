@@ -1,5 +1,6 @@
 import { Link } from '../lib/router';
 import { ArrowUpRight, Mail, MapPin, Phone, ShieldCheck } from 'lucide-react';
+import ABDeveloperCredit from './ABDeveloperCredit';
 
 const quickLinks = [
   { label: 'Home', path: '/' },
@@ -95,6 +96,8 @@ export default function Footer() {
           <p>&copy; {new Date().getFullYear()} Maple Rentals. All rights reserved.</p>
           <p>Driver rentals · Merrylands · Greater Sydney</p>
         </div>
+
+        <ABDeveloperCredit />
       </div>
     </footer>
   );

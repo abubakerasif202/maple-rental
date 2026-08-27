@@ -223,6 +223,17 @@ describe('contrast tokens', () => {
 
     expect(footerSource).not.toContain('text-slate-600');
     expect(footerSource).not.toContain('text-gray-600');
+    expect(footerSource).toContain('ABDeveloperCredit');
+    expect(footerSource).toContain('<ABDeveloperCredit />');
+  });
+
+  it('includes the premium AB Digital Solutions credit asset and link', () => {
+    const creditSource = readSource('src/components/ABDeveloperCredit.tsx');
+
+    expect(creditSource).toContain('Designed &amp; Developed by');
+    expect(creditSource).toContain('https://www.abwebstudio.com.au/');
+    expect(creditSource).toContain('/branding/ab-digital-solutions-watermark.png');
+    expect(creditSource).toContain('alt="AB Digital Solutions"');
   });
 
   it('removes the failing pricing eyebrow and error tokens', () => {
