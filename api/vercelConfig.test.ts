@@ -23,6 +23,10 @@ describe('Vercel deployment contract', () => {
   it('routes API requests before the SPA fallback', () => {
     expect(vercelConfig.rewrites).toEqual([
       {
+        source: '/api/:path*',
+        destination: '/api/index',
+      },
+      {
         source: '/((?!api(?:/|$)).*)',
         destination: '/index.html',
       },

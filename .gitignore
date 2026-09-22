@@ -38,3 +38,4 @@ metadata.json
 # Local Codex review output and unrelated design exports
 .codex-pdf-visual-check/
 stitch_maple_painting_service_website/
+.vercel
