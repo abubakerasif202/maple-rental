@@ -47,10 +47,10 @@ where storage_path = '<storage-path>'
 
 Confirm legal, insurance, dispute, tax, and regulatory retention obligations before releasing a hold or applying cleanup. A database backup does not include Supabase Storage objects; storage backups must be handled separately.
 
-## Render cron preparation (disabled)
+## External scheduler preparation (disabled)
 
 There is intentionally no fleet-sync job: Maple Rentals records vehicle/number-plate details as application and rental text and has no fleet table to synchronize.
 
-If approved, create a Render cron job whose command is `npm run clean:documents` and whose environment contains the same private Supabase server credentials as the web service. This command is dry-run only, emits one structured JSON summary, and exits non-zero when storage, hold lookup, or audit persistence fails. Do not schedule `clean:documents:apply`; apply mode additionally requires `DOCUMENT_CLEANUP_APPLY_ENABLED=true`, which must remain unset in normal service and cron configuration.
+Vercel does not run a persistent cron process for this repository. If approved, configure an explicitly owned external scheduler to invoke `npm run clean:documents` with the same private Supabase server credentials. This command is dry-run only, emits one structured JSON summary, and exits non-zero when storage, hold lookup, or audit persistence fails. Do not schedule `clean:documents:apply`; apply mode additionally requires `DOCUMENT_CLEANUP_APPLY_ENABLED=true`, which must remain unset in normal service and scheduler configuration.
 
 Review dry-run candidates and alerts before authorizing any separately controlled apply run.

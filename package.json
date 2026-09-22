@@ -1,6 +1,9 @@
 {
   "name": "maple-rental",
   "private": true,
+  "allowScripts": {
+    "esbuild": true
+  },
   "version": "0.0.0",
   "type": "module",
   "scripts": {
@@ -100,7 +103,7 @@
     "vitest": "^4.0.18"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "overrides": {
     "esbuild": "^0.28.1",

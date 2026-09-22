@@ -74,7 +74,7 @@ describe('production trusted admin write origins', () => {
 
     requireTrustedAdminWriteOrigin(
       buildRequest({
-        host: 'maple-rental.onrender.com',
+        host: 'www.maplerentals.com.au',
         origin: 'https://www.maplerentals.com.au',
       }),
       response,

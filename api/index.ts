@@ -54,7 +54,8 @@ import { verifyProductionSchemaContract } from './schemaContract.js';
 
 const isVitest = process.env.VITEST === 'true';
 const isProduction = process.env.NODE_ENV === 'production' && !isVitest;
-const shouldListen = process.env.VITEST !== 'true';
+const isVercel = process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV);
+const shouldListen = !isVercel && !isVitest;
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = '0.0.0.0';
 const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '100kb';
@@ -139,7 +140,7 @@ const validateProductionEnv = () => {
     const details = [...missing, ...invalid].join(', ');
     throw new Error(
       `Invalid production environment configuration: ${details}. ` +
-        'Populate or correct the values in Render before deploy. See README and render.yaml.'
+        'Populate or correct the values in Vercel before deploy. See README and the Vercel project settings.'
     );
   }
 };
@@ -177,7 +178,7 @@ const logRuntimeConfigurationSummary = () => {
   if (source === 'SUPABASE_DB_URL') {
     if (mode === 'session') {
       console.warn(
-        'SUPABASE_DB_URL is providing the current direct PostgreSQL session connection. Prefer DATABASE_URL as the Render service variable name.'
+        'SUPABASE_DB_URL is providing the current direct PostgreSQL session connection. Prefer DATABASE_URL as the Vercel server variable name.'
       );
       return;
     }
@@ -395,7 +396,7 @@ const applySecurityMiddleware = (app: express.Express) => {
   app.disable('x-powered-by');
 
   if (isProduction) {
-    // Render terminates TLS before proxying traffic to the Node process.
+    // Vercel terminates TLS before invoking the Node function.
     app.set('trust proxy', 1);
   }
 
@@ -509,7 +510,7 @@ const registerCoreRoutes = (app: express.Express) => {
 
     // In production, a degraded (restricted/not_configured) direct-DB state is
     // not acceptable: payment activation falls back to manual review silently.
-    // Return 503 so Render surfaces the misconfiguration instead of serving
+    // Return 503 so the hosting platform surfaces the misconfiguration instead of serving
     // traffic that will fail at payment time.
     const hasProductionDegradation =
       isProduction &&
@@ -637,10 +638,46 @@ const registerDevelopmentFrontend = async (app: express.Express) => {
   return viteServer;
 };
 
+let vercelInitialization: Promise<void> | null = null;
+
+const initializeVercelRuntime = () => {
+  if (!vercelInitialization) {
+    vercelInitialization = (async () => {
+      validateProductionEnv();
+      await validateProductionSchemaContract();
+      logRuntimeConfigurationSummary();
+    })();
+  }
+
+  return vercelInitialization;
+};
+
 export const createApp = () => {
   const app = express();
   applySecurityMiddleware(app);
+
+  if (isVercel) {
+    app.use(async (_request, response, next) => {
+      try {
+        await initializeVercelRuntime();
+        next();
+      } catch (error) {
+        console.error('Vercel Function initialization failed:', {
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+        });
+        response.status(503).json({
+          error: 'Service temporarily unavailable',
+        });
+      }
+    });
+  }
+
   registerCoreRoutes(app);
+
+  if (isVercel) {
+    app.use(errorHandler);
+  }
+
   return app;
 };
 
@@ -690,7 +727,7 @@ export const startServer = async (): Promise<RunningResources> => {
     createdServer.on('error', reject);
   });
 
-  // Render only needs the port to open quickly; keep DB warmup asynchronous and
+  // The local server only needs the port to open quickly; keep DB warmup asynchronous and
   // surface readiness through the healthcheck and API middleware instead.
   void ensureDB().catch((error) => {
     console.error('Database warmup failed:', error);

@@ -94,11 +94,11 @@ Validated on this handoff:
 
 ### 4. Deploy
 
-Render deployment path:
+Vercel deployment path:
 
-1. Push the release commit.
-2. Deploy the latest commit to the production web service.
-3. Confirm the service boots successfully.
+1. Push the approved release commit.
+2. Confirm the GitHub connected Vercel deployment completes for the intended SHA.
+3. Confirm the Function boots successfully.
 4. Confirm the health check responds successfully at `/api/health`.
 
 ### 5. Smoke test after deploy

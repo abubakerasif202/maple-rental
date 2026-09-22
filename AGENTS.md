@@ -1,8 +1,9 @@
 # AGENTS.md — Maple Rentals repository contract
 
 These instructions apply to the whole repository. Maple Rentals is one React/Vite
-frontend and Express/TypeScript API, built with npm and deployed as one Render web
-service. Supabase provides PostgreSQL, Auth, and private Storage; Stripe provides
+frontend and Express/TypeScript API, built with npm and deployed as one Vercel
+project. Vercel serves the Vite frontend and runs the Express API as a Node 24
+Function. Supabase provides PostgreSQL, Auth, and private Storage; Stripe provides
 hosted subscription Checkout.
 
 ## Payment-only invariant
@@ -37,7 +38,7 @@ The canonical lifecycle and Stripe rules are in
 - Document routes/storage: `api/routes/applications.ts`,
   `api/routes/agreements.ts`, `api/agreementPdfArtifacts.ts`
 - Database history: ordered files in `supabase/migrations/`
-- Deployment configuration: `render.yaml`
+- Deployment configuration: `vercel.json`
 - Security, data access, documents, audit, and accessibility:
   [`docs/security-model.md`](docs/security-model.md)
 - Release procedure: [`docs/deployment.md`](docs/deployment.md)
@@ -62,10 +63,11 @@ editing; do not add guessed paths or patch `dist/` or `server-dist/`.
    delete an applied migration. Include preflight, compatibility, recovery, and
    test notes.
 8. Do not delete data/files, apply production migrations, rotate secrets, deploy,
-   commit, or push without explicit approval. Because `render.yaml` auto-deploys
-   `main`, pushing `main` is deployment-affecting. If Git actions are authorized,
-   stage only intended files, use a professional commit message, verify the Maple
-   remote, and never force-push unless explicitly directed.
+   commit, or push without explicit approval. The GitHub connected Vercel project
+   can deploy changes pushed to its configured branch, so pushing that branch is
+   deployment-affecting. If Git actions are authorized, stage only intended files,
+   use a professional commit message, verify the Maple remote, and never
+   force-push unless explicitly directed.
 
 ## Quality requirements
 
@@ -97,7 +99,7 @@ git diff --check
 
 `validate` already runs `lint` and `test`; report each command actually run without
 implying independence. Run `npm ci` only when a clean dependency install is needed.
-Use Node 20.x for release-equivalent results; results on another Node version are
+Use Node 24.x for release-equivalent results; results on another Node version are
 diagnostic and must be labelled.
 
 Every changed business rule needs a targeted regression test. Add RLS/RBAC,
@@ -121,3 +123,16 @@ For non-trivial work, report:
 Never claim a test, build, migration, commit, push, or deployment succeeded unless
 it ran and succeeded in the current session. Never claim production success without
 the evidence required by `docs/deployment.md`.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

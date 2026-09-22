@@ -117,14 +117,6 @@ describe('postgres pool configuration', () => {
     expect(poolCtor.getLastPoolOptions()).not.toHaveProperty('ssl');
   });
 
-  it('supports explicitly named Render internal database hosts without plaintext fallback for arbitrary hosts', async () => {
-    process.env.DATABASE_URL = 'postgresql://postgres:secret@dpg-maple-db-a:5432/app';
-    const { withPostgresTransaction } = await import('./postgres.js');
-
-    await expect(withPostgresTransaction(async () => 'ok')).resolves.toBe('ok');
-    expect(poolCtor.getLastPoolOptions()).not.toHaveProperty('ssl');
-  });
-
   it('does not classify arbitrary bare hostnames as approved private hosts', async () => {
     process.env.DATABASE_URL = 'postgresql://postgres:secret@database:5432/app';
     const { withPostgresTransaction } = await import('./postgres.js');

@@ -18,8 +18,8 @@ Verdict: handoff-ready from local code, build, and test validation. Production d
 
 ## 2. What Was Tested
 
-- Package scripts and Render build/start configuration.
-- Required environment variable surface in `.env.example` and `render.yaml`.
+- Package scripts and Vercel build/function configuration.
+- Required environment variable surface in `.env.example` and `vercel.json`.
 - Express API route registration, including health, live, applications, admin, rentals, agreements, toll notices, inquiries, and Stripe routes.
 - Frontend route surface for public pages, admin pages, checkout, and success recovery.
 - Supabase migration inventory through `supabase/migrations/20260509090000_add_agreement_templates.sql`.
@@ -42,12 +42,12 @@ Verdict: handoff-ready from local code, build, and test validation. Production d
 
 - `npm run typecheck` is not defined. In this repository, `npm run lint` runs `tsc --noEmit` and is the effective typecheck.
 - Production schema verification was not run against live Supabase because real `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` values are not present locally. Run `npm run verify:schema-contract` in a secure production-like environment before deploy.
-- Render deployment was not triggered in this pass.
-- The repo pins Node 20 through `.nvmrc` and package engines. Supabase published a Node 20 deprecation notice on 2026-05-08; no code change was made because the current Render/build path passes, but Node 22 migration should be scheduled.
+- Vercel deployment was not triggered in this pass.
+- The repo now pins Node 24 through `.nvmrc`, package engines, and the Vercel Function configuration.
 
 ## 5. Required Production Env Vars
 
-Set real values in Render or the production secret store. Do not commit these values.
+Set real values in Vercel or the production secret store. Do not commit these values.
 
 - `DATABASE_URL`
 - `SUPABASE_URL`
@@ -101,10 +101,10 @@ Optional or legacy-supported values to confirm intentionally:
 - Confirm paid completed sessions are never expired during retry/cleanup.
 - Confirm payment activation remains idempotent for duplicate or replayed webhooks.
 
-## 7. Render Deployment Checklist
+## 7. Vercel Deployment Checklist
 
-- Confirm Render uses `npm ci --include=dev && npm run validate && npm run build` as the build command.
-- Confirm Render uses `npm start` as the start command.
+- Confirm Vercel uses `npm run build` with `dist` as the output directory.
+- Confirm Vercel runs `api/index.ts` as the Node 24 Function.
 - Confirm health path is `/api/health`.
 - Confirm `NODE_ENV=production`.
 - Confirm `DATABASE_URL` points to a session-capable connection for the same Supabase project as `SUPABASE_URL`.
@@ -146,7 +146,7 @@ Go for engineering handoff. Local code validation is clean and the discovered bl
 
 No-go for production deploy until these manual checks are completed:
 
-- Production env vars are present in Render.
+- Production env vars are present in Vercel.
 - Live Stripe webhook endpoint and signing secret are configured.
 - Production database migrations are applied.
 - `npm run verify:schema-contract` passes with production Supabase credentials.

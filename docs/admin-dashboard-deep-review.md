@@ -76,4 +76,4 @@ Transaction/conflict/apply behavior is also enforced structurally by row/import 
 - Confirm the audit event, authoritative rental rate and import result in the database.
 - Confirm applications, Checkout/payment, agreements, toll notices and cancellation still pass their smoke flows.
 - Check desktop and mobile widths, keyboard operation, console errors and failed network requests.
-- Do not push `main` until deployment is explicitly approved because Render auto-deploys it.
+- Do not push the configured production branch until deployment is explicitly approved because the GitHub connected Vercel project can deploy it.

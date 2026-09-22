@@ -1,0 +1,8 @@
+node_modules/
+dist/
+server-dist/
+.claude/
+graphify-out/
+_to_delete/
+.~lock.*
+ersabubamaple-rental-clean*

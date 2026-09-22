@@ -1,6 +1,6 @@
 # Maple Rental
 
-Maple Rental is a single-service full-stack rental platform for weekly vehicle rentals. Vehicles are identified operationally by registration text rather than a separate fleet catalogue. The same Express process serves the API and the built React/Vite frontend in production.
+Maple Rental is a full-stack rental platform for weekly vehicle rentals. Vehicles are identified operationally by registration text rather than a separate fleet catalogue. Vercel serves the built React/Vite frontend and runs the Express API as a Node Function.
 
 Client-ready deployment notes are documented in [docs/CLIENT_HANDOFF.md](docs/CLIENT_HANDOFF.md).
 Canonical engineering contracts are in
@@ -15,7 +15,7 @@ Stripe operational setup and reset steps remain in [docs/STRIPE_SETUP.md](docs/S
 - Admin users can review applications, record a registration number, manage payment status, inspect customer and invoice history, and work with lease agreements.
 - Supabase provides auth and private document storage.
 - Transactional app data and Stripe/payment state use a session-capable direct connection to the same Supabase PostgreSQL database exposed through `SUPABASE_URL`.
-- Render deploys the app as one Node web service.
+- Vercel deploys the Vite frontend and Express API from one GitHub connected project.
 
 ## Stack
 
@@ -24,7 +24,7 @@ Stripe operational setup and reset steps remain in [docs/STRIPE_SETUP.md](docs/S
 - Data: Direct PostgreSQL for transactional state, Supabase Auth, Supabase Storage
 - Payments: Stripe
 - Email: Resend
-- Deployment: Render
+- Deployment: Vercel
 
 ## Runtime Architecture
 
@@ -138,7 +138,7 @@ DATABASE_URL=postgresql://...
 RESEND_API_KEY=re_...
 ```
 
-`SUPABASE_DB_URL=postgresql://...` remains supported as a fallback for legacy environments, but `DATABASE_URL` is preferred for local parity and Render deployments.
+`SUPABASE_DB_URL=postgresql://...` remains supported as a fallback for legacy environments, but `DATABASE_URL` is preferred for local parity and Vercel deployments.
 
 Stripe payment links and hosted Checkout session creation require a session-capable Postgres connection through `DATABASE_URL` or `SUPABASE_DB_URL`. Verified Checkout completion records the application as `Paid` transactionally; it never changes vehicle status or creates a rental row.
 
@@ -300,7 +300,7 @@ What each command does:
 
 ## Security and Operational Notes
 
-- Express trusts one proxy hop in production so rate limiting works correctly on Render.
+- Express trusts one proxy hop in production so rate limiting works correctly behind Vercel's proxy.
 - Helmet is enabled in production.
 - Global API rate limiting is enabled, plus a stricter limiter on admin login attempts.
 - API request bodies are size-limited.
@@ -308,17 +308,18 @@ What each command does:
 - Driver licence documents are stored in a private Supabase Storage bucket and served through short-lived signed URLs.
 - The server fails fast in production on invalid or missing core config instead of constructing unsafe fallback clients.
 
-## Render + Supabase Storage + Stripe
+## Vercel + Supabase Storage + Stripe
 
-This repo includes [`render.yaml`](./render.yaml) for a single web-service deployment.
+This repo includes [`vercel.json`](./vercel.json) for Vite static output, SPA fallback routing, and the Express Node Function.
 
-Render runtime contract:
+Vercel runtime contract:
 
-- Build command: `npm ci --include=dev && npm run validate && npm run build`
-- Start command: `npm start`
-- Health check path: `/api/health`
+- Build command: `npm run build`
+- Output directory: `dist`
+- API Function: `api/index.ts` on Node 24
+- Health path: `/api/health`
 
-Recommended Render environment variables:
+Required Vercel environment variables:
 
 - `APP_URL`
 - `ADMIN_EMAIL`
@@ -333,13 +334,12 @@ Recommended Render environment variables:
 - `JWT_SECRET`
 - `RESEND_API_KEY` if email delivery is enabled
 
-`render.yaml` pre-populates the `LEASE_OWNER_*` values with the current Maple Rentals business details.
-Override them in Render only if those agreement details need to change.
+Set the `LEASE_OWNER_*` values in Vercel with the current Maple Rentals business details. Override them only if those agreement details need to change.
 
-### Render deployment steps
+### Vercel deployment steps
 
 1. Copy a session-capable direct or session-pooler PostgreSQL URL for the same Supabase project used by `SUPABASE_URL`.
-2. Deploy the web service from `render.yaml`, then set that URL as `DATABASE_URL` on the service. Do not use a separate Render Postgres database because application reads and writes are server-mediated through the Supabase Data API.
+2. Import the GitHub repository into Vercel and use the committed `vercel.json`. Do not use a separate hosted Postgres database because application reads and writes are server-mediated through the same Supabase project.
 3. Keep the Supabase variables in place for storage and auth: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
 4. Set the Stripe secrets: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `CHECKOUT_LINK_SECRET`.
 5. Set the app and security variables: `APP_URL`, `ADMIN_EMAIL`, and `JWT_SECRET`.
@@ -370,7 +370,7 @@ Do not paste the Postgres connection string into `SUPABASE_URL`.
 
 ### Health endpoint reports `restricted`
 
-Add `DATABASE_URL` with a session-capable direct or session-pooler connection to the same Supabase project as `SUPABASE_URL`. `SUPABASE_DB_URL` remains available as a fallback, but `DATABASE_URL` is the preferred Render variable name. Production startup fails closed when this same-project transactional connection is missing or incompatible.
+Add `DATABASE_URL` with a session-capable direct or session-pooler connection to the same Supabase project as `SUPABASE_URL`. `SUPABASE_DB_URL` remains available as a fallback, but `DATABASE_URL` is the preferred Vercel variable name. Production startup fails closed when this same-project transactional connection is missing or incompatible.
 
 ### `npm run stripe:handoff` fails
 
@@ -392,9 +392,9 @@ Check:
 - Supabase Auth user existence
 - cookie settings on the deployed domain
 
-### Render logs mention rate limiting and `X-Forwarded-For`
+### Vercel logs mention rate limiting and `X-Forwarded-For`
 
-The server is already configured to trust Render’s proxy hop. If this appears again, confirm the service is running the latest commit from `main`.
+The server is already configured to trust Vercel's proxy hop. If this appears again, confirm the Function is running the intended deployed commit.
 
 ## Repository Notes
 

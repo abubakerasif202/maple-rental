@@ -157,7 +157,7 @@ router.post('/car-lease/render', authenticateAdmin, async (req, res) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: error.issues });
     }
-    console.error('Render agreement error:', error);
+    console.error('Agreement render error:', error);
     res.status(500).json({ error: 'Failed to render agreement' });
   }
 });

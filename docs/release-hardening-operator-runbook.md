@@ -5,7 +5,7 @@ database URLs, JWTs, or Stripe secrets into tickets, chat, or command output.
 
 ## Admin entitlement activation
 
-1. Leave Render `ADMIN_AUTHORIZATION_MODE=hybrid` during migration.
+1. Leave Vercel `ADMIN_AUTHORIZATION_MODE=hybrid` during migration.
 2. In Supabase Dashboard, identify the existing admin by immutable user ID and
    set trusted Auth `app_metadata.maple_role` to `admin` using the Dashboard or a
    protected server-side Admin API operation. Never use `user_metadata`.
@@ -13,7 +13,7 @@ database URLs, JWTs, or Stripe secrets into tickets, chat, or command output.
    read using the encrypted cookie flow. Bearer verification should also pass.
 4. Remove the claim or set `maple_role` to `revoked`; verify access is denied.
    Restore `admin`, sign in again, and verify access.
-5. Change Render `ADMIN_AUTHORIZATION_MODE=entitlement`, deploy in an approved
+5. Change Vercel `ADMIN_AUTHORIZATION_MODE=entitlement`, deploy in an approved
    change window, and verify the existing admin again. Keep `ADMIN_EMAIL` for
    notifications; it no longer authorizes a missing role in entitlement mode.
 

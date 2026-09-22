@@ -196,7 +196,7 @@ export default function MaintenanceTab() {
           )}
           {resetFailure?.step && resetFailure?.message && (
             <div className="mt-2 text-red-100">
-              Reset failed while deleting {resetFailure.step.replace(/^delete_/, '').replace(/_/g, ' ')}. Check Render logs for [maintenance-reset].
+              Reset failed while deleting {resetFailure.step.replace(/^delete_/, '').replace(/_/g, ' ')}. Check Vercel Function logs for [maintenance-reset].
             </div>
           )}
         </div>

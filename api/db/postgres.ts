@@ -105,8 +105,7 @@ const isPrivatePostgresHostname = (hostname: string) => {
     normalized.startsWith('127.') ||
     normalized.startsWith('10.') ||
     normalized.startsWith('192.168.') ||
-    normalized.endsWith('.internal') ||
-    /^dpg-[a-z0-9-]+$/.test(normalized)
+    normalized.endsWith('.internal')
   ) {
     return true;
   }
@@ -235,7 +234,7 @@ export const getDirectDatabaseAlignmentIssue = () => {
   if (!postgresProjectRef || postgresProjectRef !== apiProjectRef) {
     return (
       'The direct PostgreSQL connection must target the same Supabase project as SUPABASE_URL. ' +
-      'A separate Render Postgres database would split application and payment state.'
+      'A separate Postgres database would split application and payment state.'
     );
   }
 
@@ -327,7 +326,7 @@ const getPostgresPool = () => {
     // When using Supabase Transaction Pooler (port 6543), we optimize for high concurrency.
     // Note: Session-based features like pg_advisory_lock() are not reliable in transaction mode.
     // Session mode holds connections longer, especially around advisory locks, so tune DB_POOL_SIZE
-    // against your Supabase pool limits and Render instance count in production.
+    // against your Supabase pool limits and Vercel Function concurrency in production.
     const secureConnection = getSecurePostgresConnectionOptions(connectionString);
     postgresPool = new Pool({
       ...secureConnection,

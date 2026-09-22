@@ -79,7 +79,7 @@ describe('admin auth cookie handling', () => {
     const request = {
       get: (header: string) => {
         const headers: Record<string, string> = {
-          host: 'maple-rental.onrender.com',
+          host: 'www.maplerentals.com.au',
           origin: 'https://admin.maplerentals.com.au',
           'x-forwarded-proto': 'https',
         };
