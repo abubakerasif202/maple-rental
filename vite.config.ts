@@ -1,10 +1,9 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
-import { configDefaults } from 'vitest/config';
 import { defineConfig } from 'vite';
 
-export default defineConfig(() => {
+export const createViteConfig = () => {
   const isNodeModule = (id: string, packageName: string) =>
     id.includes(`/node_modules/${packageName}/`) || id.includes(`\\node_modules\\${packageName}\\`);
 
@@ -19,7 +18,7 @@ export default defineConfig(() => {
       manifest: true,
       rollupOptions: {
         output: {
-          manualChunks(id) {
+          manualChunks(id: string) {
             if (!id.includes('node_modules')) {
               return;
             }
@@ -64,19 +63,7 @@ export default defineConfig(() => {
       // Do not modify; file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
     },
-    test: {
-      // `.claude/**` keeps agent worktrees under .claude/worktrees/ out of test
-      // discovery. A worktree is a full copy of the repository, so without this
-      // Vitest collects every suite twice; the duplicate Supertest servers then
-      // fail with ECONNREFUSED, timeouts, and cross-suite mock interference.
-      exclude: [
-        ...configDefaults.exclude,
-        '.claude/**',
-        'e2e/**',
-        'server-dist/**',
-        'dist/**',
-        'tmp/**',
-      ],
-    },
   };
-});
+};
+
+export default defineConfig(createViteConfig);
